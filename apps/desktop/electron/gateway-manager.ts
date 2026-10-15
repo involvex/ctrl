@@ -1,0 +1,208 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import path from 'node:path';
+
+export type GatewayStatus =
+  | { state: 'stopped' }
+  | { state: 'starting'; attempt: number }
+  | { state: 'running'; url: string; pid: number }
+  | { state: 'restarting'; attempt: number; delayMs: number }
+  | { state: 'failed'; error: string };
+
+export type GatewayStatusListener = (status: GatewayStatus) => void;
+
+const HEALTH_TIMEOUT_MS = 15_000;
+const HEALTH_POLL_MS = 200;
+const STOP_TIMEOUT_MS = 5_000;
+const MAX_BACKOFF_MS = 10_000;
+
+function pickPort(): number {
+  const fromEnv = Number(process.env['CTRL_A_PORT']);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) {
+    return fromEnv;
+  }
+  return 40_000 + Math.floor(Math.random() * 20_000);
+}
+
+async function waitForHealth(url: string, signal: AbortSignal): Promise<void> {
+  const deadline = Date.now() + HEALTH_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (signal.aborted) {
+      throw new Error('health wait aborted');
+    }
+    try {
+      const res = await fetch(`${url}/healthz`, { signal });
+      if (res.ok) {
+        return;
+      }
+    } catch {
+      // retry until timeout
+    }
+    await new Promise((r) => setTimeout(r, HEALTH_POLL_MS));
+  }
+  throw new Error(`gateway health check timed out: ${url}/healthz`);
+}
+
+export class GatewayManager {
+  private child: ChildProcess | null = null;
+  private status: GatewayStatus = { state: 'stopped' };
+  private readonly listeners = new Set<GatewayStatusListener>();
+  private stopping = false;
+  private attempt = 0;
+  private port = 7331;
+  private url = 'http://127.0.0.1:7331';
+  private healthAbort: AbortController | null = null;
+
+  constructor(private readonly repoRoot: string) {}
+
+  onStatus(listener: GatewayStatusListener): () => void {
+    this.listeners.add(listener);
+    listener(this.status);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  getStatus(): GatewayStatus {
+    return this.status;
+  }
+
+  getUrl(): string {
+    return this.url;
+  }
+
+  private setStatus(next: GatewayStatus): void {
+    this.status = next;
+    for (const listener of this.listeners) {
+      listener(next);
+    }
+  }
+
+  async start(): Promise<string> {
+    this.stopping = false;
+    this.attempt = 0;
+    await this.spawnWithRetry();
+    return this.url;
+  }
+
+  async stop(): Promise<void> {
+    this.stopping = true;
+    this.healthAbort?.abort();
+    this.healthAbort = null;
+
+    const child = this.child;
+    this.child = null;
+    if (!child || child.killed) {
+      this.setStatus({ state: 'stopped' });
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        resolve();
+      }, STOP_TIMEOUT_MS);
+
+      child.once('exit', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+
+      child.kill('SIGTERM');
+    });
+
+    this.setStatus({ state: 'stopped' });
+  }
+
+  private async spawnWithRetry(): Promise<void> {
+    while (!this.stopping) {
+      this.attempt += 1;
+      this.setStatus({ state: 'starting', attempt: this.attempt });
+
+      try {
+        await this.spawnOnce();
+        return;
+      } catch {
+        if (this.stopping) {
+          return;
+        }
+        const delayMs = Math.min(
+          500 * 2 ** Math.min(this.attempt - 1, 4),
+          MAX_BACKOFF_MS
+        );
+        this.setStatus({
+          state: 'restarting',
+          attempt: this.attempt,
+          delayMs,
+        });
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+  }
+
+  private async spawnOnce(): Promise<void> {
+    const entry = path.join(
+      this.repoRoot,
+      'packages',
+      'ctrl-a',
+      'src',
+      'server.ts'
+    );
+    this.port = pickPort();
+    this.url = `http://127.0.0.1:${this.port}`;
+
+    const bunBin = process.env['BUN_BIN'] ?? 'bun';
+    const child = spawn(bunBin, ['run', entry], {
+      cwd: this.repoRoot,
+      env: {
+        ...process.env,
+        HOST: '127.0.0.1',
+        PORT: String(this.port),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+
+    this.child = child;
+
+    child.stdout.on('data', (buf: Buffer) => {
+      process.stderr.write(`[ctrl-a] ${buf.toString()}`);
+    });
+    child.stderr.on('data', (buf: Buffer) => {
+      process.stderr.write(`[ctrl-a] ${buf.toString()}`);
+    });
+
+    child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+      if (this.child !== child) {
+        return;
+      }
+      this.child = null;
+      if (this.stopping) {
+        this.setStatus({ state: 'stopped' });
+        return;
+      }
+      this.setStatus({
+        state: 'failed',
+        error: `exited code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+      });
+      void this.spawnWithRetry();
+    });
+
+    this.healthAbort = new AbortController();
+    try {
+      await waitForHealth(this.url, this.healthAbort.signal);
+    } catch (err) {
+      child.kill('SIGTERM');
+      throw err;
+    }
+
+    if (!child.pid) {
+      throw new Error('gateway process has no pid');
+    }
+
+    this.setStatus({
+      state: 'running',
+      url: this.url,
+      pid: child.pid,
+    });
+  }
+}

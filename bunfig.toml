@@ -1,0 +1,41 @@
+[test]
+root = "."
+coverage = true
+
+[run]
+bun = true
+
+[fmt]
+semi = true
+singleQuote = true
+trailingComma = "es5"
+tabWidth = 2
+
+[lint]
+typeAware = true
+ignorePatterns = [
+  "vendor/",
+  "**/*.gen.ts",
+  "dist/",
+  "node_modules/",
+  ".expo/",
+  "android/",
+  "ios/",
+]
+plugins = []
+
+[lint.categories]
+correctness = "error"
+suspicious = "warn"
+perf = "warn"
+
+[lint.rules]
+"no-console" = "warn"
+"eqeqeq" = ["error", "smart"]
+"unicorn/prefer-node-protocol" = "error"
+"@typescript-eslint/no-explicit-any" = "off"
+"import/no-unassigned-import" = "off"
+"react/style-prop-object" = "off"
+"no-await-in-loop" = "off"
+
+

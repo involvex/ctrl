@@ -1,0 +1,24 @@
+{
+  "name": "@involvex/ctrl-f5",
+  "version": "0.0.1",
+  "description": "ctrl-f5 — headless CLI client for @involvex/ctrl-a",
+  "type": "module",
+  "bin": {
+    "ctrl-f5": "./src/cli.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "check": "bun check",
+    "build": "bun build ./src/cli.ts --outdir ./dist --target=bun --sourcemap=external"
+  },
+  "dependencies": {
+    "@involvex/ctrl-s": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

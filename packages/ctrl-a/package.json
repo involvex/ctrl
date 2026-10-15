@@ -1,0 +1,20 @@
+{
+  "name": "@involvex/ctrl-a",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Gateway daemon — Agent & All",
+  "type": "module",
+  "bin": {
+    "ctrl-a": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "start": "bun run src/server.ts",
+    "check": "bun check",
+    "build": "bun build ./src/server.ts ./src/cli.ts --outdir ./dist --target=bun --sourcemap=external",
+    "build:compile": "echo \"bun build --compile — Phase 3\""
+  },
+  "dependencies": {
+    "@involvex/ctrl-s": "workspace:*"
+  }
+}

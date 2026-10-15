@@ -1,0 +1,28 @@
+{
+  "name": "@involvex/ctrl-desktop",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Electron desktop shell for @involvex/ctrl",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "bun check",
+    "start": "vite"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.12",
+    "@types/react-dom": "~18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^34.2.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  }
+}

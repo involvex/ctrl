@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.bun/
+
+# Build
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Expo
+.expo/
+apps/mobile/android/
+apps/mobile/ios/
+apps/web/android/
+apps/web/ios/
+web-build/
+expo-env.d.ts
+
+# Electron
+apps/desktop/release/
+apps/desktop/out/
+apps/desktop/dist-electron/
+apps/desktop/dist/
+
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Logs & coverage
+logs/
+*.log
+coverage/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Generated
+**/*.gen.ts
+*.sqlite
+*.sqlite-journal
+data/
+
+# Misc
+*.local
+.turbo/

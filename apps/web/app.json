@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "ctrl",
+    "slug": "ctrl-web",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "ctrl",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router"]
+  }
+}
