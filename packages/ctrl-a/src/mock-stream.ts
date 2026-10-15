@@ -19,28 +19,3 @@ export function* demoAgentEvents(
     finishReason: 'stop',
   });
 }
-
-/** Phase 1 mock assistant reply — echoes last user message. */
-export function* mockChatEvents(
-  userText: string,
-  runId = `run-${Date.now()}`
-): Generator<AgentEvent> {
-  const reply = `mock: ${userText}`;
-  const chunks = reply.match(/.{1,12}/g) ?? [reply];
-  yield agentEventSchema.parse({ type: 'run.started', runId });
-  for (const text of chunks) {
-    yield agentEventSchema.parse({ type: 'message.delta', text });
-  }
-  yield agentEventSchema.parse({
-    type: 'usage.updated',
-    usage: {
-      promptTokens: userText.length,
-      completionTokens: reply.length,
-      totalTokens: userText.length + reply.length,
-    },
-  });
-  yield agentEventSchema.parse({
-    type: 'run.completed',
-    finishReason: 'stop',
-  });
-}

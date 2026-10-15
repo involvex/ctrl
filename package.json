@@ -16,7 +16,8 @@
     "dev:desktop": "bun run --filter @involvex/ctrl-desktop dev",
     "dev:cli": "bun run --filter @involvex/ctrl-f5 start",
     "build": "bun run build:packages && bun run build:apps",
-    "build:packages": "bun run --filter @involvex/ctrl-s build && bun run --filter @involvex/ctrl-z build && bun run --filter @involvex/ctrl-i build && bun run --filter @involvex/ctrl-a build && bun run --filter @involvex/ctrl-t build",
+    "build:packages": "bun run --filter @involvex/ctrl-s build && bun run --filter @involvex/ctrl-z build && bun run --filter @involvex/ctrl-r build && bun run --filter @involvex/ctrl-i build && bun run --filter @involvex/ctrl-a build && bun run --filter @involvex/ctrl-t build",
+    "build:ctrl-r": "bun run --filter @involvex/ctrl-r build",
     "build:apps": "bun run --filter @involvex/ctrl-f5 build && bun run --filter @involvex/ctrl-desktop build && bun run --filter @involvex/ctrl-mobile build && bun run --filter @involvex/ctrl-web build",
     "build:ctrl-s": "bun run --filter @involvex/ctrl-s build",
     "build:ctrl-z": "bun run --filter @involvex/ctrl-z build",
@@ -41,7 +42,16 @@
   "packageManager": "bun@1.4.4",
   "overrides": {
     "@types/react": "~18.3.12",
-    "@types/react-dom": "~18.3.1"
+    "@types/react-dom": "~18.3.1",
+    "@xmldom/xmldom": "0.9.12",
+    "tar": "7.5.22",
+    "postcss": "8.5.30",
+    "uuid": "11.1.1",
+    "builder-util-runtime": "9.7.0",
+    "image-size": "2.0.4",
+    "esbuild": "0.25.12",
+    "vite": "6.4.4",
+    "app-builder-lib": "26.15.3"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",

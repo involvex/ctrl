@@ -46,3 +46,18 @@ export const createMessageInputSchema = z.object({
   role: messageRoleSchema,
   content: z.string().min(1),
 });
+
+/** Portable workspace dump for export/import (Phase 1). */
+export const workspaceExportSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.number().int().nonnegative(),
+  workspace: workspaceSchema,
+  conversations: z.array(
+    z.object({
+      conversation: conversationSchema,
+      messages: z.array(messageSchema),
+    })
+  ),
+});
+
+export type WorkspaceExport = z.infer<typeof workspaceExportSchema>;

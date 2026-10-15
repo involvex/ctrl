@@ -1,13 +1,16 @@
+import { resolveProvider } from '@involvex/ctrl-r';
 import {
   createConversationInputSchema,
   createMessageInputSchema,
   createWorkspaceInputSchema,
   healthResponseSchema,
+  workspaceExportSchema,
+  type AgentEvent,
   type HealthResponse,
 } from '@involvex/ctrl-s';
 import { openDatabase, Store } from '@involvex/ctrl-z';
 import path from 'node:path';
-import { demoAgentEvents, mockChatEvents } from './mock-stream';
+import { demoAgentEvents } from './mock-stream';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 7331;
@@ -71,24 +74,26 @@ function resolveDbPath(): string {
   return path.join(dataDir, 'app.db');
 }
 
-async function streamEvents(
+async function streamIterable(
   ws: {
     readyState: number;
     send: (data: string) => void;
-    close: (code?: number, reason?: string) => void;
   },
-  events: Iterable<{ type: string; text?: string }>
+  events: AsyncIterable<AgentEvent> | Iterable<AgentEvent>,
+  pace = false
 ): Promise<string> {
   let assembled = '';
-  for (const event of events) {
+  for await (const event of events) {
     if (ws.readyState !== 1) {
       return assembled;
     }
     ws.send(JSON.stringify(event));
-    if (event.type === 'message.delta' && typeof event.text === 'string') {
+    if (event.type === 'message.delta') {
       assembled += event.text;
     }
-    await Bun.sleep(CHUNK_DELAY_MS);
+    if (pace) {
+      await Bun.sleep(CHUNK_DELAY_MS);
+    }
   }
   return assembled;
 }
@@ -98,6 +103,9 @@ export function startServer(): ReturnType<typeof Bun.serve> {
   const port = Number(process.env['PORT'] ?? DEFAULT_PORT);
   const db = openDatabase(resolveDbPath());
   const store = new Store(db);
+  const provider = resolveProvider();
+
+  process.stderr.write(`[ctrl-a] provider ${provider.id}\n`);
 
   const server = Bun.serve<SocketData>({
     hostname: host,
@@ -121,6 +129,24 @@ export function startServer(): ReturnType<typeof Bun.serve> {
         const body: unknown = await req.json();
         const input = createWorkspaceInputSchema.parse(body);
         return json(req, store.createWorkspace(input.name), 201);
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/v1/import') {
+        const body: unknown = await req.json();
+        const dump = workspaceExportSchema.parse(body);
+        return json(req, store.importWorkspace(dump), 201);
+      }
+
+      const exportMatch = /^\/api\/v1\/workspaces\/([^/]+)\/export$/.exec(
+        url.pathname
+      );
+      if (exportMatch && req.method === 'GET') {
+        const workspaceId = exportMatch[1]!;
+        try {
+          return json(req, store.exportWorkspace(workspaceId));
+        } catch {
+          return json(req, { error: 'workspace not found' }, 404);
+        }
       }
 
       const workspaceConversations =
@@ -198,7 +224,6 @@ export function startServer(): ReturnType<typeof Bun.serve> {
         );
       }
 
-      // Also accept POST to create user message + return run info (clients may prefer WS only)
       const chatPost = /^\/api\/v1\/conversations\/([^/]+)\/runs$/.exec(
         url.pathname
       );
@@ -227,7 +252,7 @@ export function startServer(): ReturnType<typeof Bun.serve> {
       open(ws) {
         if (ws.data.kind === 'demo') {
           void (async () => {
-            await streamEvents(ws, demoAgentEvents());
+            await streamIterable(ws, demoAgentEvents(), true);
             ws.close(1000, 'demo complete');
           })();
           return;
@@ -237,7 +262,15 @@ export function startServer(): ReturnType<typeof Bun.serve> {
           const { conversationId, content } = ws.data;
           void (async () => {
             store.addMessage(conversationId, 'user', content);
-            const assembled = await streamEvents(ws, mockChatEvents(content));
+            const history = store.listMessages(conversationId).map((m) => ({
+              role: m.role,
+              content: m.content,
+            }));
+            const runId = `run_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
+            const assembled = await streamIterable(
+              ws,
+              provider.generate({ runId, messages: history }, {})
+            );
             if (assembled.length > 0) {
               store.addMessage(conversationId, 'assistant', assembled);
             }

@@ -2,8 +2,10 @@
   color-scheme: dark;
   --bg: #000000;
   --charcoal: #111613;
+  --panel: #0a100d;
   --accent: #00ff66;
   --muted: #6b7f72;
+  --user: #14201a;
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 }
 
@@ -20,61 +22,184 @@ body,
   color: var(--accent);
 }
 
-.splash {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
+.shell {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
   background:
-    radial-gradient(ellipse at center, #0a0f0d 0%, #000000 70%), var(--bg);
-  border: 1px solid var(--charcoal);
+    radial-gradient(ellipse at top, #0a0f0d 0%, #000000 55%), var(--bg);
+}
+
+.top {
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--charcoal);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1.25rem;
 }
 
 .brand {
   margin: 0;
-  font-size: 4rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: lowercase;
-  text-shadow: 0 0 24px rgba(0, 255, 102, 0.35);
-}
-
-.tagline {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.95rem;
+  text-shadow: 0 0 18px rgba(0, 255, 102, 0.35);
 }
 
 .meta {
-  margin: 0.5rem 0 0;
-  font-size: 0.8rem;
+  margin: 0;
+  font-size: 0.75rem;
   color: var(--accent);
-  opacity: 0.7;
-  max-width: 42rem;
-  text-align: center;
+  opacity: 0.65;
   word-break: break-all;
 }
 
 .meta.lan {
-  opacity: 0.55;
+  opacity: 0.45;
   font-size: 0.7rem;
 }
 
-.demo-btn {
-  margin-top: 1rem;
-  font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #000000;
-  background: var(--accent);
-  border: none;
-  padding: 0.65rem 1.25rem;
-  cursor: pointer;
+.actions {
+  margin-left: auto;
+  display: flex;
+  gap: 0.5rem;
 }
 
-.demo-btn:disabled {
-  opacity: 0.5;
+.ghost-btn,
+.demo-btn {
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  padding: 0.55rem 1rem;
+}
+
+.ghost-btn {
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--charcoal);
+}
+
+.demo-btn {
+  color: #000000;
+  background: var(--accent);
+}
+
+.demo-btn:disabled,
+.ghost-btn:disabled {
+  opacity: 0.45;
   cursor: default;
+}
+
+.chat {
+  overflow: auto;
+  padding: 1rem 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.bubble {
+  max-width: min(48rem, 100%);
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--charcoal);
+  background: var(--panel);
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: var(--user);
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+}
+
+.bubble.streaming {
+  opacity: 0.9;
+}
+
+.role {
+  display: block;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.plain {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.md {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.md-p {
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.md-inline {
+  font-size: 0.85em;
+  padding: 0.05rem 0.3rem;
+  background: #06110c;
+  border: 1px solid var(--charcoal);
+}
+
+.md-code {
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  background: #050a08;
+  border: 1px solid var(--charcoal);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.md a {
+  color: var(--accent);
+}
+
+.error {
+  margin: 0;
+  padding: 0.5rem 1.25rem;
+  color: #ff6b6b;
+  font-size: 0.8rem;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 0.85rem 1.25rem 1.1rem;
+  border-top: 1px solid var(--charcoal);
+  background: #050705;
+}
+
+.composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 3.5rem;
+  max-height: 10rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid var(--charcoal);
+  padding: 0.65rem 0.75rem;
+}
+
+.composer textarea:focus {
+  outline: 1px solid var(--accent);
 }

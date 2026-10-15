@@ -19,8 +19,10 @@ export {
   createWorkspaceInputSchema,
   createConversationInputSchema,
   createMessageInputSchema,
+  workspaceExportSchema,
   type Workspace,
   type Conversation,
   type Message,
   type MessageRole,
+  type WorkspaceExport,
 } from './domain';

@@ -1,10 +1,12 @@
 import type { Database } from 'bun:sqlite';
 import {
   messageRoleSchema,
+  workspaceExportSchema,
   type Conversation,
   type Message,
   type MessageRole,
   type Workspace,
+  type WorkspaceExport,
 } from '@involvex/ctrl-s';
 
 function id(prefix: string): string {
@@ -197,5 +199,40 @@ export class Store {
       .query('UPDATE conversations SET updated_at = ? WHERE id = ?')
       .run(now, conversationId);
     return message;
+  }
+
+  exportWorkspace(workspaceId: string): WorkspaceExport {
+    const workspace = this.getWorkspace(workspaceId);
+    if (!workspace) {
+      throw new Error('workspace not found');
+    }
+    const conversations = this.listConversations(workspaceId).map(
+      (conversation) => ({
+        conversation,
+        messages: this.listMessages(conversation.id),
+      })
+    );
+    return workspaceExportSchema.parse({
+      version: 1,
+      exportedAt: Date.now(),
+      workspace,
+      conversations,
+    });
+  }
+
+  /** Import a dump as a new workspace (new IDs; preserves titles/content/order). */
+  importWorkspace(dump: WorkspaceExport): Workspace {
+    const parsed = workspaceExportSchema.parse(dump);
+    const workspace = this.createWorkspace(parsed.workspace.name);
+    for (const entry of parsed.conversations) {
+      const conversation = this.createConversation(
+        workspace.id,
+        entry.conversation.title
+      );
+      for (const message of entry.messages) {
+        this.addMessage(conversation.id, message.role, message.content);
+      }
+    }
+    return workspace;
   }
 }

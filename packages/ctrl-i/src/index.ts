@@ -3,12 +3,14 @@ import {
   conversationSchema,
   healthResponseSchema,
   messageSchema,
+  workspaceExportSchema,
   workspaceSchema,
   type AgentEvent,
   type Conversation,
   type HealthResponse,
   type Message,
   type Workspace,
+  type WorkspaceExport,
 } from '@involvex/ctrl-s';
 import { z } from 'zod';
 
@@ -118,6 +120,34 @@ export async function listMessages(
   return body.items;
 }
 
+export async function exportWorkspace(
+  baseUrl: string,
+  workspaceId: string
+): Promise<WorkspaceExport> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/export`
+  );
+  if (!res.ok) {
+    throw new Error(`exportWorkspace failed: ${res.status}`);
+  }
+  return workspaceExportSchema.parse(await readJson(res));
+}
+
+export async function importWorkspace(
+  baseUrl: string,
+  dump: WorkspaceExport
+): Promise<Workspace> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(dump),
+  });
+  if (!res.ok) {
+    throw new Error(`importWorkspace failed: ${res.status}`);
+  }
+  return workspaceSchema.parse(await readJson(res));
+}
+
 export type StreamHandlers = {
   onEvent: (event: AgentEvent) => void;
   onError?: (error: Error) => void;
@@ -176,4 +206,11 @@ export function streamChat(
   );
 }
 
-export type { AgentEvent, Conversation, HealthResponse, Message, Workspace };
+export type {
+  AgentEvent,
+  Conversation,
+  HealthResponse,
+  Message,
+  Workspace,
+  WorkspaceExport,
+};
