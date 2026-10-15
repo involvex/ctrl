@@ -6,7 +6,10 @@ import {
   channelPublicSchema,
   contextInspectSchema,
   conversationSchema,
+  createBackupInputSchema,
   healthResponseSchema,
+  hostBackupManifestSchema,
+  hostBackupSnapshotSchema,
   knowledgeHitSchema,
   memoryItemSchema,
   messageSchema,
@@ -21,7 +24,10 @@ import {
   type ChannelPublic,
   type ContextInspect,
   type Conversation,
+  type CreateBackupInput,
   type HealthResponse,
+  type HostBackupManifest,
+  type HostBackupSnapshot,
   type KnowledgeHit,
   type MemoryItem,
   type MemoryStatus,
@@ -41,6 +47,12 @@ export {
   withAuthSearch,
   type ClientAuth,
 } from './auth';
+
+export type {
+  CreateBackupInput,
+  HostBackupManifest,
+  HostBackupSnapshot,
+} from '@involvex/ctrl-s';
 
 export function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/$/, '');
@@ -201,6 +213,74 @@ export async function importWorkspace(
     throw new Error(`importWorkspace failed: ${res.status}`);
   }
   return workspaceSchema.parse(await readJson(res));
+}
+
+export async function listBackups(
+  baseUrl: string
+): Promise<HostBackupManifest[]> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/backups`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`listBackups failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(hostBackupManifestSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function createBackup(
+  baseUrl: string,
+  input: CreateBackupInput = {}
+): Promise<HostBackupManifest> {
+  const body = createBackupInputSchema.parse(input);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/backups`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`createBackup failed: ${res.status}`);
+  }
+  return hostBackupManifestSchema.parse(await readJson(res));
+}
+
+export async function getBackup(
+  baseUrl: string,
+  backupId: string
+): Promise<HostBackupSnapshot> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/backups/${backupId}`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`getBackup failed: ${res.status}`);
+  }
+  return hostBackupSnapshotSchema.parse(await readJson(res));
+}
+
+export async function restoreBackup(
+  baseUrl: string,
+  backupId: string
+): Promise<{ backupId: string; workspaceIds: string[]; items: Workspace[] }> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/backups/${backupId}/restore`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: '{}',
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`restoreBackup failed: ${res.status}`);
+  }
+  return z
+    .object({
+      backupId: z.string(),
+      workspaceIds: z.array(z.string()),
+      items: z.array(workspaceSchema),
+    })
+    .parse(await readJson(res));
 }
 
 export type StreamHandlers = {

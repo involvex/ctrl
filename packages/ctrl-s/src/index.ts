@@ -114,3 +114,16 @@ export {
   type OnDeviceModelRequest,
   type PolicyDecision,
 } from './device';
+
+export {
+  hostBackupManifestSchema,
+  hostBackupSnapshotSchema,
+  createBackupInputSchema,
+  restoreBackupInputSchema,
+  restoreBackupResultSchema,
+  type HostBackupManifest,
+  type HostBackupSnapshot,
+  type CreateBackupInput,
+  type RestoreBackupInput,
+  type RestoreBackupResult,
+} from './backup';

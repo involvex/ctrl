@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  createBackup,
   createChannel,
   createConversation,
   createWorkspace,
   exportWorkspace,
   importWorkspace,
   inspectContext,
+  listBackups,
   listChannels,
   listConversations,
   listMemory,
   listMessages,
   listWorkspaces,
+  restoreBackup,
   searchKnowledge,
   setClientAuth,
   streamChat,
@@ -18,6 +21,7 @@ import {
   uploadAttachmentText,
   type ChannelPublic,
   type Conversation,
+  type HostBackupManifest,
   type KnowledgeHit,
   type MemoryItem,
   type Message,
@@ -103,6 +107,9 @@ export function App() {
   const [channelsOpen, setChannelsOpen] = useState(false);
   const [channelItems, setChannelItems] = useState<ChannelPublic[]>([]);
   const [channelName, setChannelName] = useState('webhook');
+  const [backupsOpen, setBackupsOpen] = useState(false);
+  const [backupItems, setBackupItems] = useState<HostBackupManifest[]>([]);
+  const [backupLabel, setBackupLabel] = useState('manual');
   const sessionRef = useRef<RunSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -378,6 +385,60 @@ export function App() {
     }
   }, [gatewayUrl, workspace]);
 
+  const refreshBackups = useCallback(async () => {
+    if (!gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      setBackupItems(await listBackups(gatewayUrl));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [gatewayUrl]);
+
+  const onCreateBackup = useCallback(async () => {
+    if (!gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      await createBackup(gatewayUrl, {
+        label: backupLabel.trim() || undefined,
+        workspaceIds: workspace ? [workspace.id] : undefined,
+      });
+      await refreshBackups();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [backupLabel, gatewayUrl, refreshBackups, workspace]);
+
+  const onRestoreBackup = useCallback(
+    async (id: string) => {
+      if (!gatewayUrl.startsWith('http')) {
+        return;
+      }
+      try {
+        const result = await restoreBackup(gatewayUrl, id);
+        const restored = result.items[0];
+        if (restored) {
+          setWorkspace(restored);
+          const conversations = await listConversations(
+            gatewayUrl,
+            restored.id
+          );
+          const first = conversations[0] ?? null;
+          setConversation(first);
+          setMessages(first ? await listMessages(gatewayUrl, first.id) : []);
+        }
+        await refreshBackups();
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [gatewayUrl, refreshBackups]
+  );
+
   const onCreateWebhookChannel = useCallback(async () => {
     if (!workspace || !gatewayUrl.startsWith('http')) {
       return;
@@ -486,6 +547,18 @@ export function App() {
             }}
           >
             channels
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setBackupsOpen((v) => !v);
+              if (!backupsOpen) {
+                void refreshBackups();
+              }
+            }}
+          >
+            backups
           </button>
           <button type="button" className="ghost-btn" onClick={onExport}>
             export
@@ -667,6 +740,64 @@ export function App() {
           </ul>
           {channelItems.length === 0 ? (
             <p className="meta">no channels yet</p>
+          ) : null}
+        </aside>
+      ) : null}
+
+      {backupsOpen ? (
+        <aside className="host-panel knowledge-panel">
+          <p className="host-title">host backups</p>
+          <p className="meta">
+            Snapshots on this machine (`data/backups`). Restore creates new
+            workspaces — no peer SQLite sync.
+          </p>
+          <div className="host-row">
+            <input
+              className="host-input"
+              value={backupLabel}
+              onChange={(e) => setBackupLabel(e.target.value)}
+              placeholder="label"
+            />
+            <button
+              type="button"
+              className="demo-btn"
+              onClick={() => {
+                void onCreateBackup();
+              }}
+            >
+              snapshot
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void refreshBackups();
+              }}
+            >
+              refresh
+            </button>
+          </div>
+          <ul className="knowledge-list">
+            {backupItems.map((b) => (
+              <li key={b.id}>
+                <code>{b.label ?? b.id.slice(0, 8)}</code> · {b.workspaceCount}{' '}
+                ws · {new Date(b.createdAt).toLocaleString()}
+                <div className="host-row">
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => {
+                      void onRestoreBackup(b.id);
+                    }}
+                  >
+                    restore
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {backupItems.length === 0 ? (
+            <p className="meta">no backups yet</p>
           ) : null}
         </aside>
       ) : null}

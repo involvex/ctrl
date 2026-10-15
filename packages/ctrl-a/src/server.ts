@@ -9,6 +9,7 @@ import {
 import {
   clientControlMessageSchema,
   createAttachmentInputSchema,
+  createBackupInputSchema,
   createChannelInputSchema,
   createConversationInputSchema,
   createMemoryInputSchema,
@@ -32,6 +33,7 @@ import {
   ToolRegistry,
 } from '@involvex/ctrl-x';
 import {
+  BackupStore,
   ChannelStore,
   KnowledgeStore,
   openDatabase,
@@ -102,22 +104,22 @@ function json(req: Request, data: unknown, status = 200): Response {
   return withCors(req, Response.json(data, { status }));
 }
 
+function resolveDataDir(): string {
+  return process.env['CTRL_DATA_DIR'] ?? path.join(process.cwd(), 'data');
+}
+
 function resolveDbPath(): string {
   if (process.env['CTRL_DB_PATH']) {
     return process.env['CTRL_DB_PATH'];
   }
-  const dataDir =
-    process.env['CTRL_DATA_DIR'] ?? path.join(process.cwd(), 'data');
-  return path.join(dataDir, 'app.db');
+  return path.join(resolveDataDir(), 'app.db');
 }
 
 function resolveSandboxRoot(): string {
   if (process.env['CTRL_SANDBOX_ROOT']) {
     return process.env['CTRL_SANDBOX_ROOT'];
   }
-  const dataDir =
-    process.env['CTRL_DATA_DIR'] ?? path.join(process.cwd(), 'data');
-  return path.join(dataDir, 'sandbox');
+  return path.join(resolveDataDir(), 'sandbox');
 }
 
 function decodeAttachmentBytes(
@@ -166,6 +168,7 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
   const db = openDatabase(resolveDbPath());
   const store = new Store(db);
   const knowledge = new KnowledgeStore(db);
+  const backups = new BackupStore(resolveDataDir(), store);
   const channels = new ChannelManager({ store: new ChannelStore(db) });
   channels.startWorker(750);
 
@@ -396,6 +399,54 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
         const body: unknown = await req.json();
         const dump = workspaceExportSchema.parse(body);
         return json(req, store.importWorkspace(dump), 201);
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/v1/backups') {
+        return json(req, { items: backups.list() });
+      }
+
+      if (req.method === 'POST' && url.pathname === '/api/v1/backups') {
+        const body: unknown = await req.json().catch(() => ({}));
+        try {
+          const input = createBackupInputSchema.parse(body ?? {});
+          return json(req, backups.create(input), 201);
+        } catch (err) {
+          return json(
+            req,
+            {
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+
+      const backupRestoreMatch = /^\/api\/v1\/backups\/([^/]+)\/restore$/.exec(
+        url.pathname
+      );
+      if (backupRestoreMatch && req.method === 'POST') {
+        const backupId = backupRestoreMatch[1]!;
+        try {
+          const result = backups.restore(backupId);
+          return json(req, {
+            backupId: result.backupId,
+            workspaceIds: result.workspaces.map((w) => w.id),
+            items: result.workspaces,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const status = message.includes('not found') ? 404 : 400;
+          return json(req, { error: message }, status);
+        }
+      }
+
+      const backupGetMatch = /^\/api\/v1\/backups\/([^/]+)$/.exec(url.pathname);
+      if (backupGetMatch && req.method === 'GET') {
+        const snap = backups.get(backupGetMatch[1]!);
+        if (!snap) {
+          return json(req, { error: 'backup not found' }, 404);
+        }
+        return json(req, snap);
       }
 
       const exportMatch = /^\/api\/v1\/workspaces\/([^/]+)\/export$/.exec(

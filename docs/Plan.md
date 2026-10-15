@@ -197,9 +197,11 @@ Kompatibilitätsschicht: `/v1/models`, `/v1/chat/completions`, `/v1/responses`, 
 
 **Phase 6 – On-Device-Inferenz (Android):** Native Module, LiteRT-LM, Capability Detection, Thermal/Battery-Policies.
 
-**Phase 7 – Sync:** Host-zentriert zuerst; später verschlüsselte Backups. Keine SQLite-Datei-Sync zwischen Geräten.
+**Phase 7 – Sync (host-centric):** Gateway owns the DB. Clients never sync SQLite files peer-to-peer. MVP = on-host backup snapshots (create / list / restore) of workspace exports under `data/backups/`; desktop UI + contract tests. Later = passphrase-encrypted backups. Incremental pull/push between devices is out of MVP (see §10).
 
-**Phase 8 – Rust-Backend (optional):** Siehe Abschnitt 11.
+**Phase 8 – Featured CLI (`ctrl-f5`):** Publishable ops tool after Sync. Full local ops: config file (`CTRL_*` / `~/.config/ctrl/config.json`), gateway start/stop/restart/status (spawn `ctrl-a`), pairing/token, workspaces + interactive/one-shot chat (`streamChat`), thin wrappers for knowledge/channels. Shell tab-completions for **bash** and **PowerShell** (`ctrl-f5 completion bash|powershell`). Speaks only HTTP/WS protocol via `ctrl-i` (prep for Rust `agentd`).
+
+**Phase 9 – Rust-Backend (optional):** Siehe Abschnitt 11 (was Phase 8).
 
 ## 10. Nicht ins MVP
 
@@ -266,4 +268,6 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 9. Phase 4 Personal Knowledge — **done**: `ctrl-k` extract/chunk/FTS, attachments + blobs in `ctrl-z` (schema v3), memory review + context inspector APIs/UI.
 10. Phase 5 Channels — **done**: `ctrl-c` adapters (webhook + mock telegram/discord/slack), identity mapping, outbox queue/retry/rate limits, gateway hooks + desktop panel.
 11. Phase 6 On-Device Inference (Android) — **done**: LiteRT-LM Expo plugin (`react-native-litert-lm`), capability probe (ABI/RAM/battery), thermal/battery policy in `ctrl-s` (re-exported from `ctrl-r`), mobile `/on-device` UI, `native/android-litert` docs.
-12. Phase 7 Sync — next.
+12. Phase 7 Sync — **done** (MVP): host backups under `data/backups/` (`BackupStore`), `/api/v1/backups` create/list/get/restore, desktop panel, contracts. Encrypted backups later. No device↔device SQLite sync.
+13. Phase 8 Featured CLI (`ctrl-f5`) — **next**: gateway lifecycle + chat + bash/PowerShell completions.
+14. Phase 9 Rust `agentd` — optional.
