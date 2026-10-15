@@ -66,6 +66,35 @@ body,
   padding: 0.45rem 0.6rem;
 }
 
+.knowledge-draft,
+.context-preview {
+  width: 100%;
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: #06110c;
+  border: 1px solid var(--charcoal);
+  padding: 0.55rem 0.65rem;
+  resize: vertical;
+}
+
+.context-preview {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.knowledge-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.75rem;
+  color: var(--accent);
+  opacity: 0.85;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
 .top {
   padding: 1rem 1.25rem 0.75rem;
   border-bottom: 1px solid var(--charcoal);

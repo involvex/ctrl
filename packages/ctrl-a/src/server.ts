@@ -1,3 +1,4 @@
+import { assembleContextPreview, ingestAttachment } from '@involvex/ctrl-k';
 import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
 import {
   createLlamaSidecarFromEnv,
@@ -6,12 +7,17 @@ import {
 } from '@involvex/ctrl-r';
 import {
   clientControlMessageSchema,
+  createAttachmentInputSchema,
   createConversationInputSchema,
+  createMemoryInputSchema,
   createMessageInputSchema,
   createWorkspaceInputSchema,
   healthResponseSchema,
+  knowledgeSearchInputSchema,
+  updateMemoryInputSchema,
   workspaceExportSchema,
   type AgentEvent,
+  type CreateAttachmentInput,
   type HealthResponse,
 } from '@involvex/ctrl-s';
 import {
@@ -20,7 +26,7 @@ import {
   runAgentLoop,
   ToolRegistry,
 } from '@involvex/ctrl-x';
-import { openDatabase, Store } from '@involvex/ctrl-z';
+import { KnowledgeStore, openDatabase, Store } from '@involvex/ctrl-z';
 import path from 'node:path';
 import { gatewayTokenFromEnv, isAuthorized, isPublicPath } from './auth';
 import { demoAgentEvents } from './mock-stream';
@@ -104,6 +110,21 @@ function resolveSandboxRoot(): string {
   return path.join(dataDir, 'sandbox');
 }
 
+function decodeAttachmentBytes(
+  input: CreateAttachmentInput
+): Uint8Array | null {
+  if (typeof input.text === 'string') {
+    return new TextEncoder().encode(input.text);
+  }
+  if (
+    typeof input.contentBase64 === 'string' &&
+    input.contentBase64.length > 0
+  ) {
+    return Uint8Array.from(Buffer.from(input.contentBase64, 'base64'));
+  }
+  return null;
+}
+
 async function streamIterable(
   ws: {
     readyState: number;
@@ -134,6 +155,7 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
   const expectedToken = gatewayTokenFromEnv();
   const db = openDatabase(resolveDbPath());
   const store = new Store(db);
+  const knowledge = new KnowledgeStore(db);
 
   let llama: LlamaSidecar | null = null;
   try {
@@ -208,6 +230,131 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
 
       if (req.method === 'GET' && url.pathname === '/api/v1/tools') {
         return json(req, { items: registry.list() });
+      }
+
+      const workspaceAttachments =
+        /^\/api\/v1\/workspaces\/([^/]+)\/attachments$/.exec(url.pathname);
+      if (workspaceAttachments) {
+        const workspaceId = workspaceAttachments[1]!;
+        if (!store.getWorkspace(workspaceId)) {
+          return json(req, { error: 'workspace not found' }, 404);
+        }
+        if (req.method === 'GET') {
+          return json(req, { items: knowledge.listAttachments(workspaceId) });
+        }
+        if (req.method === 'POST') {
+          const body: unknown = await req.json();
+          const input = createAttachmentInputSchema.parse(body);
+          const bytes = decodeAttachmentBytes(input);
+          if (!bytes) {
+            return json(req, { error: 'text or contentBase64 required' }, 400);
+          }
+          const attachment = knowledge.createAttachment(
+            workspaceId,
+            input,
+            bytes
+          );
+          ingestAttachment(knowledge, attachment);
+          const ready = knowledge.getAttachment(attachment.id) ?? attachment;
+          return json(req, ready, 201);
+        }
+      }
+
+      const workspaceKnowledgeSearch =
+        /^\/api\/v1\/workspaces\/([^/]+)\/knowledge\/search$/.exec(
+          url.pathname
+        );
+      if (workspaceKnowledgeSearch && req.method === 'POST') {
+        const workspaceId = workspaceKnowledgeSearch[1]!;
+        if (!store.getWorkspace(workspaceId)) {
+          return json(req, { error: 'workspace not found' }, 404);
+        }
+        const body: unknown = await req.json();
+        const input = knowledgeSearchInputSchema.parse(body);
+        return json(req, {
+          items: knowledge.searchKnowledge(
+            workspaceId,
+            input.query,
+            input.limit ?? 8
+          ),
+        });
+      }
+
+      const workspaceMemory = /^\/api\/v1\/workspaces\/([^/]+)\/memory$/.exec(
+        url.pathname
+      );
+      if (workspaceMemory) {
+        const workspaceId = workspaceMemory[1]!;
+        if (!store.getWorkspace(workspaceId)) {
+          return json(req, { error: 'workspace not found' }, 404);
+        }
+        if (req.method === 'GET') {
+          const status = url.searchParams.get('status');
+          return json(req, {
+            items: knowledge.listMemory(
+              workspaceId,
+              status === 'active' ||
+                status === 'archived' ||
+                status === 'pending_review'
+                ? { status }
+                : undefined
+            ),
+          });
+        }
+        if (req.method === 'POST') {
+          const body: unknown = await req.json();
+          const input = createMemoryInputSchema.parse(body);
+          return json(req, knowledge.createMemory(workspaceId, input), 201);
+        }
+      }
+
+      const memoryItem = /^\/api\/v1\/memory\/([^/]+)$/.exec(url.pathname);
+      if (memoryItem && req.method === 'PATCH') {
+        const memoryId = memoryItem[1]!;
+        const body: unknown = await req.json();
+        const input = updateMemoryInputSchema.parse(body);
+        const updated = knowledge.updateMemory(memoryId, input);
+        if (!updated) {
+          return json(req, { error: 'memory not found' }, 404);
+        }
+        return json(req, updated);
+      }
+
+      const workspaceContext = /^\/api\/v1\/workspaces\/([^/]+)\/context$/.exec(
+        url.pathname
+      );
+      if (workspaceContext && req.method === 'GET') {
+        const workspaceId = workspaceContext[1]!;
+        if (!store.getWorkspace(workspaceId)) {
+          return json(req, { error: 'workspace not found' }, 404);
+        }
+        const conversationId = url.searchParams.get('conversationId');
+        const query = url.searchParams.get('q') ?? '';
+        const recentMessages = conversationId
+          ? store
+              .listMessages(conversationId)
+              .slice(-8)
+              .map((m) => ({
+                role: m.role,
+                content: m.content,
+                createdAt: m.createdAt,
+              }))
+          : [];
+        const pinnedMemory = knowledge.listPinnedMemory(workspaceId);
+        const knowledgeHits =
+          query.trim().length > 0
+            ? knowledge.searchKnowledge(workspaceId, query, 6)
+            : [];
+        return json(
+          req,
+          assembleContextPreview({
+            workspaceId,
+            conversationId,
+            recentMessages,
+            pinnedMemory,
+            knowledgeHits,
+          })
+        );
       }
 
       if (req.method === 'GET' && url.pathname === '/api/v1/profiles') {

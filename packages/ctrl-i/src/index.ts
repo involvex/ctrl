@@ -1,13 +1,22 @@
 import {
   agentEventSchema,
+  attachmentSchema,
+  contextInspectSchema,
   conversationSchema,
   healthResponseSchema,
+  knowledgeHitSchema,
+  memoryItemSchema,
   messageSchema,
   workspaceExportSchema,
   workspaceSchema,
   type AgentEvent,
+  type Attachment,
+  type ContextInspect,
   type Conversation,
   type HealthResponse,
+  type KnowledgeHit,
+  type MemoryItem,
+  type MemoryStatus,
   type Message,
   type Workspace,
   type WorkspaceExport,
@@ -249,10 +258,166 @@ export function streamChat(
   );
 }
 
+export async function listAttachments(
+  baseUrl: string,
+  workspaceId: string
+): Promise<Attachment[]> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/attachments`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`listAttachments failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(attachmentSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function uploadAttachmentText(
+  baseUrl: string,
+  workspaceId: string,
+  input: {
+    filename: string;
+    text: string;
+    mimeType?: string;
+    conversationId?: string;
+  }
+): Promise<Attachment> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/attachments`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(input),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`uploadAttachment failed: ${res.status}`);
+  }
+  return attachmentSchema.parse(await readJson(res));
+}
+
+export async function searchKnowledge(
+  baseUrl: string,
+  workspaceId: string,
+  query: string,
+  limit?: number
+): Promise<KnowledgeHit[]> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/knowledge/search`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ query, limit }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`searchKnowledge failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(knowledgeHitSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function listMemory(
+  baseUrl: string,
+  workspaceId: string,
+  status?: MemoryStatus
+): Promise<MemoryItem[]> {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/memory${qs}`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`listMemory failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(memoryItemSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function createMemory(
+  baseUrl: string,
+  workspaceId: string,
+  input: {
+    content: string;
+    kind?: MemoryItem['kind'];
+    status?: MemoryStatus;
+    pinned?: boolean;
+  }
+): Promise<MemoryItem> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/memory`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(input),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`createMemory failed: ${res.status}`);
+  }
+  return memoryItemSchema.parse(await readJson(res));
+}
+
+export async function updateMemory(
+  baseUrl: string,
+  memoryId: string,
+  input: {
+    content?: string;
+    kind?: MemoryItem['kind'];
+    status?: MemoryStatus;
+    pinned?: boolean;
+  }
+): Promise<MemoryItem> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/memory/${memoryId}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(input),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`updateMemory failed: ${res.status}`);
+  }
+  return memoryItemSchema.parse(await readJson(res));
+}
+
+export async function inspectContext(
+  baseUrl: string,
+  workspaceId: string,
+  opts?: { conversationId?: string; q?: string }
+): Promise<ContextInspect> {
+  const params = new URLSearchParams();
+  if (opts?.conversationId) {
+    params.set('conversationId', opts.conversationId);
+  }
+  if (opts?.q) {
+    params.set('q', opts.q);
+  }
+  const qs = params.toString();
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/context${qs ? `?${qs}` : ''}`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`inspectContext failed: ${res.status}`);
+  }
+  return contextInspectSchema.parse(await readJson(res));
+}
+
 export type {
   AgentEvent,
+  Attachment,
+  ContextInspect,
   Conversation,
   HealthResponse,
+  KnowledgeHit,
+  MemoryItem,
+  MemoryStatus,
   Message,
   Workspace,
   WorkspaceExport,

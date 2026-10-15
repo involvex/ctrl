@@ -4,12 +4,19 @@ import {
   createWorkspace,
   exportWorkspace,
   importWorkspace,
+  inspectContext,
   listConversations,
+  listMemory,
   listMessages,
   listWorkspaces,
+  searchKnowledge,
   setClientAuth,
   streamChat,
+  updateMemory,
+  uploadAttachmentText,
   type Conversation,
+  type KnowledgeHit,
+  type MemoryItem,
   type Message,
   type RunSession,
   type Workspace,
@@ -83,6 +90,13 @@ export function App() {
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
   const [openAiDraft, setOpenAiDraft] = useState('');
   const [updateLabel, setUpdateLabel] = useState('idle');
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [knowledgeDraft, setKnowledgeDraft] = useState('');
+  const [knowledgeFilename, setKnowledgeFilename] = useState('notes.md');
+  const [knowledgeQuery, setKnowledgeQuery] = useState('');
+  const [knowledgeHits, setKnowledgeHits] = useState<KnowledgeHit[]>([]);
+  const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
+  const [contextPreview, setContextPreview] = useState<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -347,6 +361,57 @@ export function App() {
     [gatewayUrl]
   );
 
+  const refreshKnowledge = useCallback(async () => {
+    if (!workspace || !gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      setMemoryItems(await listMemory(gatewayUrl, workspace.id));
+      if (knowledgeQuery.trim()) {
+        setKnowledgeHits(
+          await searchKnowledge(gatewayUrl, workspace.id, knowledgeQuery.trim())
+        );
+      }
+      const ctx = await inspectContext(gatewayUrl, workspace.id, {
+        conversationId: conversation?.id,
+        q: knowledgeQuery.trim() || undefined,
+      });
+      setContextPreview(ctx.assembledPreview);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [conversation, gatewayUrl, knowledgeQuery, workspace]);
+
+  const onIngestNote = useCallback(async () => {
+    if (
+      !workspace ||
+      !gatewayUrl.startsWith('http') ||
+      !knowledgeDraft.trim()
+    ) {
+      return;
+    }
+    try {
+      await uploadAttachmentText(gatewayUrl, workspace.id, {
+        filename: knowledgeFilename.trim() || 'notes.md',
+        mimeType: 'text/markdown',
+        text: knowledgeDraft,
+        conversationId: conversation?.id,
+      });
+      setKnowledgeDraft('');
+      await refreshKnowledge();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [
+    conversation,
+    gatewayUrl,
+    knowledgeDraft,
+    knowledgeFilename,
+    refreshKnowledge,
+    workspace,
+  ]);
+
   return (
     <div className="shell">
       <header className="top">
@@ -364,6 +429,18 @@ export function App() {
             onClick={() => setHostOpen((v) => !v)}
           >
             host
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setKnowledgeOpen((v) => !v);
+              if (!knowledgeOpen) {
+                void refreshKnowledge();
+              }
+            }}
+          >
+            knowledge
           </button>
           <button type="button" className="ghost-btn" onClick={onExport}>
             export
@@ -507,6 +584,110 @@ export function App() {
             <p className="meta">
               mobile: use LAN URL + Bearer token from safeStorage
             </p>
+          ) : null}
+        </aside>
+      ) : null}
+
+      {knowledgeOpen ? (
+        <aside className="host-panel knowledge-panel">
+          <p className="host-title">personal knowledge</p>
+          <div className="host-row">
+            <input
+              className="host-input"
+              value={knowledgeFilename}
+              onChange={(e) => setKnowledgeFilename(e.target.value)}
+              placeholder="filename.md"
+            />
+          </div>
+          <textarea
+            className="knowledge-draft"
+            rows={4}
+            value={knowledgeDraft}
+            onChange={(e) => setKnowledgeDraft(e.target.value)}
+            placeholder="Paste notes to ingest (text/markdown)…"
+          />
+          <div className="host-row">
+            <button
+              type="button"
+              className="demo-btn"
+              onClick={() => {
+                void onIngestNote();
+              }}
+              disabled={!workspace || knowledgeDraft.trim().length === 0}
+            >
+              ingest
+            </button>
+          </div>
+          <div className="host-row">
+            <input
+              className="host-input"
+              value={knowledgeQuery}
+              onChange={(e) => setKnowledgeQuery(e.target.value)}
+              placeholder="FTS query…"
+            />
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void refreshKnowledge();
+              }}
+            >
+              search / inspect
+            </button>
+          </div>
+          {knowledgeHits.length > 0 ? (
+            <ul className="knowledge-list">
+              {knowledgeHits.map((hit) => (
+                <li key={hit.chunkId}>
+                  <code>{hit.filename}</code> — {hit.snippet}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="host-title">memory review</p>
+          <ul className="knowledge-list">
+            {memoryItems.map((item) => (
+              <li key={item.id}>
+                <span className="meta">
+                  [{item.status}] {item.kind}
+                  {item.pinned ? ' ★' : ''}
+                </span>{' '}
+                {item.content.slice(0, 160)}
+                <div className="host-row">
+                  {item.status === 'pending_review' ? (
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => {
+                        void updateMemory(gatewayUrl, item.id, {
+                          status: 'active',
+                          pinned: true,
+                        }).then(() => refreshKnowledge());
+                      }}
+                    >
+                      approve + pin
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => {
+                      void updateMemory(gatewayUrl, item.id, {
+                        status: 'archived',
+                      }).then(() => refreshKnowledge());
+                    }}
+                  >
+                    archive
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {contextPreview ? (
+            <>
+              <p className="host-title">context inspector</p>
+              <pre className="context-preview">{contextPreview}</pre>
+            </>
           ) : null}
         </aside>
       ) : null}

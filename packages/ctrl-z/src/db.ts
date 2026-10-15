@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export type CtrlDb = Database;
 
@@ -87,6 +87,62 @@ function migrate(db: Database): void {
 
       CREATE INDEX IF NOT EXISTS idx_audit_created
         ON audit_logs(created_at DESC);
+    `);
+  }
+
+  if (current < 3) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY NOT NULL,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        blob_path TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'ready', 'failed')),
+        error TEXT,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_attachments_workspace
+        ON attachments(workspace_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS knowledge_chunks (
+        id TEXT PRIMARY KEY NOT NULL,
+        attachment_id TEXT NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        chunk_index INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_chunks_attachment
+        ON knowledge_chunks(attachment_id, chunk_index);
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+        content,
+        chunk_id UNINDEXED,
+        workspace_id UNINDEXED,
+        filename UNINDEXED,
+        tokenize = 'porter unicode61'
+      );
+
+      CREATE TABLE IF NOT EXISTS memory_items (
+        id TEXT PRIMARY KEY NOT NULL,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK(kind IN ('note', 'fact', 'preference')),
+        content TEXT NOT NULL,
+        source_attachment_id TEXT REFERENCES attachments(id) ON DELETE SET NULL,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL CHECK(status IN ('active', 'archived', 'pending_review')),
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_memory_workspace
+        ON memory_items(workspace_id, status, updated_at DESC);
     `);
   }
 
