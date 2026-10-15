@@ -23,7 +23,12 @@ ignorePatterns = [
   "ios/",
   "apps/desktop/release/",
   "apps/desktop/resources/",
+  "docs/.vitepress/dist/",
+  "docs/.vitepress/cache/",
+  "docs/.vitepress/",
 ]
+
+
 plugins = []
 
 [lint.categories]

@@ -13,6 +13,7 @@ const root = path.resolve(
 const serverEntry = path.join(root, 'packages/ctrl-a/src/server.ts');
 const port = 40_000 + Math.floor(Math.random() * 20_000);
 const baseUrl = `http://127.0.0.1:${port}`;
+const tmpDb = path.join(root, 'data', `contract-${port}.db`);
 
 async function waitForHealth(url: string, ms = 15_000): Promise<void> {
   const deadline = Date.now() + ms;
@@ -38,6 +39,7 @@ const child = spawn('bun', ['run', serverEntry], {
     ...process.env,
     HOST: '127.0.0.1',
     PORT: String(port),
+    CTRL_DB_PATH: tmpDb,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
   shell: true,
@@ -47,8 +49,7 @@ child.stderr?.on('data', (buf: Buffer) => {
   process.stderr.write(buf);
 });
 
-let exitCode = 1;
-try {
+async function runTests(): Promise<number> {
   await waitForHealth(baseUrl);
   process.stderr.write(`[ctrl-t] running contract tests against ${baseUrl}\n`);
 
@@ -62,15 +63,15 @@ try {
     shell: true,
   });
 
-  exitCode = await new Promise<number>((resolve, reject) => {
+  return await new Promise<number>((resolve, reject) => {
     test.on('error', reject);
     test.on('exit', (code) => {
       resolve(code ?? 1);
     });
   });
-} catch {
-  exitCode = 1;
-} finally {
+}
+
+async function stopGateway(): Promise<void> {
   child.kill('SIGTERM');
   await new Promise<void>((resolve) => {
     const t = setTimeout(() => {
@@ -84,4 +85,6 @@ try {
   });
 }
 
+const exitCode = await runTests().catch(() => 1);
+await stopGateway();
 process.exit(exitCode);

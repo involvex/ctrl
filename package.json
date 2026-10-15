@@ -17,9 +17,10 @@
     "dev:desktop": "bun run --filter @involvex/ctrl-desktop dev",
     "dev:cli": "bun run --filter @involvex/ctrl-f5 start",
     "build": "bun run build:packages && bun run build:apps",
-    "build:packages": "bun run --filter @involvex/ctrl-s build && bun run --filter @involvex/ctrl-i build && bun run --filter @involvex/ctrl-a build && bun run --filter @involvex/ctrl-t build",
+    "build:packages": "bun run --filter @involvex/ctrl-s build && bun run --filter @involvex/ctrl-z build && bun run --filter @involvex/ctrl-i build && bun run --filter @involvex/ctrl-a build && bun run --filter @involvex/ctrl-t build",
     "build:apps": "bun run --filter @involvex/ctrl-f5 build && bun run --filter @involvex/ctrl-desktop build && bun run --filter @involvex/ctrl-mobile build && bun run --filter @involvex/ctrl-web build",
     "build:ctrl-s": "bun run --filter @involvex/ctrl-s build",
+    "build:ctrl-z": "bun run --filter @involvex/ctrl-z build",
     "build:ctrl-i": "bun run --filter @involvex/ctrl-i build",
     "build:ctrl-a": "bun run --filter @involvex/ctrl-a build",
     "build:ctrl-t": "bun run --filter @involvex/ctrl-t build",
@@ -30,7 +31,10 @@
     "build:mobile": "bun run --filter @involvex/ctrl-mobile build",
     "build:web": "bun run --filter @involvex/ctrl-web build",
     "test": "bun test",
-    "test:contracts": "bun run --filter @involvex/ctrl-t test:live"
+    "test:contracts": "bun run --filter @involvex/ctrl-t test:live",
+    "docs:dev": "bunx --bun vitepress dev docs",
+    "docs:build": "bunx --bun vitepress build docs",
+    "docs:preview": "bunx --bun vitepress preview docs"
   },
   "engines": {
     "bun": ">=1.3.4"
@@ -42,6 +46,10 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.5",
+    "@vue/compiler-sfc": "^3.5.44",
+    "@vue/server-renderer": "^3.5.44",
+    "vitepress": "^1.6.3",
+    "vue": "^3.5.44"
   }
 }

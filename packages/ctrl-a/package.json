@@ -15,6 +15,7 @@
     "build:compile": "bun run ../../apps/desktop/scripts/build-gateway.ts"
   },
   "dependencies": {
-    "@involvex/ctrl-s": "workspace:*"
+    "@involvex/ctrl-s": "workspace:*",
+    "@involvex/ctrl-z": "workspace:*"
   }
 }

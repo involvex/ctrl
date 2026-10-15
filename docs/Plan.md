@@ -260,4 +260,4 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 3. Expo-Clients im LAN + WebSocket-Demo-Stream (`/ws/v1/demo`, `@involvex/ctrl-i`) — **done**.
 4. Contract-Tests (`ctrl-t`) und CI-Matrix — **done**.
 5. Dependabot, SECURITY.md, tag→GitHub Release workflow — **done** (see [ci-and-releases.md](ci-and-releases.md)).
-6. Phase 1 Chat MVP (echte Conversations, OpenAI-Provider, `ctrl-z` SQLite).
+6. Phase 1 Chat MVP — **started**: `ctrl-z` SQLite, workspace/conversation/message API, mock chat WS stream. Remaining: OpenAI-compatible provider, Markdown UI, export/import.

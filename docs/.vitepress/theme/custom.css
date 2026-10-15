@@ -1,0 +1,45 @@
+:root {
+  --vp-c-bg: #000000;
+  --vp-c-bg-alt: #0a0f0d;
+  --vp-c-bg-elv: #111613;
+  --vp-c-bg-soft: #111613;
+  --vp-c-border: #1a2e24;
+  --vp-c-divider: #1a2e24;
+  --vp-c-gutter: #0a0f0d;
+  --vp-c-text-1: #e8fff0;
+  --vp-c-text-2: #6b7f72;
+  --vp-c-text-3: #4a5c52;
+  --vp-c-brand-1: #00ff66;
+  --vp-c-brand-2: #00cc52;
+  --vp-c-brand-3: #00ff66;
+  --vp-c-brand-soft: rgba(0, 255, 102, 0.12);
+  --vp-button-brand-bg: #00ff66;
+  --vp-button-brand-hover-bg: #33ff85;
+  --vp-button-brand-text: #000000;
+  --vp-button-brand-hover-text: #000000;
+  --vp-home-hero-name-color: #00ff66;
+  --vp-home-hero-name-background: transparent;
+  --vp-font-family-base: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+.dark {
+  --vp-c-bg: #000000;
+  --vp-c-bg-alt: #0a0f0d;
+  --vp-c-bg-elv: #111613;
+  --vp-c-bg-soft: #111613;
+}
+
+.VPHero .name {
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+}
+
+.VPFeature {
+  border-color: #1a2e24 !important;
+  background: #0a0f0d !important;
+}
+
+.VPButton.brand {
+  border-radius: 0 !important;
+}

@@ -54,7 +54,8 @@ ctrl/
 │  ├─ ctrl-a/            # Gateway (Bun + TS) — Phase 0
 │  ├─ ctrl-s/            # Protocol (Zod, Events, OpenAPI) — Phase 0
 │  ├─ ctrl-r/            # Runtime & Provider Adapter — later
-│  ├─ ctrl-z/            # Memory, State & SQLite — later
+│  ├─ ctrl-z/            # Memory, State & SQLite — Phase 1
+
 │  ├─ ctrl-space/        # Shared UI — later
 │  ├─ ctrl-c/            # Channels — later
 │  ├─ ctrl-m/            # MCP — later

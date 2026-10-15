@@ -68,6 +68,9 @@ Expo mobile/web: paste the LAN URL from desktop, tap **connect + stream demo**.
 | Package / App       | Role                   |
 | ------------------- | ---------------------- |
 | `@involvex/ctrl-s`  | Protocol (Zod schemas) |
+| `@involvex/ctrl-z`  | SQLite storage         |
+| `@involvex/ctrl-i`  | Typed gateway client   |
+| `@involvex/ctrl-t`  | Contract tests         |
 | `@involvex/ctrl-a`  | Gateway daemon         |
 | `@involvex/ctrl-f5` | CLI (publishable)      |
 | `apps/desktop`      | Electron shell         |
@@ -75,6 +78,11 @@ Expo mobile/web: paste the LAN URL from desktop, tap **connect + stream demo**.
 | `apps/web`          | Expo PWA               |
 
 Full naming, theme, and roadmap: [docs/Plan.md](docs/Plan.md), [docs/Namespace_and_Design.md](docs/Namespace_and_Design.md).
+
+## Docs site (GitHub Pages)
+
+- Live: [involvex.github.io/ctrl](https://involvex.github.io/ctrl/)
+- Local: `bun run docs:dev` → `bun run docs:build`
 
 ## CI, Dependabot, releases
 
@@ -85,6 +93,16 @@ Full naming, theme, and roadmap: [docs/Plan.md](docs/Plan.md), [docs/Namespace_a
 git tag v0.1.0
 git push origin v0.1.0   # publishes GitHub Release + win-x64 artifacts
 ```
+
+## Sponsor
+
+See [docs/funding.md](docs/funding.md) and [`.github/FUNDING.yml`](.github/FUNDING.yml):
+
+- [GitHub Sponsors](https://github.com/sponsors/involvex)
+- [Buy Me a Coffee](https://buymeacoffee.com/involvex)
+- [PayPal](https://paypal.me/involvex)
+- [OpenCode](https://opencode.ai/go?ref=XS9FHCZT4C)
+- [Microsoft Rewards](https://rewards.bing.com/welcome?rh=14525F68&ref=rafsrchae&form=ML2XE3&OCID=ML2XE3&PUBL=RewardsDO&CREA=ML2XE3)
 
 ## Theme
 

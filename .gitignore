@@ -53,3 +53,8 @@ data/
 # Misc
 *.local
 .turbo/
+
+# VitePress
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+

@@ -23,6 +23,25 @@ Config: [`.github/dependabot.yml`](../.github/dependabot.yml)
 - Weekly updates for **Bun** dependencies and **GitHub Actions**
 - Grouped PRs with `dependencies` labels
 
+## Docs site (GitHub Pages)
+
+Workflow: [`.github/workflows/docs.yml`](../.github/workflows/docs.yml)
+
+- Deploys VitePress from `docs/` to **https://involvex.github.io/ctrl/**
+- Triggers on pushes to `main` that touch docs (or manual `workflow_dispatch`)
+- Enable **Settings → Pages → Source: GitHub Actions** once after the first deploy
+
+Local:
+
+```bash
+bun run docs:dev
+bun run docs:build
+```
+
+## Funding
+
+Sponsor links are defined in [`.github/FUNDING.yml`](../.github/FUNDING.yml) and mirrored on the docs [Sponsor page](./funding.md) and root README.
+
 ## Security
 
 See [SECURITY.md](../SECURITY.md) for reporting and operator hardening notes.
