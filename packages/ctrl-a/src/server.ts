@@ -1,4 +1,4 @@
-import { createDemoMcpClient } from '@involvex/ctrl-m';
+import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
 import { resolveProvider } from '@involvex/ctrl-r';
 import {
   clientControlMessageSchema,
@@ -123,7 +123,7 @@ async function streamIterable(
   return assembled;
 }
 
-export function startServer(): ReturnType<typeof Bun.serve> {
+export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
   const host = process.env['HOST'] ?? DEFAULT_HOST;
   const port = Number(process.env['PORT'] ?? DEFAULT_PORT);
   const db = openDatabase(resolveDbPath());
@@ -132,13 +132,22 @@ export function startServer(): ReturnType<typeof Bun.serve> {
   const sandboxRoot = resolveSandboxRoot();
   const registry = new ToolRegistry();
   registerBuiltinTools(registry, sandboxRoot);
-  const mcp = createDemoMcpClient();
+  const mcp = resolveMcpClientFromEnv();
+  await mcp.connectConfigured();
   mcp.mountOn(registry);
   const profile = store.ensureDefaultProfile(registry.listNames());
 
   process.stderr.write(`[ctrl-a] provider ${provider.id}\n`);
   process.stderr.write(`[ctrl-a] tools ${registry.listNames().join(', ')}\n`);
   process.stderr.write(`[ctrl-a] sandbox ${sandboxRoot}\n`);
+  process.stderr.write(
+    `[ctrl-a] mcp ${
+      mcp
+        .listServers()
+        .map((s) => s.id)
+        .join(', ') || '(none)'
+    }\n`
+  );
 
   const server = Bun.serve<SocketData>({
     hostname: host,
@@ -513,5 +522,5 @@ function auditFromEvent(
 }
 
 if (import.meta.main) {
-  startServer();
+  await startServer();
 }

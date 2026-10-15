@@ -11,7 +11,8 @@
   },
   "scripts": {
     "check": "bun check",
-    "build": "bun build ./src/index.ts --outdir ./dist --target=bun --sourcemap=external"
+    "build": "bun build ./src/index.ts --outdir ./dist --target=bun --sourcemap=external",
+    "test": "bun test"
   },
   "dependencies": {
     "@involvex/ctrl-s": "workspace:*",

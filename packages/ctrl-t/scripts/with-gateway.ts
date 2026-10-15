@@ -40,6 +40,8 @@ const child = spawn('bun', ['run', serverEntry], {
     HOST: '127.0.0.1',
     PORT: String(port),
     CTRL_DB_PATH: tmpDb,
+    // Real MCP stdio JSON-RPC for contract coverage
+    CTRL_MCP_STDIO: '1',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
   shell: true,

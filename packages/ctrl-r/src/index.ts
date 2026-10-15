@@ -6,7 +6,8 @@ export type {
   ModelProvider,
   ProviderContext,
 } from './types';
-export { MockProvider } from './mock-provider';
+export { MockProvider, parseCallDirective } from './mock-provider';
+export type { ProviderToolCall } from './types';
 export {
   OpenAICompatibleProvider,
   type OpenAICompatibleConfig,

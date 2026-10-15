@@ -119,12 +119,17 @@ describe('contract: tools + approval', () => {
     const completed = events.find((e) => e.type === 'tool.completed');
     expect(completed?.type).toBe('tool.completed');
     if (completed?.type === 'tool.completed') {
-      const result = completed.result as {
-        stdout?: string;
-        exitCode?: number;
-      };
-      expect(result.exitCode).toBe(0);
-      expect(String(result.stdout)).toContain('hello-ctrl');
+      const result = completed.result;
+      expect(result && typeof result === 'object').toBe(true);
+      if (
+        result &&
+        typeof result === 'object' &&
+        'exitCode' in result &&
+        'stdout' in result
+      ) {
+        expect(result.exitCode).toBe(0);
+        expect(String(result.stdout)).toContain('hello-ctrl');
+      }
     }
   });
 });
