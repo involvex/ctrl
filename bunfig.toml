@@ -21,6 +21,8 @@ ignorePatterns = [
   ".expo/",
   "android/",
   "ios/",
+  "apps/desktop/release/",
+  "apps/desktop/resources/",
 ]
 plugins = []
 
@@ -37,5 +39,7 @@ perf = "warn"
 "import/no-unassigned-import" = "off"
 "react/style-prop-object" = "off"
 "no-await-in-loop" = "off"
+"react-perf/jsx-no-new-array-as-prop" = "off"
+"react-perf/jsx-no-new-function-as-prop" = "off"
 
 

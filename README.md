@@ -23,22 +23,37 @@ Runs `bun check`, `bun lint`, and `bun fmt --check` (Bun-native only). Write for
 ## Build
 
 ```bash
-bun run build              # all packages + apps
-bun run build:packages     # ctrl-s, ctrl-a
-bun run build:apps         # cli, desktop, mobile, web
+bun run build              # all packages + apps (desktop = vite only via build:apps)
+bun run build:packages     # ctrl-s, ctrl-i, ctrl-a
+bun run build:apps         # cli, desktop vite, mobile, web
 bun run build:ctrl-a       # single workspace
-bun run build:desktop
+bun run build:desktop      # win x64: unpacked + portable + NSIS installer
+bun run build:desktop:dir  # win x64 unpacked only (fastest for local use)
 ```
 
-## Gateway health check
+Desktop packaging outputs (`apps/desktop/release/`):
+
+| Artifact                             | Path                              |
+| ------------------------------------ | --------------------------------- |
+| Unpacked (recommended for daily use) | `win-unpacked/ctrl.exe`           |
+| Portable                             | `ctrl-0.0.1-win-x64-portable.exe` |
+| NSIS installer                       | `ctrl-0.0.1-win-x64-setup.exe`    |
+
+The packaged app embeds a compiled `ctrl-a` sidecar under `resources/`.
+
+## Gateway health + demo stream
 
 ```bash
 bun run dev:gateway
 # in another terminal:
 curl http://127.0.0.1:7331/healthz
-# or:
 bun run --filter @involvex/ctrl-f5 start -- health
+bun run --filter @involvex/ctrl-f5 start -- demo
 ```
+
+Desktop (`bun run dev:desktop`) starts the gateway (LAN-bound), shows LAN URLs for Expo, and runs the WebSocket demo stream automatically.
+
+Expo mobile/web: paste the LAN URL from desktop, tap **connect + stream demo**.
 
 ## Workspace map
 

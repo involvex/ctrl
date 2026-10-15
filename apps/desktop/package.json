@@ -3,14 +3,19 @@
   "version": "0.0.1",
   "private": true,
   "description": "Electron desktop shell for @involvex/ctrl",
+  "author": "involvex",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:gateway": "bun run scripts/build-gateway.ts",
+    "package": "bun run build && bun run build:gateway && electron-builder --config electron-builder.yml --win --x64",
+    "package:dir": "bun run build && bun run build:gateway && electron-builder --config electron-builder.yml --win dir --x64",
     "check": "bun check",
     "start": "vite"
   },
   "dependencies": {
+    "@involvex/ctrl-i": "workspace:*",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "zod": "^3.24.2"
@@ -20,6 +25,7 @@
     "@types/react-dom": "~18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
     "typescript": "^5.8.2",
     "vite": "^6.2.0",
     "vite-plugin-electron": "^0.29.0",

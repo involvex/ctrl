@@ -255,7 +255,8 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 
 ## 15. Nächste Schritte
 
-1. Monorepo mit Bun Workspaces anlegen; `ctrl-s` und `ctrl-a` (`/healthz`) — **Phase 0 Scaffold**.
-2. Electron-Shell mit Gateway-Lifecycle.
-3. Expo-Clients im LAN; Abbruchkriterium Phase 0.
+1. Monorepo mit Bun Workspaces anlegen; `ctrl-s` und `ctrl-a` (`/healthz`) — **done**.
+2. Electron-Shell mit Gateway-Lifecycle — **done**.
+3. Expo-Clients im LAN + WebSocket-Demo-Stream (`/ws/v1/demo`, `@involvex/ctrl-i`) — **in progress**.
 4. Contract-Tests (`ctrl-t`) und CI-Matrix vor Phase 2.
+5. Phase 1 Chat MVP (echte Conversations, OpenAI-Provider).

@@ -12,7 +12,7 @@
     "start": "bun run src/server.ts",
     "check": "bun check",
     "build": "bun build ./src/server.ts ./src/cli.ts --outdir ./dist --target=bun --sourcemap=external",
-    "build:compile": "echo \"bun build --compile — Phase 3\""
+    "build:compile": "bun run ../../apps/desktop/scripts/build-gateway.ts"
   },
   "dependencies": {
     "@involvex/ctrl-s": "workspace:*"

@@ -1,0 +1,45 @@
+appId: com.involvex.ctrl
+productName: ctrl
+copyright: Copyright © involvex
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+# Sidecar built by scripts/build-gateway.ts (win x64 primary target)
+extraResources:
+  - from: resources/win/x64/
+    to: .
+    filter:
+      - '**/*'
+
+asar: true
+
+win:
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+  target:
+    - target: dir
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: ctrl
+  artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-win-${arch}-portable.${ext}

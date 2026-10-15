@@ -10,6 +10,12 @@ export type GatewayStatus =
 
 export type GatewayStatusListener = (status: GatewayStatus) => void;
 
+export type GatewayManagerOptions = {
+  repoRoot: string;
+  packaged: boolean;
+  resourcesPath: string;
+};
+
 const HEALTH_TIMEOUT_MS = 15_000;
 const HEALTH_POLL_MS = 200;
 const STOP_TIMEOUT_MS = 5_000;
@@ -21,6 +27,10 @@ function pickPort(): number {
     return fromEnv;
   }
   return 40_000 + Math.floor(Math.random() * 20_000);
+}
+
+function gatewayBinaryName(): string {
+  return process.platform === 'win32' ? 'ctrl-a.exe' : 'ctrl-a';
 }
 
 async function waitForHealth(url: string, signal: AbortSignal): Promise<void> {
@@ -52,7 +62,7 @@ export class GatewayManager {
   private url = 'http://127.0.0.1:7331';
   private healthAbort: AbortController | null = null;
 
-  constructor(private readonly repoRoot: string) {}
+  constructor(private readonly opts: GatewayManagerOptions) {}
 
   onStatus(listener: GatewayStatusListener): () => void {
     this.listeners.add(listener);
@@ -139,23 +149,42 @@ export class GatewayManager {
     }
   }
 
-  private async spawnOnce(): Promise<void> {
+  private resolveSpawn(): { command: string; args: string[]; cwd: string } {
+    if (this.opts.packaged) {
+      const command = path.join(this.opts.resourcesPath, gatewayBinaryName());
+      return {
+        command,
+        args: [],
+        cwd: this.opts.resourcesPath,
+      };
+    }
+
     const entry = path.join(
-      this.repoRoot,
+      this.opts.repoRoot,
       'packages',
       'ctrl-a',
       'src',
       'server.ts'
     );
+    return {
+      command: process.env['BUN_BIN'] ?? 'bun',
+      args: ['run', entry],
+      cwd: this.opts.repoRoot,
+    };
+  }
+
+  private async spawnOnce(): Promise<void> {
     this.port = pickPort();
     this.url = `http://127.0.0.1:${this.port}`;
 
-    const bunBin = process.env['BUN_BIN'] ?? 'bun';
-    const child = spawn(bunBin, ['run', entry], {
-      cwd: this.repoRoot,
+    const { command, args, cwd } = this.resolveSpawn();
+    const child = spawn(command, args, {
+      cwd,
       env: {
         ...process.env,
-        HOST: '127.0.0.1',
+        // Phase 0: bind all interfaces so Expo devices on LAN can reach the gateway.
+        // Set CTRL_A_LAN=0 to force loopback-only.
+        HOST: process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
         PORT: String(this.port),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -164,10 +193,10 @@ export class GatewayManager {
 
     this.child = child;
 
-    child.stdout.on('data', (buf: Buffer) => {
+    child.stdout?.on('data', (buf: Buffer) => {
       process.stderr.write(`[ctrl-a] ${buf.toString()}`);
     });
-    child.stderr.on('data', (buf: Buffer) => {
+    child.stderr?.on('data', (buf: Buffer) => {
       process.stderr.write(`[ctrl-a] ${buf.toString()}`);
     });
 

@@ -1,8 +1,13 @@
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import type { GatewayManager, GatewayStatus } from './gateway-manager';
+import { listLanAddresses } from './lan';
 
-const channelSchema = z.enum(['gateway:getUrl', 'gateway:getStatus']);
+const channelSchema = z.enum([
+  'gateway:getUrl',
+  'gateway:getStatus',
+  'gateway:getLanUrls',
+]);
 
 const gatewayStatusSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('stopped') }),
@@ -29,5 +34,11 @@ export function registerGatewayIpc(gateway: GatewayManager): void {
   ipcMain.handle('gateway:getStatus', (): GatewayStatus => {
     channelSchema.parse('gateway:getStatus');
     return gatewayStatusSchema.parse(gateway.getStatus());
+  });
+
+  ipcMain.handle('gateway:getLanUrls', (): string[] => {
+    channelSchema.parse('gateway:getLanUrls');
+    const port = new URL(gateway.getUrl()).port;
+    return listLanAddresses().map((ip) => `http://${ip}:${port}`);
   });
 }

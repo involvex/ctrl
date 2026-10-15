@@ -49,7 +49,11 @@ function createWindow(gatewayUrl: string): void {
 async function bootstrap(): Promise<void> {
   await app.whenReady();
 
-  gateway = new GatewayManager(resolveRepoRoot());
+  gateway = new GatewayManager({
+    repoRoot: resolveRepoRoot(),
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
   registerGatewayIpc(gateway);
 
   const url = await gateway.start();

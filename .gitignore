@@ -22,6 +22,8 @@ apps/desktop/release/
 apps/desktop/out/
 apps/desktop/dist-electron/
 apps/desktop/dist/
+apps/desktop/resources/
+
 
 
 # Env & secrets

@@ -9,10 +9,12 @@
     "backgroundColor": "#000000",
     "android": {
       "package": "com.involvex.ctrl",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#000000"
       }
     },
+
     "plugins": ["expo-router"]
   }
 }

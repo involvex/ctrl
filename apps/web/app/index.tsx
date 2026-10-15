@@ -1,10 +1,64 @@
-import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { useCallback, useState } from 'react';
+import { checkHealth, streamDemo } from '@involvex/ctrl-i';
 
 const DEFAULT_GATEWAY = 'http://127.0.0.1:7331';
 
 export default function IndexScreen() {
   const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_GATEWAY);
+  const [health, setHealth] = useState('idle');
+  const [streamState, setStreamState] = useState('idle');
+  const [streamText, setStreamText] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const connect = useCallback(async () => {
+    setBusy(true);
+    setHealth('checking…');
+    setStreamText('');
+    setStreamState('idle');
+    try {
+      const h = await checkHealth(gatewayUrl);
+      setHealth(`ok ${h.version}`);
+      setStreamState('connecting');
+      streamDemo(gatewayUrl, {
+        onEvent: (event) => {
+          if (event.type === 'run.started') {
+            setStreamState('streaming');
+            setStreamText('');
+          }
+          if (event.type === 'message.delta') {
+            setStreamText((prev) => prev + event.text);
+          }
+          if (event.type === 'run.completed') {
+            setStreamState('done');
+            setBusy(false);
+          }
+          if (event.type === 'run.failed') {
+            setStreamState(`failed: ${event.error.message}`);
+            setBusy(false);
+          }
+        },
+        onError: (err) => {
+          setStreamState(`error: ${err.message}`);
+          setBusy(false);
+        },
+        onClose: () => {
+          setStreamState((s) => (s === 'streaming' ? 'done' : s));
+          setBusy(false);
+        },
+      });
+    } catch (err) {
+      setHealth(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }, [gatewayUrl]);
 
   return (
     <View style={styles.root}>
@@ -17,9 +71,27 @@ export default function IndexScreen() {
         onChangeText={setGatewayUrl}
         autoCapitalize="none"
         autoCorrect={false}
+        editable={!busy}
         placeholderTextColor="#6b7f72"
         placeholder="http://127.0.0.1:7331"
       />
+      <Pressable
+        style={[styles.button, busy && styles.buttonDisabled]}
+        onPress={() => {
+          void connect();
+        }}
+        disabled={busy}
+      >
+        {busy ? (
+          <ActivityIndicator color="#000000" />
+        ) : (
+          <Text style={styles.buttonText}>connect + stream demo</Text>
+        )}
+      </Pressable>
+      <Text style={styles.meta}>health: {health}</Text>
+      <Text style={styles.meta}>
+        demo [{streamState}]: {streamText || '…'}
+      </Text>
     </View>
   );
 }
@@ -63,5 +135,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: '#111613',
+  },
+  button: {
+    alignSelf: 'stretch',
+    maxWidth: 420,
+    backgroundColor: '#00ff66',
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: '#000000',
+    fontFamily: 'monospace',
+    fontWeight: '700',
+  },
+  meta: {
+    alignSelf: 'stretch',
+    maxWidth: 420,
+    color: '#00ff66',
+    fontFamily: 'monospace',
+    fontSize: 12,
+    opacity: 0.75,
+    marginTop: 4,
   },
 });

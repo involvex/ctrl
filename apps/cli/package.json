@@ -16,6 +16,7 @@
     "build": "bun build ./src/cli.ts --outdir ./dist --target=bun --sourcemap=external"
   },
   "dependencies": {
+    "@involvex/ctrl-i": "workspace:*",
     "@involvex/ctrl-s": "workspace:*"
   },
   "publishConfig": {
