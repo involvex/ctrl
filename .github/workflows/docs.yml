@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  BUN_VERSION: '1.4.4'
+  BUN_VERSION: '1.4.3'
   DOCS_BASE: /ctrl/
 
 jobs:
