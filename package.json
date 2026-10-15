@@ -9,7 +9,6 @@
   ],
   "scripts": {
     "check": "bun check",
-    "lint": "bun lint",
     "format": "bun fmt --check",
     "format:write": "bun fmt",
     "validate": "bun check && bun lint && bun fmt --check",
