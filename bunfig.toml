@@ -2,9 +2,6 @@
 root = "."
 coverage = true
 
-[run]
-bun = true
-
 [fmt]
 semi = true
 singleQuote = true

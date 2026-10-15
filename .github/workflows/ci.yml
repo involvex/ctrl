@@ -60,8 +60,23 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
+      # Install Node after Bun so PATH prefers real node.exe over Bun's node shim
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - run: bun install --frozen-lockfile
-      - run: bun run build:desktop:dir
+      - run: bun run --filter @involvex/ctrl-desktop build
+      - run: bun run --filter @involvex/ctrl-desktop build:gateway
+      # electron-builder must run under real Node (Bun's node shim breaks bluebird/source-map)
+      - name: electron-builder (Node)
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          $node = (Get-Command node).Source
+          Write-Host "Using node: $node"
+          & node --version
+          if ($node -match 'bun') { throw "PATH still resolves node to Bun shim: $node" }
+          & node ./node_modules/electron-builder/cli.js --config electron-builder.yml --win dir --x64
       - name: Upload win-unpacked
         uses: actions/upload-artifact@v4
         with:
