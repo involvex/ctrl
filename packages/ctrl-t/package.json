@@ -1,0 +1,17 @@
+{
+  "name": "@involvex/ctrl-t",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Contract tests against @involvex/ctrl-a (BASE_URL)",
+  "type": "module",
+  "scripts": {
+    "check": "bun check",
+    "build": "bun check",
+    "test": "bun test ./src",
+    "test:live": "bun run scripts/with-gateway.ts"
+  },
+  "dependencies": {
+    "@involvex/ctrl-i": "workspace:*",
+    "@involvex/ctrl-s": "workspace:*"
+  }
+}

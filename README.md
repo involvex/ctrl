@@ -20,6 +20,14 @@ bun run validate
 
 Runs `bun check`, `bun lint`, and `bun fmt --check` (Bun-native only). Write format with `bun run format:write`.
 
+## Contract tests
+
+```bash
+bun run test:contracts
+```
+
+Starts an ephemeral `ctrl-a`, runs `@involvex/ctrl-t` against `BASE_URL`, then stops the gateway. CI runs the same suite on every push/PR.
+
 ## Build
 
 ```bash

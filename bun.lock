@@ -103,6 +103,14 @@
         "zod": "^3.24.2",
       },
     },
+    "packages/ctrl-t": {
+      "name": "@involvex/ctrl-t",
+      "version": "0.0.1",
+      "dependencies": {
+        "@involvex/ctrl-i": "workspace:*",
+        "@involvex/ctrl-s": "workspace:*",
+      },
+    },
   },
   "overrides": {
     "@types/react": "~18.3.12",
@@ -504,6 +512,8 @@
     "@involvex/ctrl-mobile": ["@involvex/ctrl-mobile@workspace:apps/mobile"],
 
     "@involvex/ctrl-s": ["@involvex/ctrl-s@workspace:packages/ctrl-s"],
+
+    "@involvex/ctrl-t": ["@involvex/ctrl-t@workspace:packages/ctrl-t"],
 
     "@involvex/ctrl-web": ["@involvex/ctrl-web@workspace:apps/web"],
 
