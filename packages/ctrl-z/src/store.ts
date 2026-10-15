@@ -1,7 +1,12 @@
 import type { Database } from 'bun:sqlite';
 import {
+  agentProfileSchema,
+  auditEntrySchema,
   messageRoleSchema,
   workspaceExportSchema,
+  type AgentProfile,
+  type AuditAction,
+  type AuditEntry,
   type Conversation,
   type Message,
   type MessageRole,
@@ -11,6 +16,14 @@ import {
 
 function id(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '').slice(0, 16)}`;
+}
+
+function parseStringArray(raw: string): string[] {
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed.filter((item): item is string => typeof item === 'string');
 }
 
 type WorkspaceRow = {
@@ -234,5 +247,156 @@ export class Store {
       }
     }
     return workspace;
+  }
+
+  listAgentProfiles(): AgentProfile[] {
+    const rows = this.db
+      .query<
+        {
+          id: string;
+          name: string;
+          instructions: string;
+          tool_names: string;
+          require_approval_for: string;
+          run_timeout_ms: number;
+          created_at: number;
+          updated_at: number;
+        },
+        []
+      >(
+        `SELECT id, name, instructions, tool_names, require_approval_for,
+                run_timeout_ms, created_at, updated_at
+         FROM agent_profiles ORDER BY created_at DESC`
+      )
+      .all();
+    return rows.map((row) =>
+      agentProfileSchema.parse({
+        id: row.id,
+        name: row.name,
+        instructions: row.instructions,
+        toolNames: parseStringArray(row.tool_names),
+        requireApprovalFor: parseStringArray(row.require_approval_for),
+        runTimeoutMs: row.run_timeout_ms,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })
+    );
+  }
+
+  ensureDefaultProfile(toolNames: string[]): AgentProfile {
+    const existing = this.listAgentProfiles()[0];
+    if (existing) {
+      return existing;
+    }
+    return this.createAgentProfile({
+      name: 'default',
+      instructions: 'Local ctrl agent with sandboxed tools.',
+      toolNames,
+      requireApprovalFor: ['shell', 'fs_write'],
+      runTimeoutMs: 60_000,
+    });
+  }
+
+  createAgentProfile(input: {
+    name: string;
+    instructions?: string;
+    toolNames?: string[];
+    requireApprovalFor?: string[];
+    runTimeoutMs?: number;
+  }): AgentProfile {
+    const now = Date.now();
+    const profile = agentProfileSchema.parse({
+      id: id('ap'),
+      name: input.name,
+      instructions: input.instructions ?? '',
+      toolNames: input.toolNames ?? [],
+      requireApprovalFor: input.requireApprovalFor ?? [],
+      runTimeoutMs: input.runTimeoutMs ?? 60_000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    this.db
+      .query(
+        `INSERT INTO agent_profiles(
+          id, name, instructions, tool_names, require_approval_for,
+          run_timeout_ms, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        profile.id,
+        profile.name,
+        profile.instructions,
+        JSON.stringify(profile.toolNames),
+        JSON.stringify(profile.requireApprovalFor),
+        profile.runTimeoutMs,
+        profile.createdAt,
+        profile.updatedAt
+      );
+    return profile;
+  }
+
+  appendAudit(entry: {
+    workspaceId?: string | null;
+    conversationId?: string | null;
+    runId?: string | null;
+    action: AuditAction;
+    detail?: unknown;
+  }): AuditEntry {
+    const row = auditEntrySchema.parse({
+      id: id('aud'),
+      workspaceId: entry.workspaceId ?? null,
+      conversationId: entry.conversationId ?? null,
+      runId: entry.runId ?? null,
+      action: entry.action,
+      detail: entry.detail,
+      createdAt: Date.now(),
+    });
+    this.db
+      .query(
+        `INSERT INTO audit_logs(
+          id, workspace_id, conversation_id, run_id, action, detail, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        row.id,
+        row.workspaceId,
+        row.conversationId,
+        row.runId,
+        row.action,
+        row.detail === undefined ? null : JSON.stringify(row.detail),
+        row.createdAt
+      );
+    return row;
+  }
+
+  listAudit(limit = 100): AuditEntry[] {
+    const rows = this.db
+      .query<
+        {
+          id: string;
+          workspace_id: string | null;
+          conversation_id: string | null;
+          run_id: string | null;
+          action: string;
+          detail: string | null;
+          created_at: number;
+        },
+        [number]
+      >(
+        `SELECT id, workspace_id, conversation_id, run_id, action, detail, created_at
+         FROM audit_logs ORDER BY created_at DESC LIMIT ?`
+      )
+      .all(limit);
+    return rows.map((row) =>
+      auditEntrySchema.parse({
+        id: row.id,
+        workspaceId: row.workspace_id,
+        conversationId: row.conversation_id,
+        runId: row.run_id,
+        action: row.action,
+        detail: row.detail ? (JSON.parse(row.detail) as unknown) : undefined,
+        createdAt: row.created_at,
+      })
+    );
   }
 }

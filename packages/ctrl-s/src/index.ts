@@ -1,9 +1,11 @@
 export {
   agentEventSchema,
+  approvalDecisionSchema,
   toolCallSchema,
   tokenUsageSchema,
   serializedErrorSchema,
   type AgentEvent,
+  type ApprovalDecisionEvent,
   type ToolCall,
   type TokenUsage,
   type SerializedError,
@@ -26,3 +28,20 @@ export {
   type MessageRole,
   type WorkspaceExport,
 } from './domain';
+
+export {
+  toolRiskSchema,
+  toolDefinitionSchema,
+  agentProfileSchema,
+  createAgentProfileInputSchema,
+  auditActionSchema,
+  auditEntrySchema,
+  clientControlMessageSchema,
+  type ToolRisk,
+  type ToolDefinition,
+  type ApprovalDecision,
+  type AgentProfile,
+  type AuditAction,
+  type AuditEntry,
+  type ClientControlMessage,
+} from './tools';

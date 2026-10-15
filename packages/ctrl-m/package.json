@@ -1,0 +1,20 @@
+{
+  "name": "@involvex/ctrl-m",
+  "version": "0.0.1",
+  "private": true,
+  "description": "MCP client — connect to Model Context Protocol servers",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "bun check",
+    "build": "bun build ./src/index.ts --outdir ./dist --target=bun --sourcemap=external"
+  },
+  "dependencies": {
+    "@involvex/ctrl-s": "workspace:*",
+    "@involvex/ctrl-x": "workspace:*"
+  }
+}

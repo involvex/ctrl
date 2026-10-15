@@ -177,6 +177,38 @@ body,
   font-size: 0.8rem;
 }
 
+.tool-status {
+  padding: 0.35rem 1.25rem;
+  opacity: 0.7;
+}
+
+.approval {
+  margin: 0 1.25rem 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--accent);
+  background: #06140c;
+}
+
+.approval-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.approval-args {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem;
+  max-height: 8rem;
+  overflow: auto;
+  font-size: 0.75rem;
+  background: #050a08;
+  border: 1px solid var(--charcoal);
+}
+
+.approval-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .composer {
   display: grid;
   grid-template-columns: 1fr auto;

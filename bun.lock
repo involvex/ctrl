@@ -91,8 +91,10 @@
         "ctrl-a": "./src/cli.ts",
       },
       "dependencies": {
+        "@involvex/ctrl-m": "workspace:*",
         "@involvex/ctrl-r": "workspace:*",
         "@involvex/ctrl-s": "workspace:*",
+        "@involvex/ctrl-x": "workspace:*",
         "@involvex/ctrl-z": "workspace:*",
       },
     },
@@ -102,6 +104,14 @@
       "dependencies": {
         "@involvex/ctrl-s": "workspace:*",
         "zod": "^3.24.2",
+      },
+    },
+    "packages/ctrl-m": {
+      "name": "@involvex/ctrl-m",
+      "version": "0.0.1",
+      "dependencies": {
+        "@involvex/ctrl-s": "workspace:*",
+        "@involvex/ctrl-x": "workspace:*",
       },
     },
     "packages/ctrl-r": {
@@ -124,6 +134,15 @@
       "dependencies": {
         "@involvex/ctrl-i": "workspace:*",
         "@involvex/ctrl-s": "workspace:*",
+      },
+    },
+    "packages/ctrl-x": {
+      "name": "@involvex/ctrl-x",
+      "version": "0.0.1",
+      "dependencies": {
+        "@involvex/ctrl-r": "workspace:*",
+        "@involvex/ctrl-s": "workspace:*",
+        "zod": "^3.24.2",
       },
     },
     "packages/ctrl-z": {
@@ -586,6 +605,8 @@
 
     "@involvex/ctrl-i": ["@involvex/ctrl-i@workspace:packages/ctrl-i"],
 
+    "@involvex/ctrl-m": ["@involvex/ctrl-m@workspace:packages/ctrl-m"],
+
     "@involvex/ctrl-mobile": ["@involvex/ctrl-mobile@workspace:apps/mobile"],
 
     "@involvex/ctrl-r": ["@involvex/ctrl-r@workspace:packages/ctrl-r"],
@@ -595,6 +616,8 @@
     "@involvex/ctrl-t": ["@involvex/ctrl-t@workspace:packages/ctrl-t"],
 
     "@involvex/ctrl-web": ["@involvex/ctrl-web@workspace:apps/web"],
+
+    "@involvex/ctrl-x": ["@involvex/ctrl-x@workspace:packages/ctrl-x"],
 
     "@involvex/ctrl-z": ["@involvex/ctrl-z@workspace:packages/ctrl-z"],
 

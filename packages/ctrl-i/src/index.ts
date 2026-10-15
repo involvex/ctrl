@@ -154,9 +154,27 @@ export type StreamHandlers = {
   onClose?: () => void;
 };
 
-function attachWs(url: string, handlers: StreamHandlers): () => void {
+export type RunSession = {
+  /** Abort the active run (sends run.cancel to the gateway). */
+  cancel: (reason?: string) => void;
+  /** Approve or deny a pending tool approval. */
+  resolveApproval: (
+    approvalId: string,
+    decision: 'approved' | 'denied'
+  ) => void;
+  /** Close the socket without a cancel message. */
+  close: () => void;
+};
+
+function attachWs(url: string, handlers: StreamHandlers): RunSession {
   const ws = new WebSocket(url);
   let closed = false;
+
+  const send = (payload: unknown) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload));
+    }
+  };
 
   ws.addEventListener('message', (msg) => {
     try {
@@ -178,9 +196,19 @@ function attachWs(url: string, handlers: StreamHandlers): () => void {
     }
   });
 
-  return () => {
-    closed = true;
-    ws.close();
+  return {
+    cancel(reason) {
+      send({ type: 'run.cancel', reason });
+      closed = true;
+      ws.close();
+    },
+    resolveApproval(approvalId, decision) {
+      send({ type: 'approval.resolve', approvalId, decision });
+    },
+    close() {
+      closed = true;
+      ws.close();
+    },
   };
 }
 
@@ -188,17 +216,17 @@ function attachWs(url: string, handlers: StreamHandlers): () => void {
 export function streamDemo(
   baseUrl: string,
   handlers: StreamHandlers
-): () => void {
+): RunSession {
   return attachWs(toWsUrl(baseUrl, '/ws/v1/demo'), handlers);
 }
 
-/** Stream a mock chat run for a conversation. */
+/** Stream a chat/agent run for a conversation. */
 export function streamChat(
   baseUrl: string,
   conversationId: string,
   content: string,
   handlers: StreamHandlers
-): () => void {
+): RunSession {
   const search = `?content=${encodeURIComponent(content)}`;
   return attachWs(
     toWsUrl(baseUrl, `/ws/v1/conversations/${conversationId}/runs`, search),

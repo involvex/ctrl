@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export type CtrlDb = Database;
 
@@ -59,6 +59,34 @@ function migrate(db: Database): void {
 
       CREATE INDEX IF NOT EXISTS idx_messages_conversation
         ON messages(conversation_id, created_at);
+    `);
+  }
+
+  if (current < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS agent_profiles (
+        id TEXT PRIMARY KEY NOT NULL,
+        name TEXT NOT NULL,
+        instructions TEXT NOT NULL DEFAULT '',
+        tool_names TEXT NOT NULL DEFAULT '[]',
+        require_approval_for TEXT NOT NULL DEFAULT '[]',
+        run_timeout_ms INTEGER NOT NULL DEFAULT 60000,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        workspace_id TEXT,
+        conversation_id TEXT,
+        run_id TEXT,
+        action TEXT NOT NULL,
+        detail TEXT,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_audit_created
+        ON audit_logs(created_at DESC);
     `);
   }
 

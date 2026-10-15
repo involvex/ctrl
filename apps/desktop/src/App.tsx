@@ -10,10 +10,18 @@ import {
   streamChat,
   type Conversation,
   type Message,
+  type RunSession,
   type Workspace,
 } from '@involvex/ctrl-i';
-import { workspaceExportSchema } from '@involvex/ctrl-s';
+import { workspaceExportSchema, type ToolCall } from '@involvex/ctrl-s';
 import { Markdown } from './markdown';
+
+type PendingApproval = {
+  approvalId: string;
+  call: ToolCall;
+  risk: 'low' | 'high';
+  timeoutMs: number;
+};
 
 declare global {
   interface Window {
@@ -45,7 +53,10 @@ export function App() {
   const [streaming, setStreaming] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const stopRef = useRef<(() => void) | null>(null);
+  const [pendingApproval, setPendingApproval] =
+    useState<PendingApproval | null>(null);
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const sessionRef = useRef<RunSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -156,19 +167,48 @@ export function App() {
       },
     ]);
 
-    stopRef.current?.();
-    stopRef.current = streamChat(gatewayUrl, conversation.id, content, {
+    sessionRef.current?.close();
+    setPendingApproval(null);
+    setToolStatus(null);
+    sessionRef.current = streamChat(gatewayUrl, conversation.id, content, {
       onEvent: (event) => {
         if (event.type === 'message.delta') {
           setStreaming((prev) => prev + event.text);
+        }
+        if (event.type === 'tool.requested') {
+          setToolStatus(`tool requested: ${event.call.name}`);
+        }
+        if (event.type === 'tool.started') {
+          setToolStatus(`tool running…`);
+        }
+        if (event.type === 'tool.completed') {
+          setToolStatus(`tool done`);
+        }
+        if (event.type === 'approval.requested') {
+          setPendingApproval({
+            approvalId: event.approvalId,
+            call: event.call,
+            risk: event.risk,
+            timeoutMs: event.timeoutMs,
+          });
+        }
+        if (event.type === 'approval.resolved') {
+          setPendingApproval(null);
         }
         if (event.type === 'run.failed') {
           setError(event.error.message);
           setBusy(false);
           setStreaming('');
+          setPendingApproval(null);
+        }
+        if (event.type === 'run.cancelled') {
+          setError(event.reason ?? 'cancelled');
+          setBusy(false);
+          setPendingApproval(null);
         }
         if (event.type === 'run.completed') {
           setBusy(false);
+          setPendingApproval(null);
         }
       },
       onError: (err) => {
@@ -181,16 +221,31 @@ export function App() {
           setMessages(items);
           setStreaming('');
           setBusy(false);
+          setPendingApproval(null);
+          setToolStatus(null);
+          sessionRef.current = null;
         })();
       },
     });
   }, [busy, conversation, draft, gatewayUrl]);
 
   const stop = useCallback(() => {
-    stopRef.current?.();
-    stopRef.current = null;
+    sessionRef.current?.cancel('user stop');
+    sessionRef.current = null;
+    setPendingApproval(null);
     setBusy(false);
   }, []);
+
+  const decide = useCallback(
+    (decision: 'approved' | 'denied') => {
+      if (!pendingApproval || !sessionRef.current) {
+        return;
+      }
+      sessionRef.current.resolveApproval(pendingApproval.approvalId, decision);
+      setPendingApproval(null);
+    },
+    [pendingApproval]
+  );
 
   const onExport = useCallback(async () => {
     if (!workspace || !gatewayUrl.startsWith('http')) {
@@ -294,7 +349,36 @@ export function App() {
         <div ref={bottomRef} />
       </section>
 
+      {toolStatus ? <p className="meta tool-status">{toolStatus}</p> : null}
       {error ? <p className="error">{error}</p> : null}
+
+      {pendingApproval ? (
+        <aside className="approval">
+          <p className="approval-title">
+            approve tool <code>{pendingApproval.call.name}</code> [
+            {pendingApproval.risk}]
+          </p>
+          <pre className="approval-args">
+            {JSON.stringify(pendingApproval.call.arguments, null, 2)}
+          </pre>
+          <div className="approval-actions">
+            <button
+              type="button"
+              className="demo-btn"
+              onClick={() => decide('approved')}
+            >
+              approve
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => decide('denied')}
+            >
+              deny
+            </button>
+          </div>
+        </aside>
+      ) : null}
 
       <footer className="composer">
         <textarea
@@ -306,7 +390,7 @@ export function App() {
               send();
             }
           }}
-          placeholder="Message… (Enter to send, Shift+Enter newline)"
+          placeholder="Message… or /tool fs_list .  ·  /tool shell echo hi"
           rows={3}
           disabled={status !== 'running' || !conversation}
         />

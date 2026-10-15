@@ -40,6 +40,7 @@ export default defineConfig({
         items: [
           { text: 'CI & Releases', link: '/ci-and-releases' },
           { text: 'Security', link: '/security' },
+          { text: 'Threat Model', link: '/threat-model' },
           { text: 'Sponsor / Funding', link: '/funding' },
         ],
       },

@@ -1,0 +1,22 @@
+{
+  "name": "@involvex/ctrl-x",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Agent core — loop, tool registry, sandbox, approvals",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check": "bun check",
+    "build": "bun build ./src/index.ts --outdir ./dist --target=bun --sourcemap=external",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@involvex/ctrl-r": "workspace:*",
+    "@involvex/ctrl-s": "workspace:*",
+    "zod": "^3.24.2"
+  }
+}

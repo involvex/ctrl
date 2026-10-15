@@ -24,6 +24,8 @@ export const serializedErrorSchema = z.object({
 
 export type SerializedError = z.infer<typeof serializedErrorSchema>;
 
+export const approvalDecisionSchema = z.enum(['approved', 'denied', 'timeout']);
+
 export const agentEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('run.started'),
@@ -51,6 +53,18 @@ export const agentEventSchema = z.discriminatedUnion('type', [
     result: z.unknown(),
   }),
   z.object({
+    type: z.literal('approval.requested'),
+    approvalId: z.string(),
+    call: toolCallSchema,
+    risk: z.enum(['low', 'high']),
+    timeoutMs: z.number().int().positive(),
+  }),
+  z.object({
+    type: z.literal('approval.resolved'),
+    approvalId: z.string(),
+    decision: approvalDecisionSchema,
+  }),
+  z.object({
     type: z.literal('usage.updated'),
     usage: tokenUsageSchema,
   }),
@@ -62,6 +76,12 @@ export const agentEventSchema = z.discriminatedUnion('type', [
     type: z.literal('run.failed'),
     error: serializedErrorSchema,
   }),
+  z.object({
+    type: z.literal('run.cancelled'),
+    runId: z.string(),
+    reason: z.string().optional(),
+  }),
 ]);
 
 export type AgentEvent = z.infer<typeof agentEventSchema>;
+export type ApprovalDecisionEvent = z.infer<typeof approvalDecisionSchema>;

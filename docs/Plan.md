@@ -261,4 +261,5 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 4. Contract-Tests (`ctrl-t`) und CI-Matrix — **done**.
 5. Dependabot, SECURITY.md, tag→GitHub Release workflow — **done** (see [ci-and-releases.md](ci-and-releases.md)).
 6. Phase 1 Chat MVP — **done**: `ctrl-z` SQLite, workspace/conversation/message API, `ctrl-r` providers (mock + OpenAI-compatible), Markdown chat UI, export/import, contract tests.
-7. Phase 2 Agent Runtime — next: Tool Registry, Approval-UI, Shell-/FS-Tool with sandbox, Agent Profiles, Cancellation, Timeouts, Audit Log, MCP (`ctrl-m`).
+7. Phase 2 Agent Runtime — **started**: `ctrl-x` tool registry + sandbox shell/fs, approval gate + desktop UI, cancel/timeouts, audit log, agent profiles, `ctrl-m` MCP stub. Remaining: full MCP stdio JSON-RPC, LLM-native tool calling.
+8. Phase 3 Desktop Host — next after Phase 2 harden: Tray, Autostart, Updater, `safeStorage`, llama-server sidecar, LAN pairing.

@@ -1,5 +1,7 @@
+import { createDemoMcpClient } from '@involvex/ctrl-m';
 import { resolveProvider } from '@involvex/ctrl-r';
 import {
+  clientControlMessageSchema,
   createConversationInputSchema,
   createMessageInputSchema,
   createWorkspaceInputSchema,
@@ -8,6 +10,12 @@ import {
   type AgentEvent,
   type HealthResponse,
 } from '@involvex/ctrl-s';
+import {
+  createApprovalGate,
+  registerBuiltinTools,
+  runAgentLoop,
+  ToolRegistry,
+} from '@involvex/ctrl-x';
 import { openDatabase, Store } from '@involvex/ctrl-z';
 import path from 'node:path';
 import { demoAgentEvents } from './mock-stream';
@@ -18,7 +26,15 @@ const VERSION = '0.0.1';
 const CHUNK_DELAY_MS = 40;
 
 type SocketData =
-  { kind: 'demo' } | { kind: 'chat'; conversationId: string; content: string };
+  | { kind: 'demo' }
+  | {
+      kind: 'chat';
+      conversationId: string;
+      content: string;
+      runId: string;
+      abort: AbortController;
+      approvals: ReturnType<typeof createApprovalGate>;
+    };
 
 function healthPayload(): HealthResponse {
   return healthResponseSchema.parse({
@@ -74,6 +90,15 @@ function resolveDbPath(): string {
   return path.join(dataDir, 'app.db');
 }
 
+function resolveSandboxRoot(): string {
+  if (process.env['CTRL_SANDBOX_ROOT']) {
+    return process.env['CTRL_SANDBOX_ROOT'];
+  }
+  const dataDir =
+    process.env['CTRL_DATA_DIR'] ?? path.join(process.cwd(), 'data');
+  return path.join(dataDir, 'sandbox');
+}
+
 async function streamIterable(
   ws: {
     readyState: number;
@@ -104,8 +129,16 @@ export function startServer(): ReturnType<typeof Bun.serve> {
   const db = openDatabase(resolveDbPath());
   const store = new Store(db);
   const provider = resolveProvider();
+  const sandboxRoot = resolveSandboxRoot();
+  const registry = new ToolRegistry();
+  registerBuiltinTools(registry, sandboxRoot);
+  const mcp = createDemoMcpClient();
+  mcp.mountOn(registry);
+  const profile = store.ensureDefaultProfile(registry.listNames());
 
   process.stderr.write(`[ctrl-a] provider ${provider.id}\n`);
+  process.stderr.write(`[ctrl-a] tools ${registry.listNames().join(', ')}\n`);
+  process.stderr.write(`[ctrl-a] sandbox ${sandboxRoot}\n`);
 
   const server = Bun.serve<SocketData>({
     hostname: host,
@@ -119,6 +152,23 @@ export function startServer(): ReturnType<typeof Bun.serve> {
 
       if (req.method === 'GET' && url.pathname === '/healthz') {
         return json(req, healthPayload());
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/v1/tools') {
+        return json(req, { items: registry.list() });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/v1/profiles') {
+        return json(req, { items: store.listAgentProfiles() });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/v1/audit') {
+        const limit = Number(url.searchParams.get('limit') ?? 100);
+        return json(req, { items: store.listAudit(limit) });
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/v1/mcp/servers') {
+        return json(req, { items: mcp.listServers() });
       }
 
       if (req.method === 'GET' && url.pathname === '/api/v1/workspaces') {
@@ -212,8 +262,16 @@ export function startServer(): ReturnType<typeof Bun.serve> {
         if (!store.getConversation(conversationId)) {
           return json(req, { error: 'conversation not found' }, 404);
         }
+        const runId = `run_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
         const upgraded = srv.upgrade(req, {
-          data: { kind: 'chat', conversationId, content },
+          data: {
+            kind: 'chat',
+            conversationId,
+            content,
+            runId,
+            abort: new AbortController(),
+            approvals: createApprovalGate(),
+          },
         });
         if (upgraded) {
           return undefined;
@@ -259,18 +317,70 @@ export function startServer(): ReturnType<typeof Bun.serve> {
         }
 
         if (ws.data.kind === 'chat') {
-          const { conversationId, content } = ws.data;
+          const { conversationId, content, runId, abort, approvals } = ws.data;
           void (async () => {
             store.addMessage(conversationId, 'user', content);
+            const conversation = store.getConversation(conversationId);
+            store.appendAudit({
+              workspaceId: conversation?.workspaceId,
+              conversationId,
+              runId,
+              action: 'run.started',
+            });
+
             const history = store.listMessages(conversationId).map((m) => ({
               role: m.role,
               content: m.content,
             }));
-            const runId = `run_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
-            const assembled = await streamIterable(
-              ws,
-              provider.generate({ runId, messages: history }, {})
-            );
+
+            let assembled = '';
+            try {
+              for await (const event of runAgentLoop(
+                {
+                  runId,
+                  messages: history,
+                  profile,
+                  signal: abort.signal,
+                },
+                {
+                  provider,
+                  registry,
+                  approvals,
+                  sandboxRoot,
+                }
+              )) {
+                if (ws.readyState !== 1) {
+                  break;
+                }
+                ws.send(JSON.stringify(event));
+                if (event.type === 'message.delta') {
+                  assembled += event.text;
+                }
+                auditFromEvent(store, event, {
+                  workspaceId: conversation?.workspaceId,
+                  conversationId,
+                  runId,
+                });
+              }
+            } catch (err) {
+              const failed: AgentEvent = {
+                type: 'run.failed',
+                error: {
+                  message: err instanceof Error ? err.message : String(err),
+                },
+              };
+              if (ws.readyState === 1) {
+                ws.send(JSON.stringify(failed));
+              }
+              store.appendAudit({
+                workspaceId: conversation?.workspaceId,
+                conversationId,
+                runId,
+                action: 'run.failed',
+                detail: failed.error,
+              });
+            }
+
             if (assembled.length > 0) {
               store.addMessage(conversationId, 'assistant', assembled);
             }
@@ -278,8 +388,30 @@ export function startServer(): ReturnType<typeof Bun.serve> {
           })();
         }
       },
-      message() {
-        // Phase 1: server-push streams only
+      message(ws, raw) {
+        if (ws.data.kind !== 'chat') {
+          return;
+        }
+        let parsed: unknown;
+        try {
+          parsed =
+            typeof raw === 'string'
+              ? JSON.parse(raw)
+              : JSON.parse(new TextDecoder().decode(raw));
+        } catch {
+          return;
+        }
+        const msg = clientControlMessageSchema.safeParse(parsed);
+        if (!msg.success) {
+          return;
+        }
+        if (msg.data.type === 'run.cancel') {
+          ws.data.abort.abort(msg.data.reason ?? 'client cancel');
+          return;
+        }
+        if (msg.data.type === 'approval.resolve') {
+          ws.data.approvals.resolve(msg.data.approvalId, msg.data.decision);
+        }
       },
     },
   });
@@ -290,6 +422,94 @@ export function startServer(): ReturnType<typeof Bun.serve> {
   process.stderr.write(`[ctrl-a] db ${resolveDbPath()}\n`);
 
   return server;
+}
+
+function auditFromEvent(
+  store: Store,
+  event: AgentEvent,
+  ctx: {
+    workspaceId?: string;
+    conversationId: string;
+    runId: string;
+  }
+): void {
+  switch (event.type) {
+    case 'tool.requested':
+      store.appendAudit({
+        ...ctx,
+        action: 'tool.requested',
+        detail: event.call,
+      });
+      break;
+    case 'tool.started':
+      store.appendAudit({
+        ...ctx,
+        action: 'tool.started',
+        detail: { callId: event.callId },
+      });
+      break;
+    case 'tool.completed':
+      store.appendAudit({
+        ...ctx,
+        action: 'tool.completed',
+        detail: { callId: event.callId, result: event.result },
+      });
+      break;
+    case 'approval.requested':
+      store.appendAudit({
+        ...ctx,
+        action: 'approval.requested',
+        detail: {
+          approvalId: event.approvalId,
+          call: event.call,
+          risk: event.risk,
+        },
+      });
+      break;
+    case 'approval.resolved':
+      store.appendAudit({
+        ...ctx,
+        action: 'approval.resolved',
+        detail: {
+          approvalId: event.approvalId,
+          decision: event.decision,
+        },
+      });
+      if (event.decision !== 'approved') {
+        store.appendAudit({
+          ...ctx,
+          action: 'tool.denied',
+          detail: {
+            approvalId: event.approvalId,
+            decision: event.decision,
+          },
+        });
+      }
+      break;
+    case 'run.completed':
+      store.appendAudit({
+        ...ctx,
+        action: 'run.completed',
+        detail: { finishReason: event.finishReason },
+      });
+      break;
+    case 'run.failed':
+      store.appendAudit({
+        ...ctx,
+        action: 'run.failed',
+        detail: event.error,
+      });
+      break;
+    case 'run.cancelled':
+      store.appendAudit({
+        ...ctx,
+        action: 'run.cancelled',
+        detail: { reason: event.reason },
+      });
+      break;
+    default:
+      break;
+  }
 }
 
 if (import.meta.main) {
