@@ -19,3 +19,4 @@ export {
   type LlamaSidecarConfig,
   type LlamaSidecarStatus,
 } from './llama-sidecar';
+export { evaluateOnDevicePolicy } from './on-device-policy';

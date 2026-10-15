@@ -1,0 +1,12 @@
+**/dist/**
+**/dist-electron/**
+**/android/**
+**/ios/**
+**/.expo/**
+**/node_modules/**
+**/.cxx/**
+**/build/**
+docs/.vitepress/dist/**
+docs/.vitepress/cache/**
+*.min.js
+*.min.css

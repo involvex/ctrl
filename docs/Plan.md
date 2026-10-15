@@ -265,4 +265,5 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 8. Phase 3 Desktop Host — **done**: Tray + close-to-tray, autostart, electron-updater scaffold, `safeStorage` (gateway token + OpenAI key), gateway bearer auth / LAN pairing, `ctrl-r` llama-server sidecar (`CTRL_LLAMA_BIN`), packaging via electron-builder.
 9. Phase 4 Personal Knowledge — **done**: `ctrl-k` extract/chunk/FTS, attachments + blobs in `ctrl-z` (schema v3), memory review + context inspector APIs/UI.
 10. Phase 5 Channels — **done**: `ctrl-c` adapters (webhook + mock telegram/discord/slack), identity mapping, outbox queue/retry/rate limits, gateway hooks + desktop panel.
-11. Phase 6 On-Device Inference (Android) — next.
+11. Phase 6 On-Device Inference (Android) — **done**: LiteRT-LM Expo plugin (`react-native-litert-lm`), capability probe (ABI/RAM/battery), thermal/battery policy in `ctrl-s` (re-exported from `ctrl-r`), mobile `/on-device` UI, `native/android-litert` docs.
+12. Phase 7 Sync — next.

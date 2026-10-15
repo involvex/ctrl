@@ -1,3 +1,4 @@
+import { Link } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -189,6 +190,9 @@ export default function IndexScreen() {
       >
         <Text style={styles.brand}>ctrl</Text>
         <Text style={styles.tagline}>local agent · mobile</Text>
+        <Link href="/on-device" style={styles.link}>
+          on-device inference →
+        </Link>
 
         <Text style={styles.label}>Gateway URL</Text>
         <Text style={styles.hint}>
@@ -269,7 +273,13 @@ const styles = StyleSheet.create({
   tagline: {
     color: '#6b7f72',
     fontFamily: 'monospace',
+    marginBottom: 8,
+  },
+  link: {
+    color: '#00ff66',
+    fontFamily: 'monospace',
     marginBottom: 20,
+    opacity: 0.9,
   },
   label: {
     color: '#00ff66',

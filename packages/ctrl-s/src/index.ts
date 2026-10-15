@@ -98,3 +98,19 @@ export {
   type SendChannelMessageInput,
   type InboundWebhook,
 } from './channels';
+
+export {
+  thermalStateSchema,
+  batteryStateSchema,
+  inferenceBackendSchema,
+  deviceCapabilitiesSchema,
+  onDeviceModelRequestSchema,
+  policyDecisionSchema,
+  evaluateOnDevicePolicy,
+  type ThermalState,
+  type BatteryState,
+  type InferenceBackend,
+  type DeviceCapabilities,
+  type OnDeviceModelRequest,
+  type PolicyDecision,
+} from './device';
