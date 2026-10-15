@@ -140,7 +140,7 @@ async function waitForOpenAi(baseUrl: string): Promise<void> {
 
 /** Create a sidecar from env, or null when not configured. */
 export function createLlamaSidecarFromEnv(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.Dict<string> = process.env
 ): LlamaSidecar | null {
   const bin = env['CTRL_LLAMA_BIN']?.trim();
   if (!bin) {

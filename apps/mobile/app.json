@@ -7,16 +7,38 @@
     "scheme": "ctrl",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
+    "icon": "./assets/icon.png",
     "android": {
       "package": "com.involvex.ctrl",
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       }
     },
     "plugins": [
       "expo-router",
-      "expo-asset"
-    ]
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
   }
 }

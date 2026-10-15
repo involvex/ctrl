@@ -4,7 +4,7 @@ copyright: Copyright © involvex
 
 directories:
   output: release
-  buildResources: build
+  buildResources: ../../assets/branding
 
 files:
   - dist/**/*
@@ -20,7 +20,10 @@ extraResources:
 
 asar: true
 
+icon: icon.ico
+
 win:
+  icon: icon.ico
   artifactName: ${productName}-${version}-win-${arch}.${ext}
   target:
     - target: dir

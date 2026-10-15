@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <!-- Transparent adaptive-icon foreground; safe zone keeps mark inside center 66% -->
+  <text
+    x="512"
+    y="580"
+    text-anchor="middle"
+    font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+    font-size="240"
+    font-weight="700"
+    letter-spacing="20"
+    fill="#00ff66"
+  >ctrl</text>
+</svg>

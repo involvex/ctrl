@@ -42,12 +42,11 @@ export function toWsUrl(
   pathname: string,
   search?: string
 ): string {
-  const base = new URL(normalizeBaseUrl(baseUrl));
-  base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
-  base.pathname = pathname;
-  base.search = withAuthSearch(search ?? '');
-  base.hash = '';
-  return base.toString();
+  const http = new URL(normalizeBaseUrl(baseUrl));
+  const protocol = http.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new URL(`${protocol}//${http.host}`);
+  const path = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  return `${ws.origin}${path}${withAuthSearch(search ?? '')}`;
 }
 
 export async function checkHealth(baseUrl: string): Promise<HealthResponse> {
@@ -56,6 +55,29 @@ export async function checkHealth(baseUrl: string): Promise<HealthResponse> {
     throw new Error(`healthz failed: ${res.status} ${res.statusText}`);
   }
   return healthResponseSchema.parse(await res.json());
+}
+
+const pairingStatusSchema = z.object({
+  required: z.boolean(),
+  llama: z
+    .object({
+      state: z.string(),
+    })
+    .passthrough()
+    .optional(),
+});
+
+export type PairingStatus = z.infer<typeof pairingStatusSchema>;
+
+/** Public pairing probe — reports whether bearer auth is required. */
+export async function getPairingStatus(
+  baseUrl: string
+): Promise<PairingStatus> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/pairing`);
+  if (!res.ok) {
+    throw new Error(`pairing failed: ${res.status} ${res.statusText}`);
+  }
+  return pairingStatusSchema.parse(await res.json());
 }
 
 async function readJson(res: Response): Promise<unknown> {

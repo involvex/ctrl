@@ -3,19 +3,9 @@
   "compilerOptions": {
     "noEmit": true,
     "jsx": "react-jsx",
-    "lib": [
-      "ES2022"
-    ],
-    "moduleSuffixes": [
-      ".native",
-      ".ios",
-      ".android",
-      ""
-    ],
+    "lib": ["ES2022"],
+    "moduleSuffixes": [".native", ".ios", ".android", ""],
     "types": []
   },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ]
+  "include": ["**/*.ts", "**/*.tsx"]
 }

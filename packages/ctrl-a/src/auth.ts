@@ -4,7 +4,7 @@
  */
 
 export function gatewayTokenFromEnv(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.Dict<string> = process.env
 ): string | null {
   const token = env['CTRL_GATEWAY_TOKEN']?.trim();
   return token && token.length > 0 ? token : null;
