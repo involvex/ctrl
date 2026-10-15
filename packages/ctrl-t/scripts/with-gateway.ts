@@ -37,6 +37,7 @@ const child = spawn('bun', ['run', serverEntry], {
   cwd: root,
   env: {
     ...process.env,
+    CTRL_A_HOST: '127.0.0.1',
     HOST: '127.0.0.1',
     PORT: String(port),
     CTRL_DB_PATH: tmpDb,

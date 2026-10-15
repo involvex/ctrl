@@ -3,7 +3,7 @@ import { assembleContextPreview, ingestAttachment } from '@involvex/ctrl-k';
 import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
 import {
   createLlamaSidecarFromEnv,
-  resolveProvider,
+  createProviderRuntime,
   type LlamaSidecar,
 } from '@involvex/ctrl-r';
 import {
@@ -20,6 +20,7 @@ import {
   knowledgeSearchInputSchema,
   sendChannelMessageInputSchema,
   updateMemoryInputSchema,
+  updateProviderConfigInputSchema,
   upsertIdentityInputSchema,
   workspaceExportSchema,
   type AgentEvent,
@@ -49,6 +50,26 @@ const DEFAULT_HOST = '0.0.0.0';
 const DEFAULT_PORT = 7331;
 const VERSION = '0.0.1';
 const CHUNK_DELAY_MS = 40;
+
+/**
+ * Prefer CTRL_A_HOST. Only honor generic HOST when it is an explicit bind address —
+ * Windows/dev shells often set HOST to the machine name or 127.0.0.1.
+ */
+function resolveListenHost(): string {
+  if (process.env['CTRL_A_HOST']) {
+    return process.env['CTRL_A_HOST'];
+  }
+  const host = process.env['HOST'];
+  if (
+    host === '0.0.0.0' ||
+    host === '127.0.0.1' ||
+    host === '::' ||
+    host === '::1'
+  ) {
+    return host;
+  }
+  return DEFAULT_HOST;
+}
 
 type SocketData =
   | { kind: 'demo' }
@@ -181,9 +202,16 @@ async function streamIterable(
   return assembled;
 }
 
-export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
-  const host = process.env['HOST'] ?? DEFAULT_HOST;
-  const port = Number(process.env['PORT'] ?? DEFAULT_PORT);
+export type StartedGateway = {
+  server: ReturnType<typeof Bun.serve>;
+  shutdown: (reason?: string) => Promise<void>;
+};
+
+export async function startServer(): Promise<StartedGateway> {
+  const host = resolveListenHost();
+  const port = Number(
+    process.env['PORT'] ?? process.env['CTRL_A_PORT'] ?? DEFAULT_PORT
+  );
   const expectedToken = gatewayTokenFromEnv();
   const db = openDatabase(resolveDbPath());
   const store = new Store(db);
@@ -214,7 +242,7 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
     llama = null;
   }
 
-  const provider = resolveProvider();
+  const providerRuntime = createProviderRuntime();
   const sandboxRoot = resolveSandboxRoot();
   const registry = new ToolRegistry();
   registerBuiltinTools(registry, sandboxRoot);
@@ -223,7 +251,9 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
   mcp.mountOn(registry);
   const profile = store.ensureDefaultProfile(registry.listNames());
 
-  process.stderr.write(`[ctrl-a] provider ${provider.id}\n`);
+  process.stderr.write(
+    `[ctrl-a] provider ${providerRuntime.getProvider().id}\n`
+  );
   process.stderr.write(`[ctrl-a] tools ${registry.listNames().join(', ')}\n`);
   process.stderr.write(`[ctrl-a] sandbox ${sandboxRoot}\n`);
   process.stderr.write(
@@ -270,6 +300,19 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
 
         if (req.method === 'GET' && url.pathname === '/api/v1/tools') {
           return json(req, { items: registry.list() });
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/v1/provider') {
+          return json(req, providerRuntime.status());
+        }
+
+        if (req.method === 'PATCH' && url.pathname === '/api/v1/provider') {
+          const body = updateProviderConfigInputSchema.parse(await req.json());
+          const status = providerRuntime.update(body);
+          process.stderr.write(
+            `[ctrl-a] provider → ${providerRuntime.getProvider().id}\n`
+          );
+          return json(req, status);
         }
 
         const workspaceAttachments =
@@ -790,7 +833,7 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
                     signal: abort.signal,
                   },
                   {
-                    provider,
+                    provider: providerRuntime.getProvider(),
                     registry,
                     approvals,
                     sandboxRoot,
@@ -876,14 +919,46 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
 
   const boundPort = Number(server.port);
   const lanUrls = listLanGatewayUrls(boundPort);
-  process.stderr.write(
-    `[ctrl-a] listening on http://${server.hostname}:${boundPort}\n`
-  );
-  if (lanUrls.length > 0) {
+  process.stderr.write(`[ctrl-a] listening on http://${host}:${boundPort}\n`);
+  if (host === '127.0.0.1' || host === '::1') {
+    process.stderr.write(
+      `[ctrl-a] warn: loopback only — use CTRL_A_HOST=0.0.0.0 for LAN/Expo\n`
+    );
+  }
+  if (lanUrls.length > 0 && host !== '127.0.0.1' && host !== '::1') {
     process.stderr.write(`[ctrl-a] lan ${lanUrls.join(' ')}\n`);
   }
+  process.stderr.write(`[ctrl-a] press Ctrl+C to stop\n`);
 
-  return server;
+  let shuttingDown = false;
+  const shutdown = async (reason = 'signal'): Promise<void> => {
+    if (shuttingDown) {
+      process.stderr.write(`[ctrl-a] force exit (second ${reason})\n`);
+      process.exit(1);
+    }
+    shuttingDown = true;
+    process.stderr.write(`[ctrl-a] shutting down (${reason})\n`);
+    const forceTimer = setTimeout(() => {
+      process.stderr.write(`[ctrl-a] force exit\n`);
+      process.exit(1);
+    }, 2500);
+    try {
+      channels.stopWorker();
+      await mcp.close().catch(() => undefined);
+      await llama?.stop().catch(() => undefined);
+      await Promise.resolve(server.stop(true));
+      db.close();
+    } catch (err) {
+      process.stderr.write(
+        `[ctrl-a] shutdown error: ${err instanceof Error ? err.message : String(err)}\n`
+      );
+    } finally {
+      clearTimeout(forceTimer);
+      process.exit(0);
+    }
+  };
+
+  return { server, shutdown };
 }
 
 function auditFromEvent(
@@ -975,5 +1050,13 @@ function auditFromEvent(
 }
 
 if (import.meta.main) {
-  await startServer();
+  const { shutdown } = await startServer();
+  const onSignal = (signal: string) => {
+    void shutdown(signal);
+  };
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
+  // Windows Ctrl+Break / console close
+  process.on('SIGBREAK', () => onSignal('SIGBREAK'));
+  process.on('SIGHUP', () => onSignal('SIGHUP'));
 }

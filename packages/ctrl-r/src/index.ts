@@ -12,7 +12,11 @@ export {
   OpenAICompatibleProvider,
   type OpenAICompatibleConfig,
 } from './openai-compatible';
-export { resolveProvider } from './resolve';
+export { resolveProvider, createProviderRuntime } from './resolve';
+export { ProviderRuntime } from './runtime';
+export { listProviderCatalog, getProviderCatalogEntry } from './catalog';
+export { LiteRTProvider } from './litert-provider';
+export { DevicePairProvider, type DevicePairConfig } from './device-provider';
 export {
   LlamaSidecar,
   createLlamaSidecarFromEnv,

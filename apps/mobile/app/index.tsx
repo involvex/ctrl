@@ -23,59 +23,7 @@ import {
   defaultGatewayUrl,
   guessDevHostIp,
 } from '../src/connection/dev-gateway';
-
-const STORAGE_KEY = 'ctrl.mobile.connection';
-
-type SavedConnection = {
-  gatewayUrl: string;
-  token: string;
-};
-
-function parseSavedConnection(raw: string): SavedConnection | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  if (!('gatewayUrl' in value) || typeof value.gatewayUrl !== 'string') {
-    return null;
-  }
-  return {
-    gatewayUrl: value.gatewayUrl,
-    token:
-      'token' in value && typeof value.token === 'string' ? value.token : '',
-  };
-}
-
-async function loadSaved(): Promise<SavedConnection | null> {
-  try {
-    const AsyncStorage = (
-      await import('@react-native-async-storage/async-storage')
-    ).default;
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    return parseSavedConnection(raw);
-  } catch {
-    return null;
-  }
-}
-
-async function saveConnection(value: SavedConnection): Promise<void> {
-  try {
-    const AsyncStorage = (
-      await import('@react-native-async-storage/async-storage')
-    ).default;
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-  } catch {
-    // Persistence is best-effort on web/native.
-  }
-}
+import { loadSavedConnection, saveConnection } from '../src/connection/storage';
 
 function isLoopbackUrl(url: string): boolean {
   try {
@@ -102,7 +50,7 @@ export default function IndexScreen() {
     void (async () => {
       const guessed = guessDevHostIp();
       setDevHost(guessed);
-      const saved = await loadSaved();
+      const saved = await loadSavedConnection();
       if (saved && !isLoopbackUrl(saved.gatewayUrl)) {
         setGatewayUrl(saved.gatewayUrl);
         setToken(saved.token);
@@ -211,11 +159,23 @@ export default function IndexScreen() {
       >
         <Text style={styles.brand}>ctrl</Text>
         <Text style={styles.tagline}>local agent · mobile</Text>
-        <Link href="/on-device" style={styles.link}>
-          on-device inference →
-        </Link>
-        <Link href={'/scan' as Href} style={styles.link}>
+        <Link href="/scan" style={styles.link}>
           scan pair QR →
+        </Link>
+        <Link href={'/chat' as Href} style={styles.link}>
+          chat →
+        </Link>
+        <Link href={'/knowledge' as Href} style={styles.link}>
+          knowledge / memory →
+        </Link>
+        <Link href={'/tools' as Href} style={styles.link}>
+          tools / MCP →
+        </Link>
+        <Link href={'/settings' as Href} style={styles.link}>
+          providers / settings →
+        </Link>
+        <Link href="/on-device" style={styles.link}>
+          on-device LiteRT →
         </Link>
 
         <Text style={styles.label}>Gateway URL</Text>

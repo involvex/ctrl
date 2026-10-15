@@ -5,30 +5,41 @@ import {
   createConversation,
   createWorkspace,
   exportWorkspace,
+  getProviderStatus,
   importWorkspace,
   inspectContext,
   listBackups,
   listChannels,
   listConversations,
+  listMcpServers,
   listMemory,
   listMessages,
+  listTools,
   listWorkspaces,
   restoreBackup,
   searchKnowledge,
   setClientAuth,
   streamChat,
   updateMemory,
+  updateProviderConfig,
   uploadAttachmentText,
   type ChannelPublic,
   type Conversation,
   type HostBackupManifest,
   type KnowledgeHit,
+  type McpServerInfo,
   type MemoryItem,
   type Message,
+  type ProviderStatusResponse,
   type RunSession,
   type Workspace,
 } from '@involvex/ctrl-i';
-import { workspaceExportSchema, type ToolCall } from '@involvex/ctrl-s';
+import {
+  workspaceExportSchema,
+  type ProviderId,
+  type ToolCall,
+  type ToolDefinition,
+} from '@involvex/ctrl-s';
 import { Markdown } from './markdown';
 
 type PendingApproval = {
@@ -110,6 +121,14 @@ export function App() {
   const [backupsOpen, setBackupsOpen] = useState(false);
   const [backupItems, setBackupItems] = useState<HostBackupManifest[]>([]);
   const [backupLabel, setBackupLabel] = useState('manual');
+  const [providersOpen, setProvidersOpen] = useState(false);
+  const [providerStatus, setProviderStatus] =
+    useState<ProviderStatusResponse | null>(null);
+  const [providerKeyDraft, setProviderKeyDraft] = useState('');
+  const [providerModelDraft, setProviderModelDraft] = useState('');
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolItems, setToolItems] = useState<ToolDefinition[]>([]);
+  const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
   const sessionRef = useRef<RunSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -223,6 +242,70 @@ export function App() {
     }
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, streaming]);
+
+  const refreshProviders = useCallback(async () => {
+    if (!gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      const status = await getProviderStatus(gatewayUrl);
+      setProviderStatus(status);
+      setProviderModelDraft(status.model ?? '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [gatewayUrl]);
+
+  const refreshTools = useCallback(async () => {
+    if (!gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      const [tools, servers] = await Promise.all([
+        listTools(gatewayUrl),
+        listMcpServers(gatewayUrl),
+      ]);
+      setToolItems(tools);
+      setMcpServers(servers);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [gatewayUrl]);
+
+  const selectProvider = useCallback(
+    async (id: ProviderId) => {
+      if (!gatewayUrl.startsWith('http')) {
+        return;
+      }
+      try {
+        const patch: Parameters<typeof updateProviderConfig>[1] = {
+          active: id,
+        };
+        if (
+          providerKeyDraft.trim() &&
+          (id === 'openai' || id === 'zen' || id === 'kilo')
+        ) {
+          if (id === 'openai') {
+            patch.openai = { apiKey: providerKeyDraft.trim() };
+          } else if (id === 'zen') {
+            patch.zen = { apiKey: providerKeyDraft.trim() };
+          } else {
+            patch.kilo = { apiKey: providerKeyDraft.trim() };
+          }
+        }
+        if (providerModelDraft.trim()) {
+          patch.model = providerModelDraft.trim();
+        }
+        const status = await updateProviderConfig(gatewayUrl, patch);
+        setProviderStatus(status);
+        setProviderKeyDraft('');
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [gatewayUrl, providerKeyDraft, providerModelDraft]
+  );
 
   const send = useCallback(() => {
     if (
@@ -552,6 +635,30 @@ export function App() {
             type="button"
             className="ghost-btn"
             onClick={() => {
+              setProvidersOpen((v) => !v);
+              if (!providersOpen) {
+                void refreshProviders();
+              }
+            }}
+          >
+            providers
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setToolsOpen((v) => !v);
+              if (!toolsOpen) {
+                void refreshTools();
+              }
+            }}
+          >
+            tools
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
               setBackupsOpen((v) => !v);
               if (!backupsOpen) {
                 void refreshBackups();
@@ -703,6 +810,106 @@ export function App() {
               mobile: use LAN URL + Bearer token from safeStorage
             </p>
           ) : null}
+        </aside>
+      ) : null}
+
+      {providersOpen ? (
+        <aside className="host-panel knowledge-panel">
+          <p className="host-title">providers</p>
+          <p className="meta">
+            active · {providerStatus?.active ?? '…'}
+            {providerStatus?.model ? ` · model ${providerStatus.model}` : ''}
+          </p>
+          <div className="host-row">
+            <input
+              className="host-input"
+              placeholder="API key (zen / kilo / openai)"
+              type="password"
+              value={providerKeyDraft}
+              onChange={(e) => setProviderKeyDraft(e.target.value)}
+            />
+            <input
+              className="host-input"
+              placeholder="model id"
+              value={providerModelDraft}
+              onChange={(e) => setProviderModelDraft(e.target.value)}
+            />
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void refreshProviders();
+              }}
+            >
+              refresh
+            </button>
+          </div>
+          <ul className="knowledge-list">
+            {(providerStatus?.providers ?? []).map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={!p.available && p.id !== 'mock'}
+                  onClick={() => {
+                    void selectProvider(p.id);
+                  }}
+                >
+                  {p.id === providerStatus?.active ? '●' : '○'} {p.label}
+                </button>{' '}
+                <span className="meta">
+                  {p.kind}
+                  {p.configured ? ' · configured' : ' · needs key'}
+                  {p.unavailableReason ? ` · ${p.unavailableReason}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="meta">
+            zen → opencode.ai/zen · kilo → ai-gateway.kilo.ai · llama → local
+            sidecar · litert → mobile on-device · device → paired gateway
+          </p>
+        </aside>
+      ) : null}
+
+      {toolsOpen ? (
+        <aside className="host-panel knowledge-panel">
+          <p className="host-title">tools / MCP</p>
+          <div className="host-row">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void refreshTools();
+              }}
+            >
+              refresh
+            </button>
+          </div>
+          <p className="host-title">MCP servers</p>
+          <ul className="knowledge-list">
+            {mcpServers.map((server) => (
+              <li key={server.id}>
+                <code>{server.id}</code> {server.name}
+                {server.command
+                  ? ` · ${server.command} ${(server.args ?? []).join(' ')}`
+                  : ' · stub'}
+              </li>
+            ))}
+          </ul>
+          {mcpServers.length === 0 ? (
+            <p className="meta">no MCP servers</p>
+          ) : null}
+          <p className="host-title">registered tools</p>
+          <ul className="knowledge-list">
+            {toolItems.map((tool) => (
+              <li key={tool.name}>
+                <code>{tool.name}</code> [{tool.risk}]
+                {tool.requiresApproval ? ' · approval' : ''} —{' '}
+                {tool.description}
+              </li>
+            ))}
+          </ul>
         </aside>
       ) : null}
 

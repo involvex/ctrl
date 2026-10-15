@@ -186,6 +186,8 @@ export class GatewayManager {
         ...process.env,
         // Phase 0/3: bind all interfaces so Expo devices on LAN can reach the gateway.
         // Set CTRL_A_LAN=0 to force loopback-only. Pairing token required when set.
+        CTRL_A_HOST:
+          process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
         HOST: process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
         PORT: String(this.port),
         ...this.opts.envExtra,

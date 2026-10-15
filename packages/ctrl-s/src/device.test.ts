@@ -47,9 +47,18 @@ describe('evaluateOnDevicePolicy', () => {
     expect(decision.backend).toBe('gpu');
   });
 
-  test('blocks non-android platforms', () => {
+  test('allows iOS arm64 when LiteRT is available', () => {
     const decision = evaluateOnDevicePolicy(
-      { ...baseCaps, platform: 'ios' },
+      { ...baseCaps, platform: 'ios', apiLevel: null },
+      request
+    );
+    expect(decision.allowed).toBe(true);
+    expect(decision.backend).toBe('cpu');
+  });
+
+  test('blocks unsupported platforms', () => {
+    const decision = evaluateOnDevicePolicy(
+      { ...baseCaps, platform: 'web' },
       request
     );
     expect(decision.allowed).toBe(false);

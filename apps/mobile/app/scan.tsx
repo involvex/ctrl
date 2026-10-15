@@ -1,57 +1,71 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { parsePairPayload } from '@involvex/ctrl-s';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { checkHealth, getPairingStatus, setClientAuth } from '@involvex/ctrl-i';
+import {
+  connectionFromScanData,
+  saveConnection,
+} from '../src/connection/storage';
 
-const STORAGE_KEY = 'ctrl.mobile.connection';
+const BARCODE_TYPES = ['qr'] as Array<'qr'>;
 
 export default function ScanPairScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
-  const [locked, setLocked] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const barcodeSettings = useMemo(
-    () => ({ barcodeTypes: ['qr'] as Array<'qr'> }),
-    []
-  );
+  const [status, setStatus] = useState('point at ctrl-f5 pair QR');
+  const [busy, setBusy] = useState(false);
+  const handled = useRef(false);
 
-  const onBarcode = useCallback(
-    async (data: string) => {
-      if (locked) {
+  const applyPayload = useCallback(
+    async (raw: string) => {
+      if (handled.current || busy) {
         return;
       }
-      const payload = parsePairPayload(data);
-      if (!payload) {
-        setError('Not a ctrl pair QR');
+      const connection = connectionFromScanData(raw);
+      if (!connection) {
+        setStatus('not a ctrl pair QR — try again');
         return;
       }
-      setLocked(true);
-      setError(null);
+      handled.current = true;
+      setBusy(true);
+      setStatus(`pairing ${connection.gatewayUrl}…`);
       try {
-        await AsyncStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            gatewayUrl: payload.gatewayUrl,
-            token: payload.token,
-          })
+        setClientAuth({
+          token: connection.token || undefined,
+        });
+        await saveConnection(connection);
+        const pairing = await getPairingStatus(connection.gatewayUrl);
+        const health = await checkHealth(connection.gatewayUrl);
+        setStatus(
+          `ok · ${health.service} ${health.version} · auth ${pairing.required ? 'required' : 'open'}`
         );
-        router.replace('/');
+        setTimeout(() => {
+          router.replace('/');
+        }, 600);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        setLocked(false);
+        handled.current = false;
+        setBusy(false);
+        setStatus(
+          `failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     },
-    [locked, router]
+    [busy, router]
   );
 
   if (!permission) {
     return (
       <SafeAreaView style={styles.root}>
-        <Text style={styles.meta}>camera…</Text>
+        <ActivityIndicator color="#00ff66" />
       </SafeAreaView>
     );
   }
@@ -60,9 +74,9 @@ export default function ScanPairScreen() {
     return (
       <SafeAreaView style={styles.root}>
         <StatusBar style="light" />
-        <Text style={styles.brand}>scan</Text>
+        <Text style={styles.title}>camera permission</Text>
         <Text style={styles.meta}>
-          Camera access is needed to read pair QR.
+          Needed to scan the gateway pair QR from ctrl-f5 pair.
         </Text>
         <Pressable
           style={styles.button}
@@ -70,8 +84,8 @@ export default function ScanPairScreen() {
         >
           <Text style={styles.buttonText}>allow camera</Text>
         </Pressable>
-        <Pressable style={styles.ghost} onPress={() => router.back()}>
-          <Text style={styles.ghostText}>← back</Text>
+        <Pressable style={styles.linkBtn} onPress={() => router.back()}>
+          <Text style={styles.link}>← back</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -80,25 +94,24 @@ export default function ScanPairScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
-      <Text style={styles.brand}>scan</Text>
-      <Text style={styles.meta}>Point at `ctrl-f5 pair` QR</Text>
+      <Text style={styles.title}>scan pair QR</Text>
+      <Text style={styles.meta}>{status}</Text>
       <View style={styles.cameraWrap}>
         <CameraView
-          style={styles.camera}
+          style={StyleSheet.absoluteFill}
           facing="back"
-          barcodeScannerSettings={barcodeSettings}
+          barcodeScannerSettings={{ barcodeTypes: BARCODE_TYPES }}
           onBarcodeScanned={
-            locked
+            busy
               ? undefined
-              : (result) => {
-                  void onBarcode(result.data);
+              : (event) => {
+                  void applyPayload(event.data);
                 }
           }
         />
       </View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={styles.ghost} onPress={() => router.back()}>
-        <Text style={styles.ghostText}>← back</Text>
+      <Pressable style={styles.linkBtn} onPress={() => router.back()}>
+        <Text style={styles.link}>← back</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -109,20 +122,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
     paddingHorizontal: 24,
-    paddingVertical: 28,
+    paddingVertical: 24,
     gap: 12,
   },
-  brand: {
+  title: {
     color: '#00ff66',
-    fontSize: 36,
-    fontWeight: '700',
-    letterSpacing: 4,
     fontFamily: 'monospace',
+    fontSize: 22,
+    fontWeight: '700',
   },
   meta: {
     color: '#6b7f72',
     fontFamily: 'monospace',
     fontSize: 12,
+    lineHeight: 18,
   },
   cameraWrap: {
     flex: 1,
@@ -130,8 +143,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#00ff66',
     overflow: 'hidden',
+    backgroundColor: '#111613',
   },
-  camera: { flex: 1 },
   button: {
     backgroundColor: '#00ff66',
     paddingVertical: 14,
@@ -142,7 +155,11 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontWeight: '700',
   },
-  ghost: { paddingVertical: 10 },
-  ghostText: { color: '#6b7f72', fontFamily: 'monospace' },
-  error: { color: '#ff6666', fontFamily: 'monospace', fontSize: 12 },
+  linkBtn: {
+    paddingVertical: 8,
+  },
+  link: {
+    color: '#00ff66',
+    fontFamily: 'monospace',
+  },
 });

@@ -17,6 +17,8 @@ export type OpenAICompatibleConfig = {
   apiKey: string;
   baseUrl?: string;
   defaultModel?: string;
+  /** Override provider id (zen, kilo, llama, openai, …). */
+  id?: string;
 };
 
 type ToolCallDelta = {
@@ -46,12 +48,13 @@ type ChatCompletionChunk = {
  * endpoint (OpenAI, local llama-server, OpenRouter, etc.).
  */
 export class OpenAICompatibleProvider implements ModelProvider {
-  readonly id = 'openai-compatible';
+  readonly id: string;
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly defaultModel: string;
 
   constructor(config: OpenAICompatibleConfig) {
+    this.id = config.id ?? 'openai-compatible';
     this.apiKey = config.apiKey;
     this.baseUrl = (config.baseUrl ?? 'https://api.openai.com/v1').replace(
       /\/$/,

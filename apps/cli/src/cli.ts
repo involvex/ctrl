@@ -16,7 +16,7 @@ function usage(): never {
   ctrl-f5 demo [--url <baseUrl>]
   ctrl-f5 pair [--host <lanIp>] [--port <port>] [--token <token>] [--url <baseUrl>]
 
-pair   Print LAN gateway URL + terminal QR for Expo "scan pair QR".
+pair   Print LAN gateway URL + terminal QR; stays open until Ctrl+C so Expo can scan.
        Prefers a real LAN IP (never 127.0.0.1). Gateway should listen on 0.0.0.0.
 
 Env: CTRL_A_URL, CTRL_GATEWAY_TOKEN, PORT
@@ -128,6 +128,20 @@ async function pair(args: string[]): Promise<void> {
         `         (${err instanceof Error ? err.message : String(err)})\n`
     );
   }
+
+  process.stdout.write(
+    `\nWaiting for Expo scan — leave this open, Ctrl+C when done.\n`
+  );
+
+  await new Promise<void>((resolve) => {
+    const stop = (signal: string) => {
+      process.stdout.write(`\npair stopped (${signal})\n`);
+      resolve();
+    };
+    process.once('SIGINT', () => stop('SIGINT'));
+    process.once('SIGTERM', () => stop('SIGTERM'));
+    process.once('SIGBREAK', () => stop('SIGBREAK'));
+  });
 }
 
 async function main(): Promise<void> {

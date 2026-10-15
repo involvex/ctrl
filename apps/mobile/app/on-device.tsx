@@ -1,6 +1,5 @@
-import { Link } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
+import { useRouter, type Href } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,177 +9,220 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type {
-  DeviceCapabilities,
-  InferenceBackend,
-  PolicyDecision,
-} from '@involvex/ctrl-s';
 import {
-  prepareOnDeviceSession,
-  runOnDevicePrompt,
-} from '../src/device/on-device-session';
+  evaluateOnDevicePolicy,
+  type DeviceCapabilities,
+  type PolicyDecision,
+} from '@involvex/ctrl-s';
+import { GEMMA_4_E2B_IT, useModel } from 'react-native-litert-lm';
+import {
+  backendForPolicy,
+  probeDeviceCapabilities,
+} from '../src/device/capabilities';
+
+function LitertChat({
+  backend,
+  decision,
+}: {
+  backend: 'cpu' | 'gpu' | 'npu';
+  decision: PolicyDecision;
+}) {
+  const engine = useModel(GEMMA_4_E2B_IT, {
+    backend,
+    autoLoad: false,
+    enableMemoryTracking: true,
+    systemPrompt: 'You are ctrl on-device assistant. Be concise.',
+    maxOutputTokens: 512,
+    maxContextTokens: 2048,
+  });
+  const [prompt, setPrompt] = useState('Say hello in one short sentence.');
+  const [reply, setReply] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const onLoad = useCallback(() => {
+    setLocalError(null);
+    void engine.load().catch((err: unknown) => {
+      setLocalError(err instanceof Error ? err.message : String(err));
+    });
+  }, [engine]);
+
+  const onGenerate = useCallback(() => {
+    setLocalError(null);
+    setReply('');
+    void engine
+      .generate(prompt.trim())
+      .then((text) => setReply(text))
+      .catch((err: unknown) => {
+        setLocalError(err instanceof Error ? err.message : String(err));
+      });
+  }, [engine, prompt]);
+
+  return (
+    <View style={styles.block}>
+      <Text style={styles.label}>
+        LiteRT · Gemma 4 E2B · backend {backend}
+        {decision.warnings.length > 0
+          ? ` · ${decision.warnings.join('; ')}`
+          : ''}
+      </Text>
+      {!engine.isReady ? (
+        <Pressable style={styles.button} onPress={onLoad}>
+          <Text style={styles.buttonText}>
+            {engine.downloadProgress > 0 && engine.downloadProgress < 1
+              ? `downloading ${Math.round(engine.downloadProgress * 100)}%`
+              : 'download + load model (~2.6 GB)'}
+          </Text>
+        </Pressable>
+      ) : (
+        <Text style={styles.meta}>
+          model ready
+          {engine.memoryEstimate?.verdict
+            ? ` · memory ${engine.memoryEstimate.verdict}`
+            : ''}
+        </Text>
+      )}
+      <TextInput
+        style={styles.input}
+        value={prompt}
+        onChangeText={setPrompt}
+        placeholder="prompt"
+        placeholderTextColor="#6b7f72"
+        multiline
+        editable={!engine.isGenerating}
+      />
+      <Pressable
+        style={[
+          styles.button,
+          (!engine.isReady || engine.isGenerating) && styles.buttonDisabled,
+        ]}
+        disabled={!engine.isReady || engine.isGenerating}
+        onPress={onGenerate}
+      >
+        {engine.isGenerating ? (
+          <ActivityIndicator color="#000" />
+        ) : (
+          <Text style={styles.buttonText}>generate</Text>
+        )}
+      </Pressable>
+      {(localError ?? engine.error) ? (
+        <Text style={styles.error}>{localError ?? engine.error}</Text>
+      ) : null}
+      {reply ? (
+        <View style={styles.panel}>
+          <Text style={styles.bubbleText}>{reply}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 export default function OnDeviceScreen() {
+  const router = useRouter();
   const [caps, setCaps] = useState<DeviceCapabilities | null>(null);
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
-  const [backend, setBackend] = useState<InferenceBackend>('cpu');
-  const [prompt, setPrompt] = useState('Say hello from on-device ctrl.');
-  const [output, setOutput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [probing, setProbing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(true);
 
   const refresh = useCallback(async () => {
-    setProbing(true);
-    setError(null);
-    try {
-      const session = await prepareOnDeviceSession(backend);
-      setCaps(session.capabilities);
-      setDecision(session.decision);
-      if (session.decision.backend) {
-        setBackend(session.decision.backend);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setProbing(false);
-    }
-  }, [backend]);
-
-  const onRun = useCallback(async () => {
-    if (!decision?.allowed || !decision.backend) {
-      return;
-    }
     setBusy(true);
-    setOutput('');
-    setError(null);
-    await runOnDevicePrompt(prompt, decision.backend, {
-      onToken: (text) => setOutput((prev) => prev + text),
-      onDone: () => setBusy(false),
-      onError: (message) => {
-        setError(message);
-        setBusy(false);
-      },
-    });
-  }, [decision, prompt]);
+    const next = await probeDeviceCapabilities();
+    setCaps(next);
+    setDecision(
+      evaluateOnDevicePolicy(next, {
+        modelId: 'GEMMA_4_E2B_IT',
+        minMemoryMb: 4096,
+        preferredBackend: 'cpu',
+      })
+    );
+    setBusy(false);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setBusy(true);
+      const next = await probeDeviceCapabilities();
+      if (cancelled) {
+        return;
+      }
+      setCaps(next);
+      setDecision(
+        evaluateOnDevicePolicy(next, {
+          modelId: 'GEMMA_4_E2B_IT',
+          minMemoryMb: 4096,
+          preferredBackend: 'cpu',
+        })
+      );
+      setBusy(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const backend = backendForPolicy(decision?.backend ?? null);
+  const canRun = Boolean(decision?.allowed && caps?.litertAvailable);
 
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Link href="/" style={styles.back}>
-          ← connect
-        </Link>
-        <Text style={styles.brand}>on-device</Text>
-        <Text style={styles.tagline}>LiteRT-LM · Phase 6</Text>
-
-        <Pressable
-          style={[styles.button, styles.ghost]}
-          onPress={() => {
-            void refresh();
-          }}
-          disabled={probing || busy}
-        >
-          {probing ? (
-            <ActivityIndicator color="#00ff66" />
-          ) : (
-            <Text style={styles.ghostText}>probe capabilities</Text>
-          )}
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Pressable onPress={() => router.back()}>
+          <Text style={styles.link}>← back</Text>
         </Pressable>
+        <Text style={styles.title}>on-device</Text>
+        <Text style={styles.meta}>
+          LiteRT-LM inference on this phone (policy → load → generate).
+        </Text>
 
-        {caps ? (
-          <View style={styles.panel}>
-            <Text style={styles.meta}>
-              platform · {caps.platform} ·{' '}
-              {caps.isArm64 ? 'arm64' : caps.abi.join(',') || 'abi?'}
-            </Text>
-            <Text style={styles.meta}>
-              api · {caps.apiLevel ?? '—'} · ram ·{' '}
-              {caps.totalMemoryMb != null
-                ? `${Math.round(caps.totalMemoryMb)} MB`
-                : '—'}
-            </Text>
-            <Text style={styles.meta}>
-              battery ·{' '}
-              {caps.batteryLevel != null
-                ? `${Math.round(caps.batteryLevel * 100)}%`
-                : '—'}{' '}
-              · {caps.batteryState}
-              {caps.lowPowerMode ? ' · low-power' : ''}
-            </Text>
-            <Text style={styles.meta}>
-              thermal · {caps.thermalState} · litert ·{' '}
-              {caps.litertAvailable ? 'yes' : 'no'}
-            </Text>
-            <Text style={styles.meta}>
-              backends · cpu={caps.backends.cpu ? '1' : '0'} gpu=
-              {caps.backends.gpu ? '1' : '0'} npu=
-              {caps.backends.npu ? '1' : '0'}
-            </Text>
-          </View>
+        {busy || !caps || !decision ? (
+          <ActivityIndicator color="#00ff66" />
         ) : (
-          <Text style={styles.meta}>
-            Tap probe to check ABI, RAM, battery, and LiteRT availability.
-          </Text>
+          <>
+            <View style={styles.panel}>
+              <Text style={styles.meta}>
+                {caps.platform} · api {caps.apiLevel ?? '—'} · ram{' '}
+                {caps.totalMemoryMb ?? '—'} MB · litert{' '}
+                {caps.litertAvailable ? 'yes' : 'no'}
+              </Text>
+              <Text style={styles.meta}>
+                battery{' '}
+                {caps.batteryLevel !== null
+                  ? `${Math.round(caps.batteryLevel * 100)}%`
+                  : '—'}{' '}
+                · {caps.batteryState}
+                {caps.lowPowerMode ? ' · low-power' : ''}
+              </Text>
+              <Text style={styles.meta}>
+                policy · {decision.allowed ? 'allowed' : 'blocked'}
+                {decision.reasons.length
+                  ? ` · ${decision.reasons.join('; ')}`
+                  : ''}
+              </Text>
+            </View>
+            <Pressable style={styles.linkBtn} onPress={() => void refresh()}>
+              <Text style={styles.link}>re-probe capabilities</Text>
+            </Pressable>
+
+            {canRun ? (
+              <LitertChat backend={backend} decision={decision} />
+            ) : (
+              <Text style={styles.error}>
+                Need an arm64 Android/iOS dev or release build with LiteRT
+                linked, plus policy green (battery/thermal/RAM). Expo Go is not
+                enough.
+              </Text>
+            )}
+          </>
         )}
 
-        {decision ? (
-          <View style={styles.panel}>
-            <Text style={styles.meta}>
-              policy · {decision.allowed ? 'allowed' : 'blocked'}
-              {decision.backend ? ` · ${decision.backend}` : ''}
-            </Text>
-            {decision.reasons.map((r) => (
-              <Text key={r} style={styles.reason}>
-                ✕ {r}
-              </Text>
-            ))}
-            {decision.warnings.map((w) => (
-              <Text key={w} style={styles.warn}>
-                ! {w}
-              </Text>
-            ))}
-          </View>
-        ) : null}
-
-        <Text style={styles.label}>Prompt</Text>
-        <TextInput
-          style={styles.input}
-          value={prompt}
-          onChangeText={setPrompt}
-          editable={!busy}
-          multiline
-          placeholderTextColor="#6b7f72"
-        />
-
-        <Pressable
-          style={[
-            styles.button,
-            (!decision?.allowed || busy) && styles.buttonDisabled,
-          ]}
-          onPress={() => {
-            void onRun();
-          }}
-          disabled={!decision?.allowed || busy}
-        >
-          {busy ? (
-            <ActivityIndicator color="#000000" />
-          ) : (
-            <Text style={styles.buttonText}>run on-device</Text>
-          )}
+        <Pressable onPress={() => router.push('/settings' as Href)}>
+          <Text style={styles.link}>provider settings →</Text>
         </Pressable>
-
-        {error ? <Text style={styles.reason}>{error}</Text> : null}
-        {output ? (
-          <View style={styles.panel}>
-            <Text style={styles.meta}>output</Text>
-            <Text style={styles.output}>{output}</Text>
-          </View>
-        ) : null}
+        <Pressable onPress={() => router.push('/chat' as Href)}>
+          <Text style={styles.link}>gateway chat →</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -188,34 +230,35 @@ export default function OnDeviceScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000000' },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    gap: 10,
-  },
-  back: {
-    color: '#6b7f72',
-    fontFamily: 'monospace',
-    marginBottom: 8,
-  },
-  brand: {
+  scroll: { padding: 24, gap: 12 },
+  title: {
     color: '#00ff66',
-    fontSize: 36,
+    fontFamily: 'monospace',
+    fontSize: 22,
     fontWeight: '700',
-    letterSpacing: 4,
-    fontFamily: 'monospace',
   },
-  tagline: {
-    color: '#6b7f72',
-    fontFamily: 'monospace',
-    marginBottom: 12,
-  },
+  link: { color: '#00ff66', fontFamily: 'monospace' },
+  linkBtn: { paddingVertical: 4 },
   label: {
     color: '#00ff66',
     fontFamily: 'monospace',
     fontSize: 12,
-    marginTop: 8,
+    marginBottom: 8,
+  },
+  meta: {
+    color: '#6b7f72',
+    fontFamily: 'monospace',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  error: { color: '#ff6666', fontFamily: 'monospace', fontSize: 12 },
+  block: { gap: 10 },
+  panel: {
+    borderWidth: 1,
+    borderColor: '#1f3328',
+    padding: 12,
+    backgroundColor: '#0a0f0c',
+    gap: 4,
   },
   input: {
     borderWidth: 1,
@@ -223,56 +266,23 @@ const styles = StyleSheet.create({
     color: '#00ff66',
     fontFamily: 'monospace',
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     backgroundColor: '#111613',
-    minHeight: 88,
+    minHeight: 72,
     textAlignVertical: 'top',
   },
   button: {
     backgroundColor: '#00ff66',
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 8,
   },
   buttonDisabled: { opacity: 0.5 },
   buttonText: {
-    color: '#000000',
+    color: '#000',
     fontFamily: 'monospace',
     fontWeight: '700',
   },
-  ghost: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#1f3328',
-  },
-  ghostText: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
-  },
-  panel: {
-    borderWidth: 1,
-    borderColor: '#1f3328',
-    backgroundColor: '#0a0f0c',
-    padding: 12,
-    gap: 6,
-  },
-  meta: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    fontSize: 12,
-    opacity: 0.85,
-  },
-  reason: {
-    color: '#ff6666',
-    fontFamily: 'monospace',
-    fontSize: 12,
-  },
-  warn: {
-    color: '#ffcc66',
-    fontFamily: 'monospace',
-    fontSize: 12,
-  },
-  output: {
+  bubbleText: {
     color: '#00ff66',
     fontFamily: 'monospace',
     fontSize: 13,

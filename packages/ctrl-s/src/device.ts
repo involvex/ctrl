@@ -95,9 +95,9 @@ export function evaluateOnDevicePolicy(
   const reasons: string[] = [];
   const warnings: string[] = [];
 
-  if (caps.platform !== 'android') {
+  if (caps.platform !== 'android' && caps.platform !== 'ios') {
     reasons.push(
-      `platform ${caps.platform} is not supported for LiteRT-LM MVP`
+      `platform ${caps.platform} is not supported for LiteRT-LM (need android/ios)`
     );
   }
   if (!caps.isArm64) {

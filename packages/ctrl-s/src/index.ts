@@ -136,3 +136,22 @@ export {
   type PairPayload,
   type PairingStatus,
 } from './pairing';
+
+export {
+  providerIdSchema,
+  providerKindSchema,
+  providerDescriptorSchema,
+  providerConfigSchema,
+  updateProviderConfigInputSchema,
+  providerStatusResponseSchema,
+  ZEN_BASE_URL,
+  KILO_BASE_URL,
+  ZEN_DEFAULT_MODEL,
+  KILO_DEFAULT_MODEL,
+  type ProviderId,
+  type ProviderKind,
+  type ProviderDescriptor,
+  type ProviderConfig,
+  type UpdateProviderConfigInput,
+  type ProviderStatusResponse,
+} from './providers';

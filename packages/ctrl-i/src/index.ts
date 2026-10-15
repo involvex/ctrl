@@ -15,6 +15,9 @@ import {
   messageSchema,
   outboxJobSchema,
   pairingStatusSchema,
+  providerStatusResponseSchema,
+  toolDefinitionSchema,
+  updateProviderConfigInputSchema,
   workspaceExportSchema,
   workspaceSchema,
   type AgentEvent,
@@ -35,6 +38,9 @@ import {
   type Message,
   type OutboxJob,
   type PairingStatus,
+  type ProviderStatusResponse,
+  type ToolDefinition,
+  type UpdateProviderConfigInput,
   type Workspace,
   type WorkspaceExport,
 } from '@involvex/ctrl-s';
@@ -91,6 +97,71 @@ export async function getPairingStatus(
     throw new Error(`pairing failed: ${res.status} ${res.statusText}`);
   }
   return pairingStatusSchema.parse(await res.json());
+}
+
+export type { ProviderStatusResponse, UpdateProviderConfigInput };
+
+export async function getProviderStatus(
+  baseUrl: string
+): Promise<ProviderStatusResponse> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/provider`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`getProviderStatus failed: ${res.status}`);
+  }
+  return providerStatusResponseSchema.parse(await readJson(res));
+}
+
+export async function updateProviderConfig(
+  baseUrl: string,
+  input: UpdateProviderConfigInput
+): Promise<ProviderStatusResponse> {
+  const body = updateProviderConfigInputSchema.parse(input);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/provider`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`updateProviderConfig failed: ${res.status}`);
+  }
+  return providerStatusResponseSchema.parse(await readJson(res));
+}
+
+const mcpServerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
+});
+
+export type McpServerInfo = z.infer<typeof mcpServerSchema>;
+
+export async function listTools(baseUrl: string): Promise<ToolDefinition[]> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/tools`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`listTools failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(toolDefinitionSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function listMcpServers(
+  baseUrl: string
+): Promise<McpServerInfo[]> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/mcp/servers`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`listMcpServers failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(mcpServerSchema) })
+    .parse(await readJson(res)).items;
 }
 
 async function readJson(res: Response): Promise<unknown> {
@@ -623,6 +694,7 @@ export type {
   MemoryStatus,
   Message,
   OutboxJob,
+  ToolDefinition,
   Workspace,
   WorkspaceExport,
 };

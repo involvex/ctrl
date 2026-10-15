@@ -12,7 +12,7 @@
     "format": "bun fmt --check",
     "format:write": "bun fmt",
     "validate": "bun check && bun lint && bun fmt --check",
-    "dev:gateway": "bun run --filter @involvex/ctrl-a dev",
+    "dev:gateway": "bun run ./packages/ctrl-a/src/server.ts",
     "gateway:free": "bun run scripts/free-gateway-port.ts",
     "dev:desktop": "bun run --filter @involvex/ctrl-desktop dev",
     "dev:cli": "bun run --filter @involvex/ctrl-f5 start",
