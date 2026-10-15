@@ -90,13 +90,16 @@ export function createDemoMcpClient(): McpClient {
       risk: 'low',
     },
     (call) => {
-      const args =
+      let text = '';
+      if (
         call.arguments &&
         typeof call.arguments === 'object' &&
         'text' in call.arguments
-          ? String((call.arguments as { text: unknown }).text ?? '')
-          : '';
-      return Promise.resolve({ echo: args });
+      ) {
+        const value = (call.arguments as { text: unknown }).text;
+        text = typeof value === 'string' ? value : '';
+      }
+      return Promise.resolve({ echo: text });
     }
   );
   return client;
