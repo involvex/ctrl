@@ -13,3 +13,9 @@ export {
   type OpenAICompatibleConfig,
 } from './openai-compatible';
 export { resolveProvider } from './resolve';
+export {
+  LlamaSidecar,
+  createLlamaSidecarFromEnv,
+  type LlamaSidecarConfig,
+  type LlamaSidecarStatus,
+} from './llama-sidecar';

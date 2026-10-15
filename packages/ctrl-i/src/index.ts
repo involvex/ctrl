@@ -13,6 +13,16 @@ import {
   type WorkspaceExport,
 } from '@involvex/ctrl-s';
 import { z } from 'zod';
+import { authHeaders, withAuthSearch } from './auth';
+
+export {
+  authHeaders,
+  clearClientAuth,
+  getClientAuth,
+  setClientAuth,
+  withAuthSearch,
+  type ClientAuth,
+} from './auth';
 
 export function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/$/, '');
@@ -26,7 +36,7 @@ export function toWsUrl(
   const base = new URL(normalizeBaseUrl(baseUrl));
   base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
   base.pathname = pathname;
-  base.search = search ?? '';
+  base.search = withAuthSearch(search ?? '');
   base.hash = '';
   return base.toString();
 }
@@ -44,7 +54,9 @@ async function readJson(res: Response): Promise<unknown> {
 }
 
 export async function listWorkspaces(baseUrl: string): Promise<Workspace[]> {
-  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/workspaces`);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/workspaces`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) {
     throw new Error(`listWorkspaces failed: ${res.status}`);
   }
@@ -60,7 +72,7 @@ export async function createWorkspace(
 ): Promise<Workspace> {
   const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/workspaces`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ name }),
   });
   if (!res.ok) {
@@ -74,7 +86,8 @@ export async function listConversations(
   workspaceId: string
 ): Promise<Conversation[]> {
   const res = await fetch(
-    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/conversations`
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/conversations`,
+    { headers: authHeaders() }
   );
   if (!res.ok) {
     throw new Error(`listConversations failed: ${res.status}`);
@@ -94,7 +107,7 @@ export async function createConversation(
     `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/conversations`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ title }),
     }
   );
@@ -109,7 +122,8 @@ export async function listMessages(
   conversationId: string
 ): Promise<Message[]> {
   const res = await fetch(
-    `${normalizeBaseUrl(baseUrl)}/api/v1/conversations/${conversationId}/messages`
+    `${normalizeBaseUrl(baseUrl)}/api/v1/conversations/${conversationId}/messages`,
+    { headers: authHeaders() }
   );
   if (!res.ok) {
     throw new Error(`listMessages failed: ${res.status}`);
@@ -125,7 +139,8 @@ export async function exportWorkspace(
   workspaceId: string
 ): Promise<WorkspaceExport> {
   const res = await fetch(
-    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/export`
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/export`,
+    { headers: authHeaders() }
   );
   if (!res.ok) {
     throw new Error(`exportWorkspace failed: ${res.status}`);
@@ -139,7 +154,7 @@ export async function importWorkspace(
 ): Promise<Workspace> {
   const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/import`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(dump),
   });
   if (!res.ok) {

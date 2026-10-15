@@ -36,7 +36,7 @@ Out of scope (for now):
 ## Hardening notes (operators)
 
 - Prefer `CTRL_A_LAN=0` (loopback-only) unless you intentionally expose the gateway on the LAN
-- Treat LAN mode as **trusted network only** until device pairing ships (Phase 3)
+- Treat LAN mode as **trusted network only**; set `CTRL_GATEWAY_TOKEN` (Desktop Host stores it in `safeStorage`) for bearer auth on API/WS
 - Do not publish gateway ports to the public internet
 - Keep Bun and Electron builds updated via Dependabot / release tags
 

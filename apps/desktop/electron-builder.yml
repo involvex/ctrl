@@ -43,3 +43,10 @@ nsis:
 
 portable:
   artifactName: ${productName}-${version}-win-${arch}-portable.${ext}
+
+# electron-updater (Phase 3): publish GitHub Releases when tagging
+publish:
+  provider: github
+  owner: involvex
+  repo: ctrl
+  releaseType: release

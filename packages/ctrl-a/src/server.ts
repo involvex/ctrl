@@ -1,5 +1,9 @@
 import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
-import { resolveProvider } from '@involvex/ctrl-r';
+import {
+  createLlamaSidecarFromEnv,
+  resolveProvider,
+  type LlamaSidecar,
+} from '@involvex/ctrl-r';
 import {
   clientControlMessageSchema,
   createConversationInputSchema,
@@ -18,6 +22,7 @@ import {
 } from '@involvex/ctrl-x';
 import { openDatabase, Store } from '@involvex/ctrl-z';
 import path from 'node:path';
+import { gatewayTokenFromEnv, isAuthorized, isPublicPath } from './auth';
 import { demoAgentEvents } from './mock-stream';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -49,7 +54,7 @@ function corsHeaders(req: Request): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     Vary: 'Origin',
   };
 }
@@ -126,8 +131,32 @@ async function streamIterable(
 export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
   const host = process.env['HOST'] ?? DEFAULT_HOST;
   const port = Number(process.env['PORT'] ?? DEFAULT_PORT);
+  const expectedToken = gatewayTokenFromEnv();
   const db = openDatabase(resolveDbPath());
   const store = new Store(db);
+
+  let llama: LlamaSidecar | null = null;
+  try {
+    llama = createLlamaSidecarFromEnv();
+    if (llama) {
+      const { baseUrl } = await llama.start();
+      process.env['CTRL_OPENAI_BASE_URL'] = baseUrl;
+      process.env['CTRL_OPENAI_API_KEY'] =
+        process.env['CTRL_OPENAI_API_KEY'] ??
+        process.env['OPENAI_API_KEY'] ??
+        'local';
+      if (!process.env['CTRL_PROVIDER']) {
+        process.env['CTRL_PROVIDER'] = 'openai';
+      }
+      process.stderr.write(`[ctrl-a] llama-server ${baseUrl}\n`);
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[ctrl-a] llama-server failed: ${err instanceof Error ? err.message : String(err)}\n`
+    );
+    llama = null;
+  }
+
   const provider = resolveProvider();
   const sandboxRoot = resolveSandboxRoot();
   const registry = new ToolRegistry();
@@ -148,6 +177,9 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
         .join(', ') || '(none)'
     }\n`
   );
+  process.stderr.write(
+    `[ctrl-a] auth ${expectedToken ? 'token-required' : 'open'}\n`
+  );
 
   const server = Bun.serve<SocketData>({
     hostname: host,
@@ -161,6 +193,17 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
 
       if (req.method === 'GET' && url.pathname === '/healthz') {
         return json(req, healthPayload());
+      }
+
+      if (!isPublicPath(url.pathname) && !isAuthorized(req, expectedToken)) {
+        return json(req, { error: 'unauthorized' }, 401);
+      }
+
+      if (req.method === 'GET' && url.pathname === '/api/v1/pairing') {
+        return json(req, {
+          required: Boolean(expectedToken),
+          llama: llama?.getStatus() ?? { state: 'stopped' },
+        });
       }
 
       if (req.method === 'GET' && url.pathname === '/api/v1/tools') {

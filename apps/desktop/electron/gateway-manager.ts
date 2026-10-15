@@ -14,6 +14,8 @@ export type GatewayManagerOptions = {
   repoRoot: string;
   packaged: boolean;
   resourcesPath: string;
+  /** Extra env vars passed to the gateway child (e.g. CTRL_GATEWAY_TOKEN). */
+  envExtra?: Record<string, string>;
 };
 
 const HEALTH_TIMEOUT_MS = 15_000;
@@ -182,10 +184,11 @@ export class GatewayManager {
       cwd,
       env: {
         ...process.env,
-        // Phase 0: bind all interfaces so Expo devices on LAN can reach the gateway.
-        // Set CTRL_A_LAN=0 to force loopback-only.
+        // Phase 0/3: bind all interfaces so Expo devices on LAN can reach the gateway.
+        // Set CTRL_A_LAN=0 to force loopback-only. Pairing token required when set.
         HOST: process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
         PORT: String(this.port),
+        ...this.opts.envExtra,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,

@@ -6,7 +6,8 @@ import type { ModelProvider } from './types';
  * Resolve the active chat provider from env.
  *
  * - `CTRL_PROVIDER=mock` (default) → MockProvider
- * - `CTRL_PROVIDER=openai` or set `CTRL_OPENAI_API_KEY` → OpenAI-compatible
+ * - `CTRL_PROVIDER=openai` / `llama` or set `CTRL_OPENAI_API_KEY` → OpenAI-compatible
+ * - Local llama-server is started by ctrl-a via `CTRL_LLAMA_BIN`, then pointed here
  */
 export function resolveProvider(
   env: NodeJS.ProcessEnv = process.env
@@ -18,10 +19,15 @@ export function resolveProvider(
     return new MockProvider();
   }
 
-  if (explicit === 'openai' || explicit === 'openai-compatible' || apiKey) {
+  if (
+    explicit === 'openai' ||
+    explicit === 'openai-compatible' ||
+    explicit === 'llama' ||
+    apiKey
+  ) {
     if (!apiKey) {
       throw new Error(
-        'CTRL_OPENAI_API_KEY (or OPENAI_API_KEY) required for openai provider'
+        'CTRL_OPENAI_API_KEY (or OPENAI_API_KEY) required for openai/llama provider'
       );
     }
     return new OpenAICompatibleProvider({

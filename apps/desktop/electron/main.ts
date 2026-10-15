@@ -1,15 +1,39 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
+import { getAutostart, setAutostart } from './autostart';
 import { GatewayManager } from './gateway-manager';
-import { registerGatewayIpc } from './ipc';
+import { registerDesktopIpc } from './ipc';
+import { SecretVault } from './secrets';
+import { createAppTray } from './tray';
+import { UpdateManager } from './updater';
 
 let gateway: GatewayManager | null = null;
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
+let vault: SecretVault | null = null;
+let updates: UpdateManager | null = null;
 
 function resolveRepoRoot(): string {
-  // app.getAppPath() → apps/desktop (dev) or asar root (packaged)
   return path.resolve(app.getAppPath(), '../..');
+}
+
+function showWindow(): void {
+  if (!mainWindow) {
+    if (gateway) {
+      createWindow(gateway.getUrl());
+    }
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function requestQuit(): void {
+  isQuitting = true;
+  app.quit();
 }
 
 function createWindow(gatewayUrl: string): void {
@@ -17,6 +41,7 @@ function createWindow(gatewayUrl: string): void {
     width: 1100,
     height: 720,
     backgroundColor: '#000000',
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -39,6 +64,14 @@ function createWindow(gatewayUrl: string): void {
     );
   });
 
+  // Close → hide to tray (Phase 3); Quit from tray/menu exits fully.
+  win.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      win.hide();
+    }
+  });
+
   win.on('closed', () => {
     if (mainWindow === win) {
       mainWindow = null;
@@ -49,37 +82,73 @@ function createWindow(gatewayUrl: string): void {
 async function bootstrap(): Promise<void> {
   await app.whenReady();
 
+  vault = new SecretVault();
+  const envExtra: Record<string, string> = {};
+  try {
+    if (vault.isAvailable()) {
+      envExtra['CTRL_GATEWAY_TOKEN'] = vault.ensureGatewayToken();
+      const openaiKey = vault.get('openaiApiKey');
+      if (openaiKey) {
+        envExtra['CTRL_OPENAI_API_KEY'] = openaiKey;
+        envExtra['CTRL_PROVIDER'] = process.env['CTRL_PROVIDER'] ?? 'openai';
+      }
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[ctrl-desktop] safeStorage unavailable: ${err instanceof Error ? err.message : String(err)}\n`
+    );
+  }
+
   gateway = new GatewayManager({
     repoRoot: resolveRepoRoot(),
     packaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
+    envExtra,
   });
-  registerGatewayIpc(gateway);
+
+  updates = new UpdateManager();
+  await updates.init();
+
+  registerDesktopIpc({
+    gateway,
+    vault,
+    updates,
+    getAutostart,
+    setAutostart,
+  });
 
   const url = await gateway.start();
   createWindow(url);
 
+  createAppTray({
+    gateway,
+    showWindow,
+    quit: requestQuit,
+  });
+
+  if (app.isPackaged) {
+    void updates.check();
+  }
+
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && gateway) {
-      createWindow(gateway.getUrl());
-    }
+    showWindow();
   });
 }
 
 void bootstrap();
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // Keep running in tray on all platforms during Phase 3.
 });
 
 app.on('before-quit', (event) => {
-  if (isQuitting || !gateway || gateway.getStatus().state === 'stopped') {
+  if (!isQuitting) {
+    isQuitting = true;
+  }
+  if (!gateway || gateway.getStatus().state === 'stopped') {
     return;
   }
   event.preventDefault();
-  isQuitting = true;
   void gateway.stop().finally(() => {
     app.exit(0);
   });

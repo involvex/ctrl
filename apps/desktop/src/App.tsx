@@ -7,6 +7,7 @@ import {
   listConversations,
   listMessages,
   listWorkspaces,
+  setClientAuth,
   streamChat,
   type Conversation,
   type Message,
@@ -23,20 +24,38 @@ type PendingApproval = {
   timeoutMs: number;
 };
 
+type DesktopApi = {
+  platform: string;
+  getGatewayUrl: () => Promise<string>;
+  getGatewayStatus: () => Promise<{
+    state: string;
+    url?: string;
+    error?: string;
+    attempt?: number;
+  }>;
+  getLanUrls: () => Promise<string[]>;
+  getAutostart: () => Promise<{ openAtLogin: boolean }>;
+  setAutostart: (next: {
+    openAtLogin: boolean;
+  }) => Promise<{ openAtLogin: boolean }>;
+  getUpdateStatus: () => Promise<{
+    state: string;
+    reason?: string;
+    version?: string;
+    message?: string;
+  }>;
+  checkForUpdates: () => Promise<{ state: string }>;
+  secretsAvailable: () => Promise<boolean>;
+  getGatewayToken: () => Promise<string | null>;
+  rotateGatewayToken: () => Promise<string | null>;
+  setOpenAiKey: (key: string) => Promise<{ ok: boolean }>;
+  hasOpenAiKey: () => Promise<boolean>;
+};
+
 declare global {
   interface Window {
     ctrlGatewayUrl?: string;
-    ctrlDesktop?: {
-      platform: string;
-      getGatewayUrl: () => Promise<string>;
-      getGatewayStatus: () => Promise<{
-        state: string;
-        url?: string;
-        error?: string;
-        attempt?: number;
-      }>;
-      getLanUrls: () => Promise<string[]>;
-    };
+    ctrlDesktop?: DesktopApi;
   }
 }
 
@@ -56,6 +75,14 @@ export function App() {
   const [pendingApproval, setPendingApproval] =
     useState<PendingApproval | null>(null);
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const [hostOpen, setHostOpen] = useState(false);
+  const [openAtLogin, setOpenAtLogin] = useState(false);
+  const [secretsOk, setSecretsOk] = useState(false);
+  const [gatewayToken, setGatewayToken] = useState<string | null>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
+  const [openAiDraft, setOpenAiDraft] = useState('');
+  const [updateLabel, setUpdateLabel] = useState('idle');
   const sessionRef = useRef<RunSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -95,6 +122,34 @@ export function App() {
       cancelled = true;
       window.clearInterval(id);
     };
+  }, []);
+
+  useEffect(() => {
+    const api = window.ctrlDesktop;
+    if (!api?.getGatewayToken) {
+      return;
+    }
+    void (async () => {
+      try {
+        const [available, token, autostart, update, keyed] = await Promise.all([
+          api.secretsAvailable(),
+          api.getGatewayToken(),
+          api.getAutostart(),
+          api.getUpdateStatus(),
+          api.hasOpenAiKey(),
+        ]);
+        setSecretsOk(available);
+        setGatewayToken(token);
+        setOpenAtLogin(autostart.openAtLogin);
+        setUpdateLabel(update.state);
+        setHasOpenAiKey(keyed);
+        if (token) {
+          setClientAuth({ token });
+        }
+      } catch {
+        // browser / non-electron preview
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -303,6 +358,13 @@ export function App() {
           <p className="meta lan">LAN: {lanUrls.join(' · ')}</p>
         ) : null}
         <div className="actions">
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => setHostOpen((v) => !v)}
+          >
+            host
+          </button>
           <button type="button" className="ghost-btn" onClick={onExport}>
             export
           </button>
@@ -328,6 +390,126 @@ export function App() {
           />
         </div>
       </header>
+
+      {hostOpen ? (
+        <aside className="host-panel">
+          <p className="host-title">desktop host</p>
+          <label className="host-row">
+            <input
+              type="checkbox"
+              checked={openAtLogin}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setOpenAtLogin(next);
+                void window.ctrlDesktop?.setAutostart({ openAtLogin: next });
+              }}
+            />
+            open at login
+          </label>
+          <p className="meta">
+            safeStorage: {secretsOk ? 'available' : 'unavailable'} · updates:{' '}
+            {updateLabel}
+          </p>
+          <div className="host-row">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void window.ctrlDesktop?.checkForUpdates().then((s) => {
+                  setUpdateLabel(s.state);
+                  return undefined;
+                });
+              }}
+            >
+              check updates
+            </button>
+          </div>
+          <p className="meta">
+            pairing token{' '}
+            {gatewayToken
+              ? showToken
+                ? gatewayToken
+                : `${gatewayToken.slice(0, 10)}…`
+              : '(none)'}
+          </p>
+          <div className="host-row">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => setShowToken((v) => !v)}
+              disabled={!gatewayToken}
+            >
+              {showToken ? 'hide' : 'reveal'}
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              disabled={!gatewayToken}
+              onClick={() => {
+                if (gatewayToken) {
+                  void navigator.clipboard.writeText(gatewayToken);
+                }
+              }}
+            >
+              copy
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void window.ctrlDesktop?.rotateGatewayToken().then((t) => {
+                  setGatewayToken(t);
+                  if (t) {
+                    setClientAuth({ token: t });
+                  }
+                  setError(
+                    'Token rotated — restart the app so the gateway picks it up.'
+                  );
+                  return undefined;
+                });
+              }}
+            >
+              rotate
+            </button>
+          </div>
+          <p className="meta">
+            OpenAI key: {hasOpenAiKey ? 'saved in safeStorage' : 'not set'}
+          </p>
+          <div className="host-row">
+            <input
+              className="host-input"
+              type="password"
+              placeholder="sk-… (saved encrypted)"
+              value={openAiDraft}
+              onChange={(e) => setOpenAiDraft(e.target.value)}
+            />
+            <button
+              type="button"
+              className="ghost-btn"
+              disabled={openAiDraft.trim().length === 0}
+              onClick={() => {
+                void window.ctrlDesktop
+                  ?.setOpenAiKey(openAiDraft.trim())
+                  .then(() => {
+                    setHasOpenAiKey(true);
+                    setOpenAiDraft('');
+                    setError(
+                      'API key saved — restart the app to apply to the gateway.'
+                    );
+                    return undefined;
+                  });
+              }}
+            >
+              save key
+            </button>
+          </div>
+          {lanUrls.length > 0 ? (
+            <p className="meta">
+              mobile: use LAN URL + Bearer token from safeStorage
+            </p>
+          ) : null}
+        </aside>
+      ) : null}
 
       <section className="chat">
         {messages.map((m) => (
