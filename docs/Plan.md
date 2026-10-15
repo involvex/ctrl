@@ -269,5 +269,5 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 10. Phase 5 Channels — **done**: `ctrl-c` adapters (webhook + mock telegram/discord/slack), identity mapping, outbox queue/retry/rate limits, gateway hooks + desktop panel.
 11. Phase 6 On-Device Inference (Android) — **done**: LiteRT-LM Expo plugin (`react-native-litert-lm`), capability probe (ABI/RAM/battery), thermal/battery policy in `ctrl-s` (re-exported from `ctrl-r`), mobile `/on-device` UI, `native/android-litert` docs.
 12. Phase 7 Sync — **done** (MVP): host backups under `data/backups/` (`BackupStore`), `/api/v1/backups` create/list/get/restore, desktop panel, contracts. Encrypted backups later. No device↔device SQLite sync.
-13. Phase 8 Featured CLI (`ctrl-f5`) — **next**: gateway lifecycle + chat + bash/PowerShell completions.
+13. Phase 8 Featured CLI (`ctrl-f5`) — **in progress**: LAN pair QR (`ctrl-f5 pair` + Expo scan); gateway `0.0.0.0`; Metro host auto-fill. Next: lifecycle + chat + bash/PowerShell completions.
 14. Phase 9 Rust `agentd` — optional.

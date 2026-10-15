@@ -41,9 +41,11 @@ import {
 } from '@involvex/ctrl-z';
 import path from 'node:path';
 import { gatewayTokenFromEnv, isAuthorized, isPublicPath } from './auth';
+import { listLanGatewayUrls } from './lan';
 import { demoAgentEvents } from './mock-stream';
 
-const DEFAULT_HOST = '127.0.0.1';
+/** Bind all interfaces so Expo / LAN clients can reach the gateway. */
+const DEFAULT_HOST = '0.0.0.0';
 const DEFAULT_PORT = 7331;
 const VERSION = '0.0.1';
 const CHUNK_DELAY_MS = 40;
@@ -122,12 +124,8 @@ function isAddrInUse(err: unknown): boolean {
     return false;
   }
   const code = 'code' in err ? String(err.code) : '';
-  const message = 'message' in err ? String(err.message) : '';
-  return (
-    code === 'EADDRINUSE' ||
-    message.includes('EADDRINUSE') ||
-    (message.includes('port') && message.includes('in use'))
-  );
+  // Bun may omit code; only treat explicit EADDRINUSE (not every "Is port in use?" listen failure).
+  return code === 'EADDRINUSE';
 }
 
 function resolveDbPath(): string {
@@ -264,6 +262,8 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
         if (req.method === 'GET' && url.pathname === '/api/v1/pairing') {
           return json(req, {
             required: Boolean(expectedToken),
+            port,
+            urls: listLanGatewayUrls(port),
             llama: llama?.getStatus() ?? { state: 'stopped' },
           });
         }
@@ -874,9 +874,14 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
     throw err;
   }
 
+  const boundPort = Number(server.port);
+  const lanUrls = listLanGatewayUrls(boundPort);
   process.stderr.write(
-    `[ctrl-a] listening on http://${server.hostname}:${server.port}\n`
+    `[ctrl-a] listening on http://${server.hostname}:${boundPort}\n`
   );
+  if (lanUrls.length > 0) {
+    process.stderr.write(`[ctrl-a] lan ${lanUrls.join(' ')}\n`);
+  }
 
   return server;
 }

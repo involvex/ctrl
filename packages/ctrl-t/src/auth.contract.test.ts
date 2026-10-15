@@ -17,5 +17,12 @@ describe('contract: pairing status', () => {
       // live harness leaves token unset
       expect(body.required).toBe(false);
     }
+    if (body && typeof body === 'object' && 'port' in body) {
+      expect(typeof body.port).toBe('number');
+      expect(body.port).toBeGreaterThan(0);
+    }
+    if (body && typeof body === 'object' && 'urls' in body) {
+      expect(Array.isArray(body.urls)).toBe(true);
+    }
   });
 });

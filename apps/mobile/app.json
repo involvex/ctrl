@@ -40,7 +40,14 @@
           "backgroundColor": "#000000"
         }
       ],
-      "react-native-litert-lm"
+      "react-native-litert-lm",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ctrl to scan gateway pairing QR codes.",
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

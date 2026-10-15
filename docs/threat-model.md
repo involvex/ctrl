@@ -23,19 +23,19 @@ Scope: local gateway (`ctrl-a`) with sandboxed tools, approval UI, MCP stdio, LL
 
 ## Threats & controls
 
-| Threat                    | Control                                                                                 |
-| ------------------------- | --------------------------------------------------------------------------------------- |
-| Path traversal via `fs_*` | `Sandbox.resolve` realpath + prefix check                                               |
-| Arbitrary shell           | Allowlist + reject metacharacters                                                       |
-| Silent high-risk tools    | `requiresApproval` / profile `requireApprovalFor` + UI gate                             |
-| Stuck approvals           | Approval timeout → `timeout` decision                                                   |
-| Run runaway               | Profile `runTimeoutMs` + client `run.cancel` / AbortSignal                              |
-| Prompt injection → tool   | `/tool` and LLM tool calls both gated by approval                                       |
-| Audit gaps                | Append-only `audit_logs` for tool/approval/run lifecycle                                |
-| LAN eavesdrop / hijack    | `CTRL_GATEWAY_TOKEN` required on API/WS when set; `/healthz` public; TLS still non-goal |
-| Secret theft from disk    | Desktop secrets via `safeStorage` (DPAPI / Keychain); not stored in `app.db`            |
-| Unexpected autostart      | Explicit user toggle via `app.setLoginItemSettings`                                     |
-| Malicious update payload  | `electron-updater` only in packaged builds; GitHub Releases as publish source           |
+| Threat                    | Control                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Path traversal via `fs_*` | `Sandbox.resolve` realpath + prefix check                                                                                  |
+| Arbitrary shell           | Allowlist + reject metacharacters                                                                                          |
+| Silent high-risk tools    | `requiresApproval` / profile `requireApprovalFor` + UI gate                                                                |
+| Stuck approvals           | Approval timeout → `timeout` decision                                                                                      |
+| Run runaway               | Profile `runTimeoutMs` + client `run.cancel` / AbortSignal                                                                 |
+| Prompt injection → tool   | `/tool` and LLM tool calls both gated by approval                                                                          |
+| Audit gaps                | Append-only `audit_logs` for tool/approval/run lifecycle                                                                   |
+| LAN eavesdrop / hijack    | Default bind `0.0.0.0` for Expo/LAN; set `CTRL_GATEWAY_TOKEN` on untrusted networks; `/healthz` public; TLS still non-goal |
+| Secret theft from disk    | Desktop secrets via `safeStorage` (DPAPI / Keychain); not stored in `app.db`                                               |
+| Unexpected autostart      | Explicit user toggle via `app.setLoginItemSettings`                                                                        |
+| Malicious update payload  | `electron-updater` only in packaged builds; GitHub Releases as publish source                                              |
 
 ## Non-goals (this phase)
 

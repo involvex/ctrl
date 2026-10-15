@@ -20,6 +20,7 @@
     "expo-asset": "~57.0.20",
     "expo-battery": "~57.0.3",
     "expo-build-properties": "~57.0.22",
+    "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.22",
     "expo-device": "~57.0.2",
     "expo-linking": "~57.0.13",

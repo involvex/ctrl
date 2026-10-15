@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, type Href } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -19,8 +19,11 @@ import {
   setClientAuth,
   streamDemo,
 } from '@involvex/ctrl-i';
+import {
+  defaultGatewayUrl,
+  guessDevHostIp,
+} from '../src/connection/dev-gateway';
 
-const DEFAULT_GATEWAY = 'http://127.0.0.1:7331';
 const STORAGE_KEY = 'ctrl.mobile.connection';
 
 type SavedConnection = {
@@ -74,8 +77,17 @@ async function saveConnection(value: SavedConnection): Promise<void> {
   }
 }
 
+function isLoopbackUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
 export default function IndexScreen() {
-  const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_GATEWAY);
+  const [gatewayUrl, setGatewayUrl] = useState(() => defaultGatewayUrl());
   const [token, setToken] = useState('');
   const [health, setHealth] = useState('idle');
   const [pairing, setPairing] = useState('idle');
@@ -84,13 +96,20 @@ export default function IndexScreen() {
   const [streamText, setStreamText] = useState('');
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [devHost, setDevHost] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
+      const guessed = guessDevHostIp();
+      setDevHost(guessed);
       const saved = await loadSaved();
-      if (saved) {
+      if (saved && !isLoopbackUrl(saved.gatewayUrl)) {
         setGatewayUrl(saved.gatewayUrl);
         setToken(saved.token);
+      } else if (guessed) {
+        setGatewayUrl(`http://${guessed}:7331`);
+      } else {
+        setGatewayUrl(defaultGatewayUrl());
       }
       setReady(true);
     })();
@@ -116,10 +135,12 @@ export default function IndexScreen() {
       await saveConnection({ gatewayUrl: url, token: authToken });
 
       const status = await getPairingStatus(url);
+      const lanHint =
+        status.urls && status.urls.length > 0 ? ` · lan ${status.urls[0]}` : '';
       setPairing(
         status.required
-          ? `auth required · llama ${status.llama?.state ?? 'unknown'}`
-          : `open · llama ${status.llama?.state ?? 'unknown'}`
+          ? `auth required · llama ${status.llama?.state ?? 'unknown'}${lanHint}`
+          : `open · llama ${status.llama?.state ?? 'unknown'}${lanHint}`
       );
       if (status.required && !authToken) {
         setHealth('token required for this gateway');
@@ -193,10 +214,15 @@ export default function IndexScreen() {
         <Link href="/on-device" style={styles.link}>
           on-device inference →
         </Link>
+        <Link href={'/scan' as Href} style={styles.link}>
+          scan pair QR →
+        </Link>
 
         <Text style={styles.label}>Gateway URL</Text>
         <Text style={styles.hint}>
-          Use the desktop LAN IP (not 127.0.0.1) when testing on a phone.
+          {devHost
+            ? `Dev host from Metro: ${devHost} · port 7331`
+            : 'Use the LAN IP of the machine running ctrl-a (not 127.0.0.1).'}
         </Text>
         <TextInput
           style={styles.input}
@@ -211,7 +237,7 @@ export default function IndexScreen() {
 
         <Text style={styles.label}>Pairing token</Text>
         <Text style={styles.hint}>
-          Optional. Required when desktop LAN auth is enabled.
+          Optional. Required when desktop / CLI LAN auth is enabled.
         </Text>
         <TextInput
           style={styles.input}
@@ -222,7 +248,7 @@ export default function IndexScreen() {
           editable={!busy}
           secureTextEntry
           placeholderTextColor="#6b7f72"
-          placeholder="paste from desktop host"
+          placeholder="from ctrl-f5 pair / desktop host"
         />
 
         <Pressable
@@ -278,7 +304,7 @@ const styles = StyleSheet.create({
   link: {
     color: '#00ff66',
     fontFamily: 'monospace',
-    marginBottom: 20,
+    marginBottom: 8,
     opacity: 0.9,
   },
   label: {

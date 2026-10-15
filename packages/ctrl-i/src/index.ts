@@ -14,6 +14,7 @@ import {
   memoryItemSchema,
   messageSchema,
   outboxJobSchema,
+  pairingStatusSchema,
   workspaceExportSchema,
   workspaceSchema,
   type AgentEvent,
@@ -33,6 +34,7 @@ import {
   type MemoryStatus,
   type Message,
   type OutboxJob,
+  type PairingStatus,
   type Workspace,
   type WorkspaceExport,
 } from '@involvex/ctrl-s';
@@ -78,19 +80,9 @@ export async function checkHealth(baseUrl: string): Promise<HealthResponse> {
   return healthResponseSchema.parse(await res.json());
 }
 
-const pairingStatusSchema = z.object({
-  required: z.boolean(),
-  llama: z
-    .object({
-      state: z.string(),
-    })
-    .passthrough()
-    .optional(),
-});
+export type { PairingStatus };
 
-export type PairingStatus = z.infer<typeof pairingStatusSchema>;
-
-/** Public pairing probe — reports whether bearer auth is required. */
+/** Public pairing probe — reports auth mode + LAN URLs. */
 export async function getPairingStatus(
   baseUrl: string
 ): Promise<PairingStatus> {

@@ -17,9 +17,13 @@
   },
   "dependencies": {
     "@involvex/ctrl-i": "workspace:*",
-    "@involvex/ctrl-s": "workspace:*"
+    "@involvex/ctrl-s": "workspace:*",
+    "qrcode": "^1.5.4"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6"
   }
 }

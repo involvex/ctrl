@@ -127,3 +127,12 @@ export {
   type RestoreBackupInput,
   type RestoreBackupResult,
 } from './backup';
+
+export {
+  pairPayloadSchema,
+  pairingStatusSchema,
+  encodePairPayload,
+  parsePairPayload,
+  type PairPayload,
+  type PairingStatus,
+} from './pairing';
