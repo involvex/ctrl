@@ -76,6 +76,16 @@ Expo mobile/web: paste the LAN URL from desktop, tap **connect + stream demo**.
 
 Full naming, theme, and roadmap: [docs/Plan.md](docs/Plan.md), [docs/Namespace_and_Design.md](docs/Namespace_and_Design.md).
 
+## CI, Dependabot, releases
+
+- CI / Dependabot / tag releases: [docs/ci-and-releases.md](docs/ci-and-releases.md)
+- Security reporting: [SECURITY.md](SECURITY.md)
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0   # publishes GitHub Release + win-x64 artifacts
+```
+
 ## Theme
 
 Matrix dark: background `#000000`, accent `#00ff66`.
