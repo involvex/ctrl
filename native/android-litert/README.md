@@ -41,4 +41,17 @@ bun run prebuild:android
 bun run android
 ```
 
+After changing `expo-build-properties` in `app.json`, re-run `prebuild:android` so
+`android/gradle.properties` gets `android.minSdkVersion=26` (and friends). Without
+that line, Expo’s version catalog keeps **minSdk 24** and the LiteRT-LM manifest
+merger fails.
+
 x86_64 emulators will not run the engine — use a physical arm64 device.
+
+## Build warnings (non-fatal)
+
+| Message                                          | Meaning                                                                | Action                                                                                                                       |
+| ------------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `[CXX5304] SDK XML versions up to 3 … version 4` | Android Studio cmdline-tools newer than the CMake/NDK side AGP expects | Update SDK **Command-line Tools** / NDK via SDK Manager; safe to ignore if the build continues                               |
+| `CMAKE_OBJECT_PATH_MAX` / path ~195–227 chars    | Bun’s `.bun/pkg@version+hash/…` nests deepen object paths on Windows   | Keep `reactNativeArchitectures=arm64-v8a`; enable Win long paths; prefer a short repo path (e.g. `D:\ix\ctrl`) if links fail |
+| `Hard link … failed. Doing a slower copy`        | Gradle cache → project spans drives/volumes                            | Informational; build still works                                                                                             |
