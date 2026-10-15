@@ -13,6 +13,7 @@
     "format:write": "bun fmt",
     "validate": "bun check && bun lint && bun fmt --check",
     "dev:gateway": "bun run --filter @involvex/ctrl-a dev",
+    "gateway:free": "bun run scripts/free-gateway-port.ts",
     "dev:desktop": "bun run --filter @involvex/ctrl-desktop dev",
     "dev:cli": "bun run --filter @involvex/ctrl-f5 start",
     "build": "bun run build:packages && bun run build:apps",

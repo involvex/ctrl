@@ -60,7 +60,10 @@ export class BackupStore {
         // Skip corrupt files.
       }
     }
-    return items.toSorted((a, b) => b.createdAt - a.createdAt);
+    // Copy then sort — Array#toSorted needs ES2023 lib; Bun check target is older.
+    const sorted = items.slice();
+    sorted.sort((a, b) => b.createdAt - a.createdAt);
+    return sorted;
   }
 
   get(id: string): HostBackupSnapshot | null {
