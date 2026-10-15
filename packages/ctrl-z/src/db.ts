@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export type CtrlDb = Database;
 
@@ -143,6 +143,69 @@ function migrate(db: Database): void {
 
       CREATE INDEX IF NOT EXISTS idx_memory_workspace
         ON memory_items(workspace_id, status, updated_at DESC);
+    `);
+  }
+
+  if (current < 4) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS channels (
+        id TEXT PRIMARY KEY NOT NULL,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK(kind IN ('webhook', 'telegram', 'discord', 'slack')),
+        name TEXT NOT NULL,
+        config_json TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL CHECK(status IN ('stopped', 'starting', 'running', 'error')),
+        last_error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channels_workspace
+        ON channels(workspace_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS channel_identities (
+        id TEXT PRIMARY KEY NOT NULL,
+        channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        external_user_id TEXT NOT NULL,
+        display_name TEXT,
+        local_user_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(channel_id, external_user_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_identities_channel
+        ON channel_identities(channel_id);
+
+      CREATE TABLE IF NOT EXISTS channel_messages (
+        id TEXT PRIMARY KEY NOT NULL,
+        channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        direction TEXT NOT NULL CHECK(direction IN ('inbound', 'outbound')),
+        external_user_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_messages_channel
+        ON channel_messages(channel_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS channel_outbox (
+        id TEXT PRIMARY KEY NOT NULL,
+        channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        external_user_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'sending', 'sent', 'failed')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NOT NULL,
+        last_error TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_channel_outbox_due
+        ON channel_outbox(status, next_attempt_at);
     `);
   }
 

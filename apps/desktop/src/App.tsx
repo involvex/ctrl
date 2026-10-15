@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  createChannel,
   createConversation,
   createWorkspace,
   exportWorkspace,
   importWorkspace,
   inspectContext,
+  listChannels,
   listConversations,
   listMemory,
   listMessages,
@@ -14,6 +16,7 @@ import {
   streamChat,
   updateMemory,
   uploadAttachmentText,
+  type ChannelPublic,
   type Conversation,
   type KnowledgeHit,
   type MemoryItem,
@@ -97,6 +100,9 @@ export function App() {
   const [knowledgeHits, setKnowledgeHits] = useState<KnowledgeHit[]>([]);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [contextPreview, setContextPreview] = useState<string | null>(null);
+  const [channelsOpen, setChannelsOpen] = useState(false);
+  const [channelItems, setChannelItems] = useState<ChannelPublic[]>([]);
+  const [channelName, setChannelName] = useState('webhook');
   const sessionRef = useRef<RunSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -361,6 +367,33 @@ export function App() {
     [gatewayUrl]
   );
 
+  const refreshChannels = useCallback(async () => {
+    if (!workspace || !gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      setChannelItems(await listChannels(gatewayUrl, workspace.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [gatewayUrl, workspace]);
+
+  const onCreateWebhookChannel = useCallback(async () => {
+    if (!workspace || !gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      await createChannel(gatewayUrl, workspace.id, {
+        kind: 'webhook',
+        name: channelName.trim() || 'webhook',
+      });
+      await refreshChannels();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [channelName, gatewayUrl, refreshChannels, workspace]);
+
   const refreshKnowledge = useCallback(async () => {
     if (!workspace || !gatewayUrl.startsWith('http')) {
       return;
@@ -441,6 +474,18 @@ export function App() {
             }}
           >
             knowledge
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setChannelsOpen((v) => !v);
+              if (!channelsOpen) {
+                void refreshChannels();
+              }
+            }}
+          >
+            channels
           </button>
           <button type="button" className="ghost-btn" onClick={onExport}>
             export
@@ -584,6 +629,44 @@ export function App() {
             <p className="meta">
               mobile: use LAN URL + Bearer token from safeStorage
             </p>
+          ) : null}
+        </aside>
+      ) : null}
+
+      {channelsOpen ? (
+        <aside className="host-panel knowledge-panel">
+          <p className="host-title">channels</p>
+          <p className="meta">
+            webhook · telegram · discord · slack (MVP adapters)
+          </p>
+          <div className="host-row">
+            <input
+              className="host-input"
+              value={channelName}
+              onChange={(e) => setChannelName(e.target.value)}
+              placeholder="channel name"
+            />
+            <button
+              type="button"
+              className="demo-btn"
+              onClick={() => {
+                void onCreateWebhookChannel();
+              }}
+              disabled={!workspace}
+            >
+              add webhook
+            </button>
+          </div>
+          <ul className="knowledge-list">
+            {channelItems.map((ch) => (
+              <li key={ch.id}>
+                <code>{ch.kind}</code> {ch.name} · {ch.status}
+                {ch.lastError ? ` · ${ch.lastError}` : ''}
+              </li>
+            ))}
+          </ul>
+          {channelItems.length === 0 ? (
+            <p className="meta">no channels yet</p>
           ) : null}
         </aside>
       ) : null}

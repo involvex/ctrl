@@ -1,3 +1,4 @@
+import { ChannelManager } from '@involvex/ctrl-c';
 import { assembleContextPreview, ingestAttachment } from '@involvex/ctrl-k';
 import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
 import {
@@ -8,13 +9,17 @@ import {
 import {
   clientControlMessageSchema,
   createAttachmentInputSchema,
+  createChannelInputSchema,
   createConversationInputSchema,
   createMemoryInputSchema,
   createMessageInputSchema,
   createWorkspaceInputSchema,
   healthResponseSchema,
+  inboundWebhookSchema,
   knowledgeSearchInputSchema,
+  sendChannelMessageInputSchema,
   updateMemoryInputSchema,
+  upsertIdentityInputSchema,
   workspaceExportSchema,
   type AgentEvent,
   type CreateAttachmentInput,
@@ -26,7 +31,12 @@ import {
   runAgentLoop,
   ToolRegistry,
 } from '@involvex/ctrl-x';
-import { KnowledgeStore, openDatabase, Store } from '@involvex/ctrl-z';
+import {
+  ChannelStore,
+  KnowledgeStore,
+  openDatabase,
+  Store,
+} from '@involvex/ctrl-z';
 import path from 'node:path';
 import { gatewayTokenFromEnv, isAuthorized, isPublicPath } from './auth';
 import { demoAgentEvents } from './mock-stream';
@@ -156,6 +166,8 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
   const db = openDatabase(resolveDbPath());
   const store = new Store(db);
   const knowledge = new KnowledgeStore(db);
+  const channels = new ChannelManager({ store: new ChannelStore(db) });
+  channels.startWorker(750);
 
   let llama: LlamaSidecar | null = null;
   try {
@@ -501,6 +513,160 @@ export async function startServer(): Promise<ReturnType<typeof Bun.serve>> {
           },
           201
         );
+      }
+
+      const workspaceChannels =
+        /^\/api\/v1\/workspaces\/([^/]+)\/channels$/.exec(url.pathname);
+      if (workspaceChannels) {
+        const workspaceId = workspaceChannels[1]!;
+        if (!store.getWorkspace(workspaceId)) {
+          return json(req, { error: 'workspace not found' }, 404);
+        }
+        if (req.method === 'GET') {
+          return json(req, { items: channels.list(workspaceId) });
+        }
+        if (req.method === 'POST') {
+          const body: unknown = await req.json();
+          const input = createChannelInputSchema.parse(body);
+          const created = await channels.create(workspaceId, input);
+          return json(req, created, 201);
+        }
+      }
+
+      const channelItem = /^\/api\/v1\/channels\/([^/]+)$/.exec(url.pathname);
+      if (channelItem && req.method === 'GET') {
+        const channelId = channelItem[1]!;
+        const item = channels.get(channelId);
+        if (!item) {
+          return json(req, { error: 'channel not found' }, 404);
+        }
+        return json(req, item);
+      }
+
+      const channelStart = /^\/api\/v1\/channels\/([^/]+)\/start$/.exec(
+        url.pathname
+      );
+      if (channelStart && req.method === 'POST') {
+        try {
+          return json(req, await channels.startChannel(channelStart[1]!));
+        } catch (err) {
+          return json(
+            req,
+            { error: err instanceof Error ? err.message : String(err) },
+            400
+          );
+        }
+      }
+
+      const channelStop = /^\/api\/v1\/channels\/([^/]+)\/stop$/.exec(
+        url.pathname
+      );
+      if (channelStop && req.method === 'POST') {
+        try {
+          return json(req, await channels.stopChannel(channelStop[1]!));
+        } catch (err) {
+          return json(
+            req,
+            { error: err instanceof Error ? err.message : String(err) },
+            400
+          );
+        }
+      }
+
+      const channelSend = /^\/api\/v1\/channels\/([^/]+)\/send$/.exec(
+        url.pathname
+      );
+      if (channelSend && req.method === 'POST') {
+        const channelId = channelSend[1]!;
+        const body: unknown = await req.json();
+        const input = sendChannelMessageInputSchema.parse(body);
+        try {
+          const job = channels.enqueue(channelId, input);
+          await channels.processOutbox();
+          return json(
+            req,
+            channels.listOutbox(channelId).find((j) => j.id === job.id) ?? job,
+            201
+          );
+        } catch (err) {
+          return json(
+            req,
+            { error: err instanceof Error ? err.message : String(err) },
+            404
+          );
+        }
+      }
+
+      const channelMessages = /^\/api\/v1\/channels\/([^/]+)\/messages$/.exec(
+        url.pathname
+      );
+      if (channelMessages && req.method === 'GET') {
+        const channelId = channelMessages[1]!;
+        if (!channels.get(channelId)) {
+          return json(req, { error: 'channel not found' }, 404);
+        }
+        return json(req, { items: channels.listMessages(channelId) });
+      }
+
+      const channelOutbox = /^\/api\/v1\/channels\/([^/]+)\/outbox$/.exec(
+        url.pathname
+      );
+      if (channelOutbox && req.method === 'GET') {
+        const channelId = channelOutbox[1]!;
+        if (!channels.get(channelId)) {
+          return json(req, { error: 'channel not found' }, 404);
+        }
+        return json(req, { items: channels.listOutbox(channelId) });
+      }
+
+      const channelIdentities =
+        /^\/api\/v1\/channels\/([^/]+)\/identities$/.exec(url.pathname);
+      if (channelIdentities) {
+        const channelId = channelIdentities[1]!;
+        if (!channels.get(channelId)) {
+          return json(req, { error: 'channel not found' }, 404);
+        }
+        if (req.method === 'GET') {
+          return json(req, { items: channels.listIdentities(channelId) });
+        }
+        if (req.method === 'POST') {
+          const body: unknown = await req.json();
+          const input = upsertIdentityInputSchema.parse(body);
+          return json(req, channels.upsertIdentity(channelId, input), 201);
+        }
+      }
+
+      const hookMatch = /^\/hooks\/v1\/([^/]+)$/.exec(url.pathname);
+      if (hookMatch && req.method === 'POST') {
+        const channelId = hookMatch[1]!;
+        const full = channels.getConfig(channelId);
+        if (!full) {
+          return json(req, { error: 'channel not found' }, 404);
+        }
+        const secret =
+          typeof full.config['webhookSecret'] === 'string'
+            ? full.config['webhookSecret']
+            : null;
+        if (secret) {
+          const provided =
+            req.headers.get('x-ctrl-webhook-secret') ??
+            url.searchParams.get('secret');
+          if (provided !== secret) {
+            return json(req, { error: 'unauthorized' }, 401);
+          }
+        }
+        const body: unknown = await req.json();
+        const input = inboundWebhookSchema.parse(body);
+        try {
+          const message = await channels.handleInbound(channelId, input);
+          return json(req, message, 201);
+        } catch (err) {
+          return json(
+            req,
+            { error: err instanceof Error ? err.message : String(err) },
+            400
+          );
+        }
       }
 
       return json(req, { error: 'Not Found' }, 404);

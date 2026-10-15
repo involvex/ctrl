@@ -264,4 +264,5 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 7. Phase 2 Agent Runtime — **done**: `ctrl-x` tool registry + sandbox shell/fs, approval gate + desktop UI, cancel/timeouts, audit log, agent profiles, `ctrl-m` MCP stdio JSON-RPC, LLM-native tool calling (OpenAI-compatible + mock `!call`).
 8. Phase 3 Desktop Host — **done**: Tray + close-to-tray, autostart, electron-updater scaffold, `safeStorage` (gateway token + OpenAI key), gateway bearer auth / LAN pairing, `ctrl-r` llama-server sidecar (`CTRL_LLAMA_BIN`), packaging via electron-builder.
 9. Phase 4 Personal Knowledge — **done**: `ctrl-k` extract/chunk/FTS, attachments + blobs in `ctrl-z` (schema v3), memory review + context inspector APIs/UI.
-10. Phase 5 Channels — next: Telegram/Discord/Slack adapters (`ctrl-c`).
+10. Phase 5 Channels — **done**: `ctrl-c` adapters (webhook + mock telegram/discord/slack), identity mapping, outbox queue/retry/rate limits, gateway hooks + desktop panel.
+11. Phase 6 On-Device Inference (Android) — next.

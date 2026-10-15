@@ -33,9 +33,10 @@ describe('gateway auth', () => {
     expect(extractRequestToken(req)).toBe('from-header');
   });
 
-  test('healthz and pairing status are public', () => {
+  test('healthz, pairing, and webhook hooks are public', () => {
     expect(isPublicPath('/healthz')).toBe(true);
     expect(isPublicPath('/api/v1/pairing')).toBe(true);
+    expect(isPublicPath('/hooks/v1/ch_abc')).toBe(true);
     expect(isPublicPath('/api/v1/workspaces')).toBe(false);
   });
 });

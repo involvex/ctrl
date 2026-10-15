@@ -32,5 +32,9 @@ export function isAuthorized(req: Request, expected: string | null): boolean {
 
 /** Paths that remain public even when a gateway token is configured. */
 export function isPublicPath(pathname: string): boolean {
-  return pathname === '/healthz' || pathname === '/api/v1/pairing';
+  return (
+    pathname === '/healthz' ||
+    pathname === '/api/v1/pairing' ||
+    pathname.startsWith('/hooks/v1/')
+  );
 }

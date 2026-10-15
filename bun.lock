@@ -100,11 +100,20 @@
         "ctrl-a": "./src/cli.ts",
       },
       "dependencies": {
+        "@involvex/ctrl-c": "workspace:*",
         "@involvex/ctrl-k": "workspace:*",
         "@involvex/ctrl-m": "workspace:*",
         "@involvex/ctrl-r": "workspace:*",
         "@involvex/ctrl-s": "workspace:*",
         "@involvex/ctrl-x": "workspace:*",
+        "@involvex/ctrl-z": "workspace:*",
+      },
+    },
+    "packages/ctrl-c": {
+      "name": "@involvex/ctrl-c",
+      "version": "0.0.1",
+      "dependencies": {
+        "@involvex/ctrl-s": "workspace:*",
         "@involvex/ctrl-z": "workspace:*",
       },
     },
@@ -696,6 +705,8 @@
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.35.5", "", { "os": "win32", "cpu": "x64" }, "sha512-x76eH0vEiHlcMQu8Y8IenntaACtddpT6W0wmXtWrnKcnKI7ME5DdgqhAD6SEWOEl1v2zDvkZDhFA9KnURwpfqg=="],
 
     "@involvex/ctrl-a": ["@involvex/ctrl-a@workspace:packages/ctrl-a"],
+
+    "@involvex/ctrl-c": ["@involvex/ctrl-c@workspace:packages/ctrl-c"],
 
     "@involvex/ctrl-desktop": ["@involvex/ctrl-desktop@workspace:apps/desktop"],
 

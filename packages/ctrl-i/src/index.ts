@@ -1,16 +1,24 @@
 import {
   agentEventSchema,
   attachmentSchema,
+  channelIdentitySchema,
+  channelMessageSchema,
+  channelPublicSchema,
   contextInspectSchema,
   conversationSchema,
   healthResponseSchema,
   knowledgeHitSchema,
   memoryItemSchema,
   messageSchema,
+  outboxJobSchema,
   workspaceExportSchema,
   workspaceSchema,
   type AgentEvent,
   type Attachment,
+  type ChannelIdentity,
+  type ChannelKind,
+  type ChannelMessage,
+  type ChannelPublic,
   type ContextInspect,
   type Conversation,
   type HealthResponse,
@@ -18,6 +26,7 @@ import {
   type MemoryItem,
   type MemoryStatus,
   type Message,
+  type OutboxJob,
   type Workspace,
   type WorkspaceExport,
 } from '@involvex/ctrl-s';
@@ -431,9 +440,109 @@ export async function inspectContext(
   return contextInspectSchema.parse(await readJson(res));
 }
 
+export async function listChannels(
+  baseUrl: string,
+  workspaceId: string
+): Promise<ChannelPublic[]> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/channels`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`listChannels failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(channelPublicSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function createChannel(
+  baseUrl: string,
+  workspaceId: string,
+  input: { kind: ChannelKind; name: string; config?: Record<string, unknown> }
+): Promise<ChannelPublic> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/channels`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(input),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`createChannel failed: ${res.status}`);
+  }
+  return channelPublicSchema.parse(await readJson(res));
+}
+
+export async function sendChannelMessage(
+  baseUrl: string,
+  channelId: string,
+  input: { externalUserId: string; text: string }
+): Promise<OutboxJob> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/channels/${channelId}/send`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(input),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`sendChannelMessage failed: ${res.status}`);
+  }
+  return outboxJobSchema.parse(await readJson(res));
+}
+
+export async function postChannelWebhook(
+  baseUrl: string,
+  channelId: string,
+  input: { externalUserId: string; text: string; displayName?: string },
+  secret?: string
+): Promise<ChannelMessage> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (secret) {
+    headers['x-ctrl-webhook-secret'] = secret;
+  }
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/hooks/v1/${channelId}`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(input),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`postChannelWebhook failed: ${res.status}`);
+  }
+  return channelMessageSchema.parse(await readJson(res));
+}
+
+export async function listChannelIdentities(
+  baseUrl: string,
+  channelId: string
+): Promise<ChannelIdentity[]> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/channels/${channelId}/identities`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`listChannelIdentities failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(channelIdentitySchema) })
+    .parse(await readJson(res)).items;
+}
+
 export type {
   AgentEvent,
   Attachment,
+  ChannelIdentity,
+  ChannelKind,
+  ChannelMessage,
+  ChannelPublic,
   ContextInspect,
   Conversation,
   HealthResponse,
@@ -441,6 +550,7 @@ export type {
   MemoryItem,
   MemoryStatus,
   Message,
+  OutboxJob,
   Workspace,
   WorkspaceExport,
 };
