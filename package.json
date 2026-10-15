@@ -9,7 +9,6 @@
   ],
   "scripts": {
     "check": "bun check",
-    "lint": "bun lint",
     "format": "bun fmt --check",
     "format:write": "bun fmt",
     "validate": "bun check && bun lint && bun fmt --check",
@@ -39,7 +38,7 @@
   "engines": {
     "bun": ">=1.3.4"
   },
-  "packageManager": "bun@1.4.3",
+    "packageManager": "bun@1.4.4",
   "overrides": {
     "@types/react": "~18.3.12",
     "@types/react-dom": "~18.3.1"
