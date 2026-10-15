@@ -9,8 +9,9 @@
     "dev": "vite",
     "build": "vite build",
     "build:gateway": "bun run scripts/build-gateway.ts",
-    "package": "bun run build && bun run build:gateway && electron-builder --config electron-builder.yml --win --x64",
-    "package:dir": "bun run build && bun run build:gateway && electron-builder --config electron-builder.yml --win dir --x64",
+    "package": "bun run build && bun run build:gateway && bun run package:electron -- --win --x64",
+    "package:dir": "bun run build && bun run build:gateway && bun run package:electron -- --win dir --x64",
+    "package:electron": "node ./node_modules/electron-builder/cli.js --config electron-builder.yml",
     "check": "bun check",
     "start": "vite"
   },
