@@ -6,20 +6,30 @@ import {
   pairPayloadSchema,
 } from '@involvex/ctrl-s';
 import { toString as qrToString } from 'qrcode';
+import { chatCommand } from './chat';
+import {
+  DEFAULT_GATEWAY_PORT,
+  gatewayStart,
+  gatewayStatus,
+  gatewayStop,
+} from './gateway-lifecycle';
 import { listLanAddresses, pickLanUrl } from './lan';
-
-const DEFAULT_PORT = 7331;
 
 function usage(): never {
   process.stderr.write(`Usage:
+  ctrl-f5 start  [--port <port>] [--host <bindHost>]
+  ctrl-f5 stop   [--port <port>]
+  ctrl-f5 status [--port <port>] [--url <baseUrl>]
   ctrl-f5 health [--url <baseUrl>]
-  ctrl-f5 demo [--url <baseUrl>]
-  ctrl-f5 pair [--host <lanIp>] [--port <port>] [--token <token>] [--url <baseUrl>]
+  ctrl-f5 demo   [--url <baseUrl>]
+  ctrl-f5 chat   [--url <baseUrl>] [--token <token>] [message...]
+  ctrl-f5 pair   [--host <lanIp>] [--port <port>] [--token <token>] [--url <baseUrl>]
 
-pair   Print LAN gateway URL + terminal QR; stays open until Ctrl+C so Expo can scan.
-       Prefers a real LAN IP (never 127.0.0.1). Gateway should listen on 0.0.0.0.
+start/stop/status  Manage local ctrl-a gateway (pid under data/ctrl-a.pid).
+chat               One-shot or interactive TTY chat against a running gateway.
+pair               Print LAN QR; stays open until Ctrl+C for Expo scan.
 
-Env: CTRL_A_URL, CTRL_GATEWAY_TOKEN, PORT
+Env: CTRL_A_URL, CTRL_A_HOST, CTRL_GATEWAY_TOKEN, PORT, CTRL_DATA_DIR, CTRL_REPO_ROOT
 `);
   process.exit(1);
 }
@@ -36,6 +46,19 @@ function flagValue(args: string[], name: string): string | undefined {
   return value;
 }
 
+function stripFlags(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg.startsWith('--')) {
+      i += 1; // skip value
+      continue;
+    }
+    out.push(arg);
+  }
+  return out;
+}
+
 function parseUrl(args: string[]): string {
   const fromFlag = flagValue(args, '--url');
   if (fromFlag) {
@@ -45,10 +68,20 @@ function parseUrl(args: string[]): string {
     return process.env['CTRL_A_URL'];
   }
   const port = Number(
-    flagValue(args, '--port') ?? process.env['PORT'] ?? DEFAULT_PORT
+    flagValue(args, '--port') ?? process.env['PORT'] ?? DEFAULT_GATEWAY_PORT
   );
   const host = flagValue(args, '--host');
-  return pickLanUrl(port, host);
+  if (host) {
+    return pickLanUrl(port, host);
+  }
+  // Prefer loopback for local client commands when no LAN host requested.
+  return `http://127.0.0.1:${port}`;
+}
+
+function parsePort(args: string[]): number {
+  return Number(
+    flagValue(args, '--port') ?? process.env['PORT'] ?? DEFAULT_GATEWAY_PORT
+  );
 }
 
 async function health(baseUrl: string): Promise<void> {
@@ -80,9 +113,7 @@ async function demo(baseUrl: string): Promise<void> {
 }
 
 async function pair(args: string[]): Promise<void> {
-  const port = Number(
-    flagValue(args, '--port') ?? process.env['PORT'] ?? DEFAULT_PORT
-  );
+  const port = parsePort(args);
   const host = flagValue(args, '--host');
   const token =
     flagValue(args, '--token') ?? process.env['CTRL_GATEWAY_TOKEN'] ?? '';
@@ -124,7 +155,7 @@ async function pair(args: string[]): Promise<void> {
   } catch (err) {
     process.stderr.write(
       `\nprobe    gateway not reachable at ${payload.gatewayUrl}\n` +
-        `         start with: br gateway:free && br dev:gateway\n` +
+        `         start with: ctrl-f5 start\n` +
         `         (${err instanceof Error ? err.message : String(err)})\n`
     );
   }
@@ -144,16 +175,83 @@ async function pair(args: string[]): Promise<void> {
   });
 }
 
+async function cmdStart(args: string[]): Promise<void> {
+  const port = parsePort(args);
+  const host =
+    flagValue(args, '--host') ?? process.env['CTRL_A_HOST'] ?? '0.0.0.0';
+  const result = await gatewayStart({ port, host });
+  process.stdout.write(
+    result.alreadyRunning
+      ? `already running · ${result.meta.url} · pid ${result.meta.pid || '—'}\n`
+      : `started · ${result.meta.url} · pid ${result.meta.pid}\n`
+  );
+}
+
+async function cmdStop(args: string[]): Promise<void> {
+  const port = parsePort(args);
+  const result = await gatewayStop({ port });
+  process.stdout.write(`${result.message}\n`);
+}
+
+async function cmdStatus(args: string[]): Promise<void> {
+  const port = parsePort(args);
+  const host = flagValue(args, '--host');
+  const urlFlag = flagValue(args, '--url');
+  if (urlFlag) {
+    try {
+      const parsed = healthResponseSchema.parse(await checkHealth(urlFlag));
+      process.stdout.write(
+        `running · ${urlFlag} · ${parsed.service} ${parsed.version}\n`
+      );
+    } catch (err) {
+      process.stdout.write(
+        `stopped · ${urlFlag} · ${err instanceof Error ? err.message : String(err)}\n`
+      );
+      process.exitCode = 1;
+    }
+    return;
+  }
+  const status = await gatewayStatus({ port, host });
+  process.stdout.write(`${status.state} · ${status.message}\n`);
+  if (status.state !== 'running') {
+    process.exitCode = 1;
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const cmd = args[0];
+  const rest = args.slice(1);
 
+  if (!cmd) {
+    usage();
+  }
+
+  if (cmd === 'start') {
+    await cmdStart(rest);
+    return;
+  }
+  if (cmd === 'stop') {
+    await cmdStop(rest);
+    return;
+  }
+  if (cmd === 'status') {
+    await cmdStatus(rest);
+    return;
+  }
   if (cmd === 'pair') {
-    await pair(args.slice(1));
+    await pair(rest);
+    return;
+  }
+  if (cmd === 'chat') {
+    const baseUrl = parseUrl(rest);
+    const token =
+      flagValue(rest, '--token') ?? process.env['CTRL_GATEWAY_TOKEN'];
+    await chatCommand(baseUrl, stripFlags(rest), token);
     return;
   }
 
-  const baseUrl = parseUrl(args);
+  const baseUrl = parseUrl(rest);
   if (cmd === 'health') {
     await health(baseUrl);
     return;
