@@ -5,7 +5,7 @@
     "jsx": "react-jsx",
     "lib": ["ES2022"],
     "moduleSuffixes": [".native", ".ios", ".android", ""],
-    "types": []
+    "types": ["node", "bun"]
   },
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
   "exclude": ["**/*.test.ts"]
