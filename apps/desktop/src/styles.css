@@ -148,6 +148,12 @@ body,
   border: 1px solid var(--charcoal);
 }
 
+.ghost-btn-active {
+  border-color: var(--accent);
+  background: rgba(0, 255, 102, 0.08);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .demo-btn {
   color: #000000;
   background: var(--accent);

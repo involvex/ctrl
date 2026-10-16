@@ -11,29 +11,43 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as DocumentPicker from 'expo-document-picker';
 import {
   evaluateOnDevicePolicy,
   type DeviceCapabilities,
   type PolicyDecision,
 } from '@involvex/ctrl-s';
-import { GEMMA_4_E2B_IT, useModel } from 'react-native-litert-lm';
+import { ModelRegistry, useModel } from 'react-native-litert-lm';
 import {
   backendForPolicy,
   probeDeviceCapabilities,
 } from '../src/device/capabilities';
+import {
+  DEFAULT_MODEL_URL,
+  describeDownloadError,
+  downloadModelWithRetry,
+  isRemoteModelUrl,
+  loadSavedModelSource,
+  normalizeModelPath,
+  saveModelSource,
+} from '../src/device/model-source';
 
 function LitertChat({
+  pathOrUrl,
   backend,
   decision,
   onReprobe,
+  onSourceChange,
 }: {
+  pathOrUrl: string;
   backend: 'cpu' | 'gpu' | 'npu';
   decision: PolicyDecision;
   onReprobe: () => Promise<PolicyDecision | null>;
+  onSourceChange: (next: string) => void;
 }) {
-  const engine = useModel(GEMMA_4_E2B_IT, {
+  const engine = useModel(pathOrUrl, {
     backend,
-    autoLoad: false,
+    autoLoad: !isRemoteModelUrl(pathOrUrl),
     enableMemoryTracking: true,
     systemPrompt: 'You are ctrl on-device assistant. Be concise.',
     maxOutputTokens: 512,
@@ -42,16 +56,102 @@ function LitertChat({
   const [prompt, setPrompt] = useState('Say hello in one short sentence.');
   const [reply, setReply] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
-  const downloading =
-    engine.downloadProgress > 0 && engine.downloadProgress < 1;
-  const downloadPct = Math.round(engine.downloadProgress * 100);
+  const [manualProgress, setManualProgress] = useState(0);
+  const [busyAction, setBusyAction] = useState<'idle' | 'download' | 'import'>(
+    'idle'
+  );
 
-  const onLoad = useCallback(() => {
+  const downloading =
+    busyAction === 'download' ||
+    (engine.downloadProgress > 0 && engine.downloadProgress < 1);
+  const downloadPct = Math.round(
+    (busyAction === 'download' ? manualProgress : engine.downloadProgress) * 100
+  );
+
+  const onDownloadAndLoad = useCallback(() => {
     setLocalError(null);
-    void engine.load().catch((err: unknown) => {
-      setLocalError(err instanceof Error ? err.message : String(err));
-    });
-  }, [engine]);
+    setBusyAction('download');
+    setManualProgress(0);
+    void (async () => {
+      try {
+        if (isRemoteModelUrl(pathOrUrl)) {
+          const localPath = await downloadModelWithRetry(pathOrUrl, {
+            attempts: 3,
+            onProgress: setManualProgress,
+          });
+          await saveModelSource(localPath);
+          onSourceChange(localPath);
+          return;
+        }
+        await engine.load();
+      } catch (err: unknown) {
+        setLocalError(describeDownloadError(err));
+        try {
+          if (isRemoteModelUrl(pathOrUrl)) {
+            ModelRegistry.deleteFile(pathOrUrl);
+          }
+          await engine.deleteModel();
+        } catch {
+          // ignore
+        }
+      } finally {
+        setBusyAction('idle');
+      }
+    })();
+  }, [engine, onSourceChange, pathOrUrl]);
+
+  const onImportFromFilesystem = useCallback(() => {
+    setLocalError(null);
+    setBusyAction('import');
+    void (async () => {
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ['application/octet-stream', 'application/x-litertlm', '*/*'],
+          copyToCacheDirectory: true,
+          multiple: false,
+        });
+        if (result.canceled || !result.assets?.[0]?.uri) {
+          return;
+        }
+        const asset = result.assets[0];
+        const name = (asset.name ?? asset.uri).toLowerCase();
+        if (!name.includes('.litertlm') && !name.endsWith('.litertlm')) {
+          setLocalError(
+            'Pick a .litertlm model file (e.g. gemma-4-E2B-it.litertlm).'
+          );
+          return;
+        }
+        const localPath = normalizeModelPath(asset.uri);
+        const size = ModelRegistry.getFileSizeBytes(localPath);
+        if (size <= 0) {
+          setLocalError(
+            `Imported path not readable (${localPath}). Try copying the file into app storage first.`
+          );
+          return;
+        }
+        await saveModelSource(localPath);
+        onSourceChange(localPath);
+      } catch (err: unknown) {
+        setLocalError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setBusyAction('idle');
+      }
+    })();
+  }, [onSourceChange]);
+
+  const onClearCache = useCallback(() => {
+    setLocalError(null);
+    void (async () => {
+      try {
+        ModelRegistry.deleteFile(DEFAULT_MODEL_URL);
+        await engine.deleteModel();
+        await saveModelSource(DEFAULT_MODEL_URL);
+        onSourceChange(DEFAULT_MODEL_URL);
+      } catch (err: unknown) {
+        setLocalError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+  }, [engine, onSourceChange]);
 
   const onGenerate = useCallback(() => {
     setLocalError(null);
@@ -75,6 +175,10 @@ function LitertChat({
     })();
   }, [engine, onReprobe, prompt]);
 
+  const sourceLabel = isRemoteModelUrl(pathOrUrl)
+    ? 'HuggingFace URL (download)'
+    : `local · ${pathOrUrl.split(/[/\\]/).pop() ?? pathOrUrl}`;
+
   return (
     <View style={styles.block}>
       <Text style={styles.label}>
@@ -83,18 +187,25 @@ function LitertChat({
           ? ` · ${decision.warnings.join('; ')}`
           : ''}
       </Text>
+      <Text style={styles.meta}>source · {sourceLabel}</Text>
       {!engine.isReady ? (
         <View style={styles.block}>
           <Pressable
             style={[styles.button, downloading && styles.buttonDisabled]}
-            onPress={onLoad}
-            disabled={downloading}
+            onPress={onDownloadAndLoad}
+            disabled={busyAction !== 'idle'}
           >
-            <Text style={styles.buttonText}>
-              {downloading
-                ? `downloading ${downloadPct}%`
-                : 'download + load model (~2.6 GB)'}
-            </Text>
+            {busyAction === 'download' ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {downloading
+                  ? `downloading ${downloadPct}%`
+                  : isRemoteModelUrl(pathOrUrl)
+                    ? 'download + load (~2.6 GB, 3 retries)'
+                    : 'load local model'}
+              </Text>
+            )}
           </Pressable>
           {downloading ? (
             <View style={styles.progressTrack}>
@@ -103,18 +214,36 @@ function LitertChat({
               />
             </View>
           ) : null}
+          <Pressable
+            style={[
+              styles.secondaryBtn,
+              busyAction !== 'idle' && styles.buttonDisabled,
+            ]}
+            onPress={onImportFromFilesystem}
+            disabled={busyAction !== 'idle'}
+          >
+            <Text style={styles.secondaryText}>
+              import .litertlm from filesystem
+            </Text>
+          </Pressable>
           <Text style={styles.meta}>
-            Needs network once for the model weights. After that, inference is
-            on-device; if download fails, use gateway chat.
+            Network downloads often fail mid-stream on mobile CDNs. Prefer:
+            download gemma-4-E2B-it.litertlm on a PC, copy to the phone, then
+            Import. Or retry download (clears partial cache).
           </Text>
         </View>
       ) : (
-        <Text style={styles.meta}>
-          model ready
-          {engine.memoryEstimate?.verdict
-            ? ` · memory ${engine.memoryEstimate.verdict}`
-            : ''}
-        </Text>
+        <View style={styles.block}>
+          <Text style={styles.meta}>
+            model ready
+            {engine.memoryEstimate?.verdict
+              ? ` · memory ${engine.memoryEstimate.verdict}`
+              : ''}
+          </Text>
+          <Pressable style={styles.linkBtn} onPress={onClearCache}>
+            <Text style={styles.link}>clear model cache / switch source</Text>
+          </Pressable>
+        </View>
       )}
       <TextInput
         style={styles.input}
@@ -156,6 +285,7 @@ export default function OnDeviceScreen() {
   const [caps, setCaps] = useState<DeviceCapabilities | null>(null);
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
   const [busy, setBusy] = useState(true);
+  const [modelSource, setModelSource] = useState(DEFAULT_MODEL_URL);
 
   const probePolicy = useCallback(async (): Promise<PolicyDecision | null> => {
     const next = await probeDeviceCapabilities();
@@ -179,6 +309,10 @@ export default function OnDeviceScreen() {
     let cancelled = false;
     void (async () => {
       setBusy(true);
+      const saved = await loadSavedModelSource();
+      if (!cancelled) {
+        setModelSource(saved);
+      }
       await probePolicy();
       if (!cancelled) {
         setBusy(false);
@@ -192,7 +326,7 @@ export default function OnDeviceScreen() {
   const backend = backendForPolicy(decision?.backend ?? null);
   const canRun = Boolean(decision?.allowed && caps?.litertAvailable);
   const offlineHint = !caps?.litertAvailable
-    ? 'LiteRT native module not linked (Expo Go cannot run Gemma). Pair a PC gateway and use chat for offline-capable host inference.'
+    ? 'LiteRT native module not linked (Expo Go cannot run Gemma). Use a dev-client / release build. Pair a PC gateway for host inference.'
     : decision && !decision.allowed
       ? `Policy blocked: ${decision.reasons.join('; ') || 'not allowed'}. Charge/cool the device, then re-probe — or use gateway chat.`
       : null;
@@ -240,9 +374,12 @@ export default function OnDeviceScreen() {
 
             {canRun ? (
               <LitertChat
+                key={modelSource}
+                pathOrUrl={modelSource}
                 backend={backend}
                 decision={decision}
                 onReprobe={probePolicy}
+                onSourceChange={setModelSource}
               />
             ) : (
               <View style={styles.panel}>
@@ -316,6 +453,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#00ff66',
     paddingVertical: 14,
     alignItems: 'center',
+  },
+  secondaryBtn: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  secondaryText: {
+    color: '#00ff66',
+    fontFamily: 'monospace',
+    fontWeight: '700',
   },
   buttonDisabled: { opacity: 0.5 },
   buttonText: {

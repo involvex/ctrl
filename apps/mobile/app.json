@@ -18,6 +18,7 @@
     "plugins": [
       "expo-router",
       "expo-asset",
+      "expo-dev-client",
       [
         "expo-build-properties",
         {
@@ -31,6 +32,7 @@
         }
       ],
       "./plugins/with-android-sdk-props.js",
+      "./plugins/with-litert-consumer-proguard.js",
       [
         "expo-splash-screen",
         {
@@ -46,6 +48,12 @@
         {
           "cameraPermission": "Allow ctrl to scan gateway pairing QR codes.",
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-document-picker",
+        {
+          "iCloudContainerEnvironment": "Production"
         }
       ]
     ],

@@ -49,6 +49,10 @@ type PendingApproval = {
   timeoutMs: number;
 };
 
+/** Exclusive side panels — opening one closes the others. */
+type DesktopPanel =
+  'host' | 'knowledge' | 'channels' | 'providers' | 'tools' | 'backups' | null;
+
 type DesktopApi = {
   platform: string;
   getGatewayUrl: () => Promise<string>;
@@ -100,7 +104,7 @@ export function App() {
   const [pendingApproval, setPendingApproval] =
     useState<PendingApproval | null>(null);
   const [toolStatus, setToolStatus] = useState<string | null>(null);
-  const [hostOpen, setHostOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<DesktopPanel>(null);
   const [openAtLogin, setOpenAtLogin] = useState(false);
   const [secretsOk, setSecretsOk] = useState(false);
   const [gatewayToken, setGatewayToken] = useState<string | null>(null);
@@ -108,27 +112,43 @@ export function App() {
   const [hasOpenAiKey, setHasOpenAiKey] = useState(false);
   const [openAiDraft, setOpenAiDraft] = useState('');
   const [updateLabel, setUpdateLabel] = useState('idle');
-  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [knowledgeDraft, setKnowledgeDraft] = useState('');
   const [knowledgeFilename, setKnowledgeFilename] = useState('notes.md');
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
   const [knowledgeHits, setKnowledgeHits] = useState<KnowledgeHit[]>([]);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [contextPreview, setContextPreview] = useState<string | null>(null);
-  const [channelsOpen, setChannelsOpen] = useState(false);
   const [channelItems, setChannelItems] = useState<ChannelPublic[]>([]);
   const [channelName, setChannelName] = useState('webhook');
-  const [backupsOpen, setBackupsOpen] = useState(false);
   const [backupItems, setBackupItems] = useState<HostBackupManifest[]>([]);
   const [backupLabel, setBackupLabel] = useState('manual');
-  const [providersOpen, setProvidersOpen] = useState(false);
   const [providerStatus, setProviderStatus] =
     useState<ProviderStatusResponse | null>(null);
   const [providerKeyDraft, setProviderKeyDraft] = useState('');
   const [providerModelDraft, setProviderModelDraft] = useState('');
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [toolItems, setToolItems] = useState<ToolDefinition[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
+  const hostOpen = openPanel === 'host';
+  const knowledgeOpen = openPanel === 'knowledge';
+  const channelsOpen = openPanel === 'channels';
+  const providersOpen = openPanel === 'providers';
+  const toolsOpen = openPanel === 'tools';
+  const backupsOpen = openPanel === 'backups';
+
+  const togglePanel = useCallback(
+    (panel: Exclude<DesktopPanel, null>, onOpen?: () => void) => {
+      setOpenPanel((prev) => {
+        if (prev === panel) {
+          return null;
+        }
+        if (onOpen) {
+          queueMicrotask(onOpen);
+        }
+        return panel;
+      });
+    },
+    []
+  );
   const sessionRef = useRef<RunSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -243,14 +263,26 @@ export function App() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, streaming]);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && openPanel !== null) {
+        setOpenPanel(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [openPanel]);
+
   const refreshProviders = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {
       return;
     }
     try {
-      const status = await getProviderStatus(gatewayUrl);
-      setProviderStatus(status);
-      setProviderModelDraft(status.model ?? '');
+      const provider = await getProviderStatus(gatewayUrl);
+      setProviderStatus(provider);
+      setProviderModelDraft(provider.model ?? '');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -296,8 +328,8 @@ export function App() {
         if (providerModelDraft.trim()) {
           patch.model = providerModelDraft.trim();
         }
-        const status = await updateProviderConfig(gatewayUrl, patch);
-        setProviderStatus(status);
+        const provider = await updateProviderConfig(gatewayUrl, patch);
+        setProviderStatus(provider);
         setProviderKeyDraft('');
         setError(null);
       } catch (err) {
@@ -602,67 +634,64 @@ export function App() {
         <div className="actions">
           <button
             type="button"
-            className="ghost-btn"
-            onClick={() => setHostOpen((v) => !v)}
+            className={`ghost-btn${hostOpen ? ' ghost-btn-active' : ''}`}
+            onClick={() => {
+              togglePanel('host');
+            }}
           >
             host
           </button>
           <button
             type="button"
-            className="ghost-btn"
+            className={`ghost-btn${knowledgeOpen ? ' ghost-btn-active' : ''}`}
             onClick={() => {
-              setKnowledgeOpen((v) => !v);
-              if (!knowledgeOpen) {
+              togglePanel('knowledge', () => {
                 void refreshKnowledge();
-              }
+              });
             }}
           >
             knowledge
           </button>
           <button
             type="button"
-            className="ghost-btn"
+            className={`ghost-btn${channelsOpen ? ' ghost-btn-active' : ''}`}
             onClick={() => {
-              setChannelsOpen((v) => !v);
-              if (!channelsOpen) {
+              togglePanel('channels', () => {
                 void refreshChannels();
-              }
+              });
             }}
           >
             channels
           </button>
           <button
             type="button"
-            className="ghost-btn"
+            className={`ghost-btn${providersOpen ? ' ghost-btn-active' : ''}`}
             onClick={() => {
-              setProvidersOpen((v) => !v);
-              if (!providersOpen) {
+              togglePanel('providers', () => {
                 void refreshProviders();
-              }
+              });
             }}
           >
             providers
           </button>
           <button
             type="button"
-            className="ghost-btn"
+            className={`ghost-btn${toolsOpen ? ' ghost-btn-active' : ''}`}
             onClick={() => {
-              setToolsOpen((v) => !v);
-              if (!toolsOpen) {
+              togglePanel('tools', () => {
                 void refreshTools();
-              }
+              });
             }}
           >
             tools
           </button>
           <button
             type="button"
-            className="ghost-btn"
+            className={`ghost-btn${backupsOpen ? ' ghost-btn-active' : ''}`}
             onClick={() => {
-              setBackupsOpen((v) => !v);
-              if (!backupsOpen) {
+              togglePanel('backups', () => {
                 void refreshBackups();
-              }
+              });
             }}
           >
             backups
