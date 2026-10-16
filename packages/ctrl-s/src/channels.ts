@@ -22,7 +22,7 @@ export const channelConfigSchema = z.object({
   kind: channelKindSchema,
   name: z.string().min(1),
   /** Opaque config (bot token, webhook secret, etc.). Never echo secrets to clients. */
-  config: z.record(z.unknown()).default({}),
+  config: z.record(z.string(), z.unknown()).default({}),
   status: channelStatusSchema,
   lastError: z.string().nullable(),
   createdAt: z.number().int().nonnegative(),
@@ -37,7 +37,7 @@ export type ChannelPublic = z.infer<typeof channelPublicSchema>;
 export const createChannelInputSchema = z.object({
   kind: channelKindSchema,
   name: z.string().min(1).max(200),
-  config: z.record(z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type CreateChannelInput = z.infer<typeof createChannelInputSchema>;

@@ -8,7 +8,7 @@ export const toolDefinitionSchema = z.object({
   name: z.string().min(1),
   description: z.string(),
   /** JSON-Schema-like parameter object (validated loosely for now). */
-  parameters: z.record(z.unknown()).default({}),
+  parameters: z.record(z.string(), z.unknown()).default({}),
   requiresApproval: z.boolean().default(false),
   risk: toolRiskSchema.default('low'),
 });
