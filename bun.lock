@@ -192,6 +192,7 @@
     },
   },
   "overrides": {
+    "@vitejs/plugin-react": "4.7.0",
     "@xmldom/xmldom": "0.9.12",
     "app-builder-lib": "26.15.3",
     "builder-util-runtime": "9.7.0",
