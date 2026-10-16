@@ -53,6 +53,8 @@ export default function ChatScreen() {
   const [streaming, setStreaming] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('loading…');
+  const [syncLine, setSyncLine] = useState('sync · idle');
+  const [syncing, setSyncing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [hostOnline, setHostOnline] = useState<boolean | null>(null);
   const gatewayConversationIdRef = useRef<string | null>(null);
@@ -108,10 +110,11 @@ export default function ChatScreen() {
 
   const runSync = useCallback(async () => {
     const current = brainRef.current;
-    if (!current) {
+    if (!current || syncing) {
       return;
     }
-    setStatus('syncing…');
+    setSyncing(true);
+    setSyncLine('sync · running…');
     const result = await syncBrainWithGateway(current);
     if (result.ok) {
       brainRef.current = result.brain;
@@ -123,12 +126,15 @@ export default function ChatScreen() {
         gatewayConversationIdRef.current = conv.gatewayConversationId;
       }
       setHostOnline(true);
-      setStatus(`synced · +${result.pulled} pulled · +${result.pushed} pushed`);
+      setSyncLine(
+        `sync · ok · +${result.pulled} pulled · +${result.pushed} pushed`
+      );
     } else {
       setHostOnline(false);
-      setStatus(`sync skipped · ${result.reason}`);
+      setSyncLine(`sync · skipped · ${result.reason}`);
     }
-  }, []);
+    setSyncing(false);
+  }, [syncing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -365,7 +371,7 @@ export default function ChatScreen() {
         />
         <Text style={styles.title}>chat</Text>
         <GhostButton
-          label="sync"
+          label={syncing ? 'sync…' : 'sync'}
           onPress={() => {
             void runSync();
           }}
@@ -385,6 +391,24 @@ export default function ChatScreen() {
             generator · {generatorLabel(mode)} ▾
           </Text>
         </Pressable>
+        <View
+          style={[
+            styles.hostChip,
+            hostOnline === true
+              ? styles.hostOnline
+              : hostOnline === false
+                ? styles.hostOffline
+                : null,
+          ]}
+        >
+          <Text style={styles.hostChipText}>
+            {hostOnline === true
+              ? 'PC online'
+              : hostOnline === false
+                ? 'PC offline'
+                : 'PC …'}
+          </Text>
+        </View>
         <GhostButton
           label="settings"
           onPress={() => {
@@ -394,8 +418,9 @@ export default function ChatScreen() {
         />
       </View>
 
+      <Text style={styles.meta}>{status}</Text>
       <Text style={styles.meta}>
-        {status} · {hostHint}
+        {syncLine} · {hostHint}
       </Text>
 
       <FlatList
@@ -528,6 +553,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     marginTop: 8,
+    gap: 8,
+    flexWrap: 'wrap',
   },
   chip: {
     borderWidth: 1,
@@ -538,6 +565,23 @@ const styles = StyleSheet.create({
   },
   chipText: {
     color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  hostChip: {
+    borderWidth: 1,
+    borderColor: colors.charcoal,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  hostOnline: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(0, 255, 102, 0.08)',
+  },
+  hostOffline: { borderColor: colors.danger },
+  hostChipText: {
+    color: colors.muted,
     fontFamily: fonts.mono,
     fontSize: 11,
     fontWeight: '700',

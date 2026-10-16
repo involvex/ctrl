@@ -7,7 +7,6 @@
     "start": "expo start --dev-client",
     "android": "expo run:android",
     "android:release": "bun ./scripts/android-release.ts",
-    "prebuild": "expo prebuild --platform android --clean",
     "prebuild:android": "expo prebuild --platform android --clean",
     "check": "bun check",
     "check:expo": "bunx expo install --fix && bunx expo-doctor --verbose",
