@@ -3,8 +3,10 @@
  * every Android library/app module (incl. react-native-litert-lm, which pins
  * compileSdk 36) onto the project compileSdk from gradle.properties.
  */
-const { withProjectBuildGradle, withDangerousMod } =
-  require('expo/config-plugins');
+const {
+  withProjectBuildGradle,
+  withDangerousMod,
+} = require('expo/config-plugins');
 const fs = require('node:fs');
 const path = require('node:path');
 
