@@ -149,7 +149,7 @@ export default function ChatScreen() {
             <View style={[styles.bubble, styles.assistant]}>
               <Text style={styles.bubbleText}>{streaming}</Text>
             </View>
-          ) : null
+          ) : undefined
         }
       />
       <View style={styles.composer}>

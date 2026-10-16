@@ -1,33 +1,62 @@
+import { Link, type Href } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { useCallback, useState } from 'react';
-import { checkHealth, streamDemo } from '@involvex/ctrl-i';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  checkHealth,
+  clearClientAuth,
+  setClientAuth,
+  streamDemo,
+} from '@involvex/ctrl-i';
+import { loadSavedConnection, saveConnection } from '../src/connection/storage';
 
 const DEFAULT_GATEWAY = 'http://127.0.0.1:7331';
 
 export default function IndexScreen() {
   const [gatewayUrl, setGatewayUrl] = useState(DEFAULT_GATEWAY);
+  const [token, setToken] = useState('');
   const [health, setHealth] = useState('idle');
   const [streamState, setStreamState] = useState('idle');
   const [streamText, setStreamText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const saved = await loadSavedConnection();
+      if (saved) {
+        setGatewayUrl(saved.gatewayUrl);
+        setToken(saved.token);
+      }
+      setReady(true);
+    })();
+  }, []);
 
   const connect = useCallback(async () => {
     setBusy(true);
     setHealth('checking…');
     setStreamText('');
     setStreamState('idle');
+    const url = gatewayUrl.trim();
+    const authToken = token.trim();
+    if (authToken) {
+      setClientAuth({ token: authToken });
+    } else {
+      clearClientAuth();
+    }
     try {
-      const h = await checkHealth(gatewayUrl);
+      const h = await checkHealth(url);
       setHealth(`ok ${h.version}`);
+      await saveConnection({ gatewayUrl: url, token: authToken });
       setStreamState('connecting');
-      streamDemo(gatewayUrl, {
+      streamDemo(url, {
         onEvent: (event) => {
           if (event.type === 'run.started') {
             setStreamState('streaming');
@@ -58,10 +87,18 @@ export default function IndexScreen() {
       setHealth(err instanceof Error ? err.message : String(err));
       setBusy(false);
     }
-  }, [gatewayUrl]);
+  }, [gatewayUrl, token]);
+
+  if (!ready) {
+    return (
+      <View style={styles.root}>
+        <ActivityIndicator color="#00ff66" />
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.root}>
+    <ScrollView contentContainerStyle={styles.root}>
       <Text style={styles.brand}>ctrl</Text>
       <Text style={styles.tagline}>local agent platform · pwa</Text>
       <Text style={styles.label}>Gateway URL</Text>
@@ -74,6 +111,18 @@ export default function IndexScreen() {
         editable={!busy}
         placeholderTextColor="#6b7f72"
         placeholder="http://127.0.0.1:7331"
+      />
+      <Text style={styles.label}>Token (optional)</Text>
+      <TextInput
+        style={styles.input}
+        value={token}
+        onChangeText={setToken}
+        autoCapitalize="none"
+        autoCorrect={false}
+        editable={!busy}
+        placeholderTextColor="#6b7f72"
+        placeholder="bearer token"
+        secureTextEntry
       />
       <Pressable
         style={[styles.button, busy && styles.buttonDisabled]}
@@ -92,17 +141,32 @@ export default function IndexScreen() {
       <Text style={styles.meta}>
         demo [{streamState}]: {streamText || '…'}
       </Text>
-    </View>
+      <View style={styles.nav}>
+        <Link href={'/chat' as Href} style={styles.link}>
+          chat →
+        </Link>
+        <Link href={'/settings' as Href} style={styles.link}>
+          providers →
+        </Link>
+        <Link href={'/knowledge' as Href} style={styles.link}>
+          knowledge →
+        </Link>
+        <Link href={'/tools' as Href} style={styles.link}>
+          tools / MCP →
+        </Link>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 32,
     gap: 12,
   },
   brand: {
@@ -160,5 +224,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.75,
     marginTop: 4,
+  },
+  nav: {
+    alignSelf: 'stretch',
+    maxWidth: 420,
+    gap: 8,
+    marginTop: 16,
+  },
+  link: {
+    color: '#00ff66',
+    fontFamily: 'monospace',
+    fontSize: 14,
   },
 });

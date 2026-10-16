@@ -7,6 +7,7 @@ import {
 } from '@involvex/ctrl-s';
 import { toString as qrToString } from 'qrcode';
 import { chatCommand } from './chat';
+import { completionScript, parseCompletionShell } from './completion';
 import {
   DEFAULT_GATEWAY_PORT,
   gatewayStart,
@@ -24,10 +25,12 @@ function usage(): never {
   ctrl-f5 demo   [--url <baseUrl>]
   ctrl-f5 chat   [--url <baseUrl>] [--token <token>] [message...]
   ctrl-f5 pair   [--host <lanIp>] [--port <port>] [--token <token>] [--url <baseUrl>]
+  ctrl-f5 completion bash|powershell
 
 start/stop/status  Manage local ctrl-a gateway (pid under data/ctrl-a.pid).
 chat               One-shot or interactive TTY chat against a running gateway.
 pair               Print LAN QR; stays open until Ctrl+C for Expo scan.
+completion         Print shell tab-completion script (eval / source it).
 
 Env: CTRL_A_URL, CTRL_A_HOST, CTRL_GATEWAY_TOKEN, PORT, CTRL_DATA_DIR, CTRL_REPO_ROOT
 `);
@@ -248,6 +251,18 @@ async function main(): Promise<void> {
     const token =
       flagValue(rest, '--token') ?? process.env['CTRL_GATEWAY_TOKEN'];
     await chatCommand(baseUrl, stripFlags(rest), token);
+    return;
+  }
+  if (cmd === 'completion') {
+    try {
+      const shell = parseCompletionShell(rest[0]);
+      process.stdout.write(completionScript(shell));
+    } catch (err) {
+      process.stderr.write(
+        `${err instanceof Error ? err.message : String(err)}\n`
+      );
+      process.exit(1);
+    }
     return;
   }
 

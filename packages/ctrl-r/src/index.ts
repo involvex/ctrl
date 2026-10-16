@@ -12,8 +12,19 @@ export {
   OpenAICompatibleProvider,
   type OpenAICompatibleConfig,
 } from './openai-compatible';
-export { resolveProvider, createProviderRuntime } from './resolve';
-export { ProviderRuntime } from './runtime';
+export {
+  resolveProvider,
+  createProviderRuntime,
+  type CreateProviderRuntimeOptions,
+} from './resolve';
+export { ProviderRuntime, type ProviderRuntimeOptions } from './runtime';
+export {
+  providerPersistPath,
+  loadPersistedProvider,
+  savePersistedProvider,
+  persistedProviderSchema,
+  type PersistedProvider,
+} from './persist';
 export { listProviderCatalog, getProviderCatalogEntry } from './catalog';
 export { LiteRTProvider } from './litert-provider';
 export { DevicePairProvider, type DevicePairConfig } from './device-provider';

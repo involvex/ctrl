@@ -242,7 +242,9 @@ export async function startServer(): Promise<StartedGateway> {
     llama = null;
   }
 
-  const providerRuntime = createProviderRuntime();
+  const providerRuntime = createProviderRuntime(process.env, {
+    dataDir: resolveDataDir(),
+  });
   const sandboxRoot = resolveSandboxRoot();
   const registry = new ToolRegistry();
   registerBuiltinTools(registry, sandboxRoot);

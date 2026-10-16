@@ -25,9 +25,11 @@ import {
 function LitertChat({
   backend,
   decision,
+  onReprobe,
 }: {
   backend: 'cpu' | 'gpu' | 'npu';
   decision: PolicyDecision;
+  onReprobe: () => Promise<PolicyDecision | null>;
 }) {
   const engine = useModel(GEMMA_4_E2B_IT, {
     backend,
@@ -40,6 +42,9 @@ function LitertChat({
   const [prompt, setPrompt] = useState('Say hello in one short sentence.');
   const [reply, setReply] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+  const downloading =
+    engine.downloadProgress > 0 && engine.downloadProgress < 1;
+  const downloadPct = Math.round(engine.downloadProgress * 100);
 
   const onLoad = useCallback(() => {
     setLocalError(null);
@@ -51,13 +56,24 @@ function LitertChat({
   const onGenerate = useCallback(() => {
     setLocalError(null);
     setReply('');
-    void engine
-      .generate(prompt.trim())
-      .then((text) => setReply(text))
-      .catch((err: unknown) => {
-        setLocalError(err instanceof Error ? err.message : String(err));
-      });
-  }, [engine, prompt]);
+    void (async () => {
+      const fresh = await onReprobe();
+      if (fresh && !fresh.allowed) {
+        setLocalError(
+          `policy blocked before generate: ${fresh.reasons.join('; ') || 'not allowed'}. Use gateway chat offline instead.`
+        );
+        return;
+      }
+      try {
+        const text = await engine.generate(prompt.trim());
+        setReply(text);
+      } catch (err: unknown) {
+        setLocalError(
+          `${err instanceof Error ? err.message : String(err)} — if offline or model missing, pair a gateway and use chat.`
+        );
+      }
+    })();
+  }, [engine, onReprobe, prompt]);
 
   return (
     <View style={styles.block}>
@@ -68,13 +84,30 @@ function LitertChat({
           : ''}
       </Text>
       {!engine.isReady ? (
-        <Pressable style={styles.button} onPress={onLoad}>
-          <Text style={styles.buttonText}>
-            {engine.downloadProgress > 0 && engine.downloadProgress < 1
-              ? `downloading ${Math.round(engine.downloadProgress * 100)}%`
-              : 'download + load model (~2.6 GB)'}
+        <View style={styles.block}>
+          <Pressable
+            style={[styles.button, downloading && styles.buttonDisabled]}
+            onPress={onLoad}
+            disabled={downloading}
+          >
+            <Text style={styles.buttonText}>
+              {downloading
+                ? `downloading ${downloadPct}%`
+                : 'download + load model (~2.6 GB)'}
+            </Text>
+          </Pressable>
+          {downloading ? (
+            <View style={styles.progressTrack}>
+              <View
+                style={[styles.progressFill, { width: `${downloadPct}%` }]}
+              />
+            </View>
+          ) : null}
+          <Text style={styles.meta}>
+            Needs network once for the model weights. After that, inference is
+            on-device; if download fails, use gateway chat.
           </Text>
-        </Pressable>
+        </View>
       ) : (
         <Text style={styles.meta}>
           model ready
@@ -124,45 +157,45 @@ export default function OnDeviceScreen() {
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
   const [busy, setBusy] = useState(true);
 
+  const probePolicy = useCallback(async (): Promise<PolicyDecision | null> => {
+    const next = await probeDeviceCapabilities();
+    const policy = evaluateOnDevicePolicy(next, {
+      modelId: 'GEMMA_4_E2B_IT',
+      minMemoryMb: 4096,
+      preferredBackend: 'cpu',
+    });
+    setCaps(next);
+    setDecision(policy);
+    return policy;
+  }, []);
+
   const refresh = useCallback(async () => {
     setBusy(true);
-    const next = await probeDeviceCapabilities();
-    setCaps(next);
-    setDecision(
-      evaluateOnDevicePolicy(next, {
-        modelId: 'GEMMA_4_E2B_IT',
-        minMemoryMb: 4096,
-        preferredBackend: 'cpu',
-      })
-    );
+    await probePolicy();
     setBusy(false);
-  }, []);
+  }, [probePolicy]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setBusy(true);
-      const next = await probeDeviceCapabilities();
-      if (cancelled) {
-        return;
+      await probePolicy();
+      if (!cancelled) {
+        setBusy(false);
       }
-      setCaps(next);
-      setDecision(
-        evaluateOnDevicePolicy(next, {
-          modelId: 'GEMMA_4_E2B_IT',
-          minMemoryMb: 4096,
-          preferredBackend: 'cpu',
-        })
-      );
-      setBusy(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [probePolicy]);
 
   const backend = backendForPolicy(decision?.backend ?? null);
   const canRun = Boolean(decision?.allowed && caps?.litertAvailable);
+  const offlineHint = !caps?.litertAvailable
+    ? 'LiteRT native module not linked (Expo Go cannot run Gemma). Pair a PC gateway and use chat for offline-capable host inference.'
+    : decision && !decision.allowed
+      ? `Policy blocked: ${decision.reasons.join('; ') || 'not allowed'}. Charge/cool the device, then re-probe — or use gateway chat.`
+      : null;
 
   return (
     <SafeAreaView style={styles.root}>
@@ -206,13 +239,21 @@ export default function OnDeviceScreen() {
             </Pressable>
 
             {canRun ? (
-              <LitertChat backend={backend} decision={decision} />
+              <LitertChat
+                backend={backend}
+                decision={decision}
+                onReprobe={probePolicy}
+              />
             ) : (
-              <Text style={styles.error}>
-                Need an arm64 Android/iOS dev or release build with LiteRT
-                linked, plus policy green (battery/thermal/RAM). Expo Go is not
-                enough.
-              </Text>
+              <View style={styles.panel}>
+                <Text style={styles.error}>
+                  {offlineHint ??
+                    'Need an arm64 Android/iOS dev or release build with LiteRT linked, plus policy green (battery/thermal/RAM).'}
+                </Text>
+                <Pressable onPress={() => router.push('/chat' as Href)}>
+                  <Text style={styles.link}>fallback → gateway chat</Text>
+                </Pressable>
+              </View>
             )}
           </>
         )}
@@ -287,5 +328,14 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 13,
     lineHeight: 18,
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: '#1f3328',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 6,
+    backgroundColor: '#00ff66',
   },
 });

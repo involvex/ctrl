@@ -15,7 +15,17 @@ import { DevicePairProvider } from './device-provider';
 import { LiteRTProvider } from './litert-provider';
 import { MockProvider } from './mock-provider';
 import { OpenAICompatibleProvider } from './openai-compatible';
+import {
+  applyPersistedToConfig,
+  loadPersistedProvider,
+  savePersistedProvider,
+} from './persist';
 import type { ModelProvider } from './types';
+
+export type ProviderRuntimeOptions = {
+  /** Absolute path to provider.json (non-secret selection). */
+  persistPath?: string;
+};
 
 type ProviderSecrets = {
   openai?: string;
@@ -162,17 +172,33 @@ function buildProvider(
 /**
  * Mutable provider selection for the gateway process.
  * Secrets stay in memory; public status never echoes raw keys.
+ * Non-secret selection persists to `provider.json` when persistPath is set.
  */
 export class ProviderRuntime {
   private config: ProviderConfig;
   private secrets: ProviderSecrets;
   private provider: ModelProvider;
   private deviceGatewayUrl?: string;
+  private readonly persistPath?: string;
 
-  constructor(env: NodeJS.ProcessEnv = process.env) {
+  constructor(
+    env: NodeJS.ProcessEnv = process.env,
+    options: ProviderRuntimeOptions = {}
+  ) {
     this.secrets = envSecrets(env);
     this.config = initialConfig(env);
     this.deviceGatewayUrl = env['CTRL_DEVICE_GATEWAY_URL'];
+    this.persistPath = options.persistPath;
+    if (this.persistPath) {
+      const persisted = loadPersistedProvider(this.persistPath);
+      if (persisted) {
+        const applied = applyPersistedToConfig(this.config, persisted);
+        this.config = applied.config;
+        if (applied.deviceGatewayUrl) {
+          this.deviceGatewayUrl = applied.deviceGatewayUrl;
+        }
+      }
+    }
     this.provider = this.safeBuild();
   }
 
@@ -297,7 +323,27 @@ export class ProviderRuntime {
     }
 
     this.provider = this.safeBuild();
+    this.persist();
     return this.status();
+  }
+
+  private persist(): void {
+    if (!this.persistPath) {
+      return;
+    }
+    try {
+      savePersistedProvider(
+        this.persistPath,
+        this.publicConfig(),
+        this.deviceGatewayUrl
+      );
+    } catch (err) {
+      process.stderr.write(
+        `[ctrl-r] provider persist failed: ${
+          err instanceof Error ? err.message : String(err)
+        }\n`
+      );
+    }
   }
 
   private publicConfig(): ProviderConfig {

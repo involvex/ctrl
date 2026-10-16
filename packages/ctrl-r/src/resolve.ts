@@ -1,4 +1,6 @@
-import { ProviderRuntime } from './runtime';
+import path from 'node:path';
+import { providerPersistPath } from './persist';
+import { ProviderRuntime, type ProviderRuntimeOptions } from './runtime';
 import type { ModelProvider } from './types';
 
 /**
@@ -15,8 +17,18 @@ export function resolveProvider(
   return new ProviderRuntime(env).getProvider();
 }
 
+export type CreateProviderRuntimeOptions = ProviderRuntimeOptions & {
+  /** Directory for provider.json (defaults to CTRL_DATA_DIR or ./data). */
+  dataDir?: string;
+};
+
 export function createProviderRuntime(
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  options: CreateProviderRuntimeOptions = {}
 ): ProviderRuntime {
-  return new ProviderRuntime(env);
+  const dataDir =
+    options.dataDir ?? env['CTRL_DATA_DIR'] ?? path.join(process.cwd(), 'data');
+  const persistPath =
+    options.persistPath ?? providerPersistPath(path.resolve(dataDir));
+  return new ProviderRuntime(env, { persistPath });
 }
