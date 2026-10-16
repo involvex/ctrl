@@ -249,6 +249,34 @@ export async function listMessages(
   return body.items;
 }
 
+/** Append-only upsert for local-first sync (skips existing ids on the host). */
+export async function upsertMessages(
+  baseUrl: string,
+  conversationId: string,
+  items: Array<{
+    id: string;
+    role: Message['role'];
+    content: string;
+    createdAt: number;
+  }>
+): Promise<Message[]> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/conversations/${conversationId}/messages`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ items }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`upsertMessages failed: ${res.status}`);
+  }
+  const body = z
+    .object({ items: z.array(messageSchema) })
+    .parse(await readJson(res));
+  return body.items;
+}
+
 export async function exportWorkspace(
   baseUrl: string,
   workspaceId: string

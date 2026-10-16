@@ -214,6 +214,38 @@ export class Store {
     return message;
   }
 
+  /**
+   * Append-only upsert for device sync. Existing ids are left unchanged.
+   */
+  upsertMessage(message: Message): Message {
+    const conversation = this.getConversation(message.conversationId);
+    if (!conversation) {
+      throw new Error('conversation not found');
+    }
+    const existing = this.listMessages(message.conversationId).find(
+      (m) => m.id === message.id
+    );
+    if (existing) {
+      return existing;
+    }
+    this.db
+      .query(
+        `INSERT INTO messages(id, conversation_id, role, content, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+      .run(
+        message.id,
+        message.conversationId,
+        message.role,
+        message.content,
+        message.createdAt
+      );
+    this.db
+      .query('UPDATE conversations SET updated_at = ? WHERE id = ?')
+      .run(Date.now(), message.conversationId);
+    return message;
+  }
+
   exportWorkspace(workspaceId: string): WorkspaceExport {
     const workspace = this.getWorkspace(workspaceId);
     if (!workspace) {

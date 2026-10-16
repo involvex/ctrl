@@ -17,9 +17,9 @@ import {
 } from '../src/connection/dev-gateway';
 import { loadSavedConnection, saveConnection } from '../src/connection/storage';
 import {
-  loadInferenceMode,
-  saveInferenceMode,
-  type InferenceMode,
+  loadGeneratorMode,
+  saveGeneratorMode,
+  type GeneratorMode,
 } from '../src/device/inference-mode';
 import {
   Field,
@@ -53,7 +53,7 @@ export default function IndexScreen() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [devHost, setDevHost] = useState<string | null>(null);
-  const [inferenceMode, setInferenceMode] = useState<InferenceMode>('gateway');
+  const [inferenceMode, setInferenceMode] = useState<GeneratorMode>('litert');
 
   useEffect(() => {
     void (async () => {
@@ -61,7 +61,7 @@ export default function IndexScreen() {
       setDevHost(guessed);
       const [saved, mode] = await Promise.all([
         loadSavedConnection(),
-        loadInferenceMode(),
+        loadGeneratorMode(),
       ]);
       setInferenceMode(mode);
       if (saved && !isLoopbackUrl(saved.gatewayUrl)) {
@@ -77,12 +77,8 @@ export default function IndexScreen() {
   }, []);
 
   const openChat = useCallback(() => {
-    if (inferenceMode === 'litert') {
-      router.push('/on-device' as Href);
-      return;
-    }
     router.push('/chat' as Href);
-  }, [inferenceMode, router]);
+  }, [router]);
 
   const connect = useCallback(async () => {
     setBusy(true);
@@ -194,14 +190,8 @@ export default function IndexScreen() {
             }}
           />
           <NavRow
-            label={
-              inferenceMode === 'litert' ? 'Chat (on-device)' : 'Chat (gateway)'
-            }
-            subtitle={
-              inferenceMode === 'litert'
-                ? 'Uses LiteRT on this phone'
-                : 'Streams via paired gateway'
-            }
+            label="Chat"
+            subtitle="One transcript · swap On this phone / This PC / Cloud"
             onPress={openChat}
           />
           <NavRow
@@ -224,17 +214,17 @@ export default function IndexScreen() {
           />
           <NavRow
             label="Providers / settings"
-            subtitle="Switch gateway vs LiteRT"
+            subtitle="Keys · make this the generator"
             onPress={() => {
               router.push('/settings' as Href);
             }}
           />
           <NavRow
-            label="On-device LiteRT"
-            subtitle="Model download · import · generate"
+            label="Model setup"
+            subtitle="LiteRT download · import · policy"
             onPress={() => {
               void (async () => {
-                await saveInferenceMode('litert');
+                await saveGeneratorMode('litert');
                 setInferenceMode('litert');
                 router.push('/on-device' as Href);
               })();

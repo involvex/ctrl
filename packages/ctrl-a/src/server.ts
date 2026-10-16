@@ -15,6 +15,7 @@ import {
   createConversationInputSchema,
   createMemoryInputSchema,
   createMessageInputSchema,
+  upsertMessagesInputSchema,
   createWorkspaceInputSchema,
   healthResponseSchema,
   inboundWebhookSchema,
@@ -570,12 +571,28 @@ export async function startServer(): Promise<StartedGateway> {
 
         const conversationMessages =
           /^\/api\/v1\/conversations\/([^/]+)\/messages$/.exec(url.pathname);
-        if (conversationMessages && req.method === 'GET') {
+        if (conversationMessages) {
           const conversationId = conversationMessages[1]!;
           if (!store.getConversation(conversationId)) {
             return json(req, { error: 'conversation not found' }, 404);
           }
-          return json(req, { items: store.listMessages(conversationId) });
+          if (req.method === 'GET') {
+            return json(req, { items: store.listMessages(conversationId) });
+          }
+          if (req.method === 'POST') {
+            const body: unknown = await req.json();
+            const input = upsertMessagesInputSchema.parse(body);
+            const items = input.items.map((item) =>
+              store.upsertMessage({
+                id: item.id,
+                conversationId,
+                role: item.role,
+                content: item.content,
+                createdAt: item.createdAt,
+              })
+            );
+            return json(req, { items }, 201);
+          }
         }
 
         if (url.pathname === '/ws/v1/demo') {

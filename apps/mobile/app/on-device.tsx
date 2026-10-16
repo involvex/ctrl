@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -22,7 +21,7 @@ import {
   backendForPolicy,
   probeDeviceCapabilities,
 } from '../src/device/capabilities';
-import { saveInferenceMode } from '../src/device/inference-mode';
+import { saveGeneratorMode } from '../src/device/inference-mode';
 import {
   DEFAULT_MODEL_URL,
   describeDownloadError,
@@ -43,7 +42,7 @@ import {
   fonts,
 } from '../src/ui';
 
-function LitertChat({
+function ModelSetup({
   pathOrUrl,
   backend,
   decision,
@@ -64,8 +63,6 @@ function LitertChat({
     maxOutputTokens: 512,
     maxContextTokens: 2048,
   });
-  const [prompt, setPrompt] = useState('Say hello in one short sentence.');
-  const [reply, setReply] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
   const [manualProgress, setManualProgress] = useState(0);
   const [busyAction, setBusyAction] = useState<'idle' | 'download' | 'import'>(
@@ -164,27 +161,25 @@ function LitertChat({
     })();
   }, [engine, onSourceChange]);
 
-  const onGenerate = useCallback(() => {
+  const onVerifyLoad = useCallback(() => {
     setLocalError(null);
-    setReply('');
     void (async () => {
       const fresh = await onReprobe();
       if (fresh && !fresh.allowed) {
         setLocalError(
-          `policy blocked before generate: ${fresh.reasons.join('; ') || 'not allowed'}. Use gateway chat offline instead.`
+          `policy blocked: ${fresh.reasons.join('; ') || 'not allowed'}`
         );
         return;
       }
       try {
-        const text = await engine.generate(prompt.trim());
-        setReply(text);
+        if (!engine.isReady) {
+          await engine.load();
+        }
       } catch (err: unknown) {
-        setLocalError(
-          `${err instanceof Error ? err.message : String(err)} — if offline or model missing, pair a gateway and use chat.`
-        );
+        setLocalError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, [engine, onReprobe, prompt]);
+  }, [engine, onReprobe]);
 
   const sourceLabel = isRemoteModelUrl(pathOrUrl)
     ? 'HuggingFace URL (download)'
@@ -238,9 +233,8 @@ function LitertChat({
             </Text>
           </Pressable>
           <Text style={styles.meta}>
-            Network downloads often fail mid-stream on mobile CDNs. Prefer:
-            download gemma-4-E2B-it.litertlm on a PC, copy to the phone, then
-            Import. Or retry download (clears partial cache).
+            Prefer: download gemma-4-E2B-it.litertlm on a PC, copy to the phone,
+            then Import. Chat uses this model when generator is On this phone.
           </Text>
         </View>
       ) : (
@@ -251,41 +245,16 @@ function LitertChat({
               ? ` · memory ${engine.memoryEstimate.verdict}`
               : ''}
           </Text>
+          <Pressable style={styles.linkBtn} onPress={onVerifyLoad}>
+            <Text style={styles.link}>re-verify load</Text>
+          </Pressable>
           <Pressable style={styles.linkBtn} onPress={onClearCache}>
             <Text style={styles.link}>clear model cache / switch source</Text>
           </Pressable>
         </View>
       )}
-      <TextInput
-        style={styles.input}
-        value={prompt}
-        onChangeText={setPrompt}
-        placeholder="prompt"
-        placeholderTextColor="#6b7f72"
-        multiline
-        editable={!engine.isGenerating}
-      />
-      <Pressable
-        style={[
-          styles.button,
-          (!engine.isReady || engine.isGenerating) && styles.buttonDisabled,
-        ]}
-        disabled={!engine.isReady || engine.isGenerating}
-        onPress={onGenerate}
-      >
-        {engine.isGenerating ? (
-          <ActivityIndicator color="#000" />
-        ) : (
-          <Text style={styles.buttonText}>generate</Text>
-        )}
-      </Pressable>
       {(localError ?? engine.error) ? (
         <Text style={styles.error}>{localError ?? engine.error}</Text>
-      ) : null}
-      {reply ? (
-        <View style={styles.panel}>
-          <Text style={styles.bubbleText}>{reply}</Text>
-        </View>
       ) : null}
     </View>
   );
@@ -335,19 +304,12 @@ export default function OnDeviceScreen() {
   }, [probePolicy]);
 
   const backend = backendForPolicy(decision?.backend ?? null);
-  const canRun = Boolean(decision?.allowed && caps?.litertAvailable);
-  const offlineHint = !caps?.litertAvailable
-    ? 'LiteRT native module not linked (Expo Go cannot run Gemma). Use a dev-client / release build. Pair a PC gateway for host inference.'
+  const canSetup = Boolean(caps?.litertAvailable);
+  const policyHint = !caps?.litertAvailable
+    ? 'LiteRT native module not linked (Expo Go cannot run Gemma). Use a dev-client / release build.'
     : decision && !decision.allowed
-      ? `Policy blocked: ${decision.reasons.join('; ') || 'not allowed'}. Charge/cool the device, then re-probe — or use gateway chat.`
+      ? `Policy blocked for LiteRT only: ${decision.reasons.join('; ') || 'not allowed'}. Chat still works with This PC / Cloud.`
       : null;
-
-  const switchToGatewayChat = useCallback(() => {
-    void (async () => {
-      await saveInferenceMode('gateway');
-      router.push('/chat' as Href);
-    })();
-  }, [router]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -360,11 +322,11 @@ export default function OnDeviceScreen() {
           }}
           style={styles.back}
         />
-        <Text style={styles.title}>on-device</Text>
+        <Text style={styles.title}>model setup</Text>
         <ModeChip mode="litert" />
         <Text style={styles.meta}>
-          LiteRT-LM inference on this phone (policy → load → generate). Sticky
-          until you switch back to gateway.
+          Download / import LiteRT models and review policy. Conversation lives
+          in Chat — this screen is not a second chat.
         </Text>
 
         {busy || !caps || !decision ? (
@@ -374,6 +336,7 @@ export default function OnDeviceScreen() {
             <StatusPanel
               lines={[
                 `${caps.platform} · api ${caps.apiLevel ?? '—'} · ram ${caps.totalMemoryMb ?? '—'} MB · litert ${caps.litertAvailable ? 'yes' : 'no'}`,
+                `abi ${caps.abi.length ? caps.abi.join(',') : '(empty→arm64)'} · arm64 ${caps.isArm64 ? 'yes' : 'no'}`,
                 `battery ${
                   caps.batteryLevel !== null
                     ? `${Math.round(caps.batteryLevel * 100)}%`
@@ -393,8 +356,14 @@ export default function OnDeviceScreen() {
               }}
             />
 
-            {canRun ? (
-              <LitertChat
+            {policyHint ? (
+              <StatusPanel>
+                <Text style={styles.error}>{policyHint}</Text>
+              </StatusPanel>
+            ) : null}
+
+            {canSetup ? (
+              <ModelSetup
                 key={modelSource}
                 pathOrUrl={modelSource}
                 backend={backend}
@@ -402,32 +371,32 @@ export default function OnDeviceScreen() {
                 onReprobe={probePolicy}
                 onSourceChange={setModelSource}
               />
-            ) : (
-              <StatusPanel>
-                <Text style={styles.error}>
-                  {offlineHint ??
-                    'Need an arm64 Android/iOS dev or release build with LiteRT linked, plus policy green (battery/thermal/RAM).'}
-                </Text>
-                <PrimaryButton
-                  label="switch to gateway chat"
-                  onPress={switchToGatewayChat}
-                />
-              </StatusPanel>
-            )}
+            ) : null}
           </>
         )}
 
-        <Section title="Other">
+        <Section title="Chat">
+          <PrimaryButton
+            label="open chat (on this phone)"
+            onPress={() => {
+              void (async () => {
+                await saveGeneratorMode('litert');
+                router.push('/chat' as Href);
+              })();
+            }}
+          />
+          <NavRow
+            label="Open chat"
+            subtitle="Always /chat — pick generator there"
+            onPress={() => {
+              router.push('/chat' as Href);
+            }}
+          />
           <NavRow
             label="Provider settings"
             onPress={() => {
               router.push('/settings' as Href);
             }}
-          />
-          <NavRow
-            label="Switch to gateway chat"
-            subtitle="Clears LiteRT sticky mode"
-            onPress={switchToGatewayChat}
           />
         </Section>
       </ScrollView>
@@ -461,24 +430,6 @@ const styles = StyleSheet.create({
   },
   error: { color: '#ff6666', fontFamily: 'monospace', fontSize: 12 },
   block: { gap: 10 },
-  panel: {
-    borderWidth: 1,
-    borderColor: '#1f3328',
-    padding: 12,
-    backgroundColor: '#0a0f0c',
-    gap: 4,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#00ff66',
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#111613',
-    minHeight: 72,
-    textAlignVertical: 'top',
-  },
   button: {
     backgroundColor: '#00ff66',
     paddingVertical: 14,
@@ -500,12 +451,6 @@ const styles = StyleSheet.create({
     color: '#000',
     fontFamily: 'monospace',
     fontWeight: '700',
-  },
-  bubbleText: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    fontSize: 13,
-    lineHeight: 18,
   },
   progressTrack: {
     height: 6,

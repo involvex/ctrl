@@ -1,13 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
-import type { InferenceMode } from '../device/inference-mode';
+import { generatorLabel, type GeneratorMode } from '../device/inference-mode';
 import { colors, fonts } from './theme';
 
-export function ModeChip({ mode }: { mode: InferenceMode }) {
+export function ModeChip({ mode }: { mode: GeneratorMode }) {
   return (
     <View style={styles.chip}>
-      <Text style={styles.text}>
-        inference · {mode === 'litert' ? 'litert (on-device)' : 'gateway'}
-      </Text>
+      <Text style={styles.text}>generator · {generatorLabel(mode)}</Text>
     </View>
   );
 }

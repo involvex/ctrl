@@ -18,9 +18,9 @@ import {
 import type { ProviderId } from '@involvex/ctrl-s';
 import { loadSavedConnection } from '../src/connection/storage';
 import {
-  loadInferenceMode,
-  saveInferenceMode,
-  type InferenceMode,
+  loadGeneratorMode,
+  saveGeneratorMode,
+  type GeneratorMode,
 } from '../src/device/inference-mode';
 import {
   Field,
@@ -42,7 +42,7 @@ export default function SettingsScreen() {
   const [deviceUrl, setDeviceUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<InferenceMode>('gateway');
+  const [mode, setMode] = useState<GeneratorMode>('litert');
 
   const refresh = useCallback(async (url: string) => {
     const next = await getProviderStatus(url);
@@ -54,16 +54,16 @@ export default function SettingsScreen() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [saved, inference] = await Promise.all([
+      const [saved, generator] = await Promise.all([
         loadSavedConnection(),
-        loadInferenceMode(),
+        loadGeneratorMode(),
       ]);
       if (cancelled) {
         return;
       }
-      setMode(inference);
+      setMode(generator);
       if (!saved) {
-        setError('not paired');
+        setError('not paired — local chat still works');
         return;
       }
       setClientAuth({ token: saved.token || undefined });
@@ -83,27 +83,24 @@ export default function SettingsScreen() {
   }, [refresh]);
 
   const openChat = useCallback(() => {
-    if (mode === 'litert') {
-      router.push('/on-device' as Href);
-      return;
-    }
     router.push('/chat' as Href);
-  }, [mode, router]);
+  }, [router]);
 
   const select = useCallback(
     async (id: ProviderId) => {
       if (id === 'litert') {
-        await saveInferenceMode('litert');
+        await saveGeneratorMode('litert');
         setMode('litert');
         setError(null);
-        router.push('/on-device' as Href);
         return;
       }
+      const generator: GeneratorMode = id === 'zen' ? 'zen' : 'gateway';
+      await saveGeneratorMode(generator);
+      setMode(generator);
       if (!gatewayUrl) {
+        setError('not paired — keys apply when the PC is reachable');
         return;
       }
-      await saveInferenceMode('gateway');
-      setMode('gateway');
       setBusy(true);
       setError(null);
       try {
@@ -139,7 +136,7 @@ export default function SettingsScreen() {
         setBusy(false);
       }
     },
-    [deviceUrl, gatewayUrl, keyDraft, modelDraft, router]
+    [deviceUrl, gatewayUrl, keyDraft, modelDraft]
   );
 
   return (
@@ -156,7 +153,7 @@ export default function SettingsScreen() {
         <Text style={styles.title}>settings</Text>
         <ModeChip mode={mode} />
         <Text style={styles.meta}>
-          Providers for gateway chat · LiteRT runs on this phone
+          Make this the generator, then open chat. Keys live on the paired PC.
         </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -196,7 +193,8 @@ export default function SettingsScreen() {
               key={p.id}
               style={({ pressed }) => [
                 styles.provider,
-                p.id === status?.active && mode === 'gateway'
+                p.id === status?.active &&
+                (mode === 'gateway' || mode === 'zen')
                   ? styles.providerActive
                   : null,
                 pressed && styles.pressed,
@@ -208,7 +206,10 @@ export default function SettingsScreen() {
               accessibilityRole="button"
             >
               <Text style={styles.providerTitle}>
-                {p.id === status?.active && mode === 'gateway' ? '● ' : '○ '}
+                {p.id === status?.active &&
+                (mode === 'gateway' || mode === 'zen')
+                  ? '● '
+                  : '○ '}
                 {p.label}
               </Text>
               <Text style={styles.meta}>
@@ -235,8 +236,8 @@ export default function SettingsScreen() {
               {mode === 'litert' ? '● ' : '○ '}On-device LiteRT
             </Text>
             <Text style={styles.meta}>
-              Sticky mode — chat opens /on-device until you pick a gateway
-              provider.
+              Sets generator to On this phone. Model download / import is under
+              Model setup.
             </Text>
           </Pressable>
         </Section>
@@ -245,7 +246,8 @@ export default function SettingsScreen() {
 
         <PrimaryButton label="open chat" onPress={openChat} />
         <NavRow
-          label="On-device screen"
+          label="Model setup"
+          subtitle="LiteRT download · import · policy"
           onPress={() => {
             router.push('/on-device' as Href);
           }}

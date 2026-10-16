@@ -47,6 +47,20 @@ export const createMessageInputSchema = z.object({
   content: z.string().min(1),
 });
 
+/** Append-only sync payload (device → host). Existing ids are skipped. */
+export const upsertMessagesInputSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().min(1),
+      role: messageRoleSchema,
+      content: z.string().min(1),
+      createdAt: z.number().int().nonnegative(),
+    })
+  ),
+});
+
+export type UpsertMessagesInput = z.infer<typeof upsertMessagesInputSchema>;
+
 /** Portable workspace dump for export/import (Phase 1). */
 export const workspaceExportSchema = z.object({
   version: z.literal(1),

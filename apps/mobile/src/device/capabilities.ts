@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import type { DeviceCapabilities, InferenceBackend } from '@involvex/ctrl-s';
+import { resolveIsArm64 } from './abi';
 
 async function readBattery(): Promise<{
   batteryLevel: number | null;
@@ -82,10 +83,6 @@ export async function probeDeviceCapabilities(): Promise<DeviceCapabilities> {
     // keep defaults
   }
 
-  const isArm64 =
-    abi.some((a) => /arm64|aarch64/i.test(a)) ||
-    (Platform.OS === 'ios' && isDevice);
-
   const platform: DeviceCapabilities['platform'] =
     Platform.OS === 'android'
       ? 'android'
@@ -94,6 +91,8 @@ export async function probeDeviceCapabilities(): Promise<DeviceCapabilities> {
         : Platform.OS === 'web'
           ? 'web'
           : 'unknown';
+
+  const isArm64 = resolveIsArm64({ platform, abi, isDevice });
 
   return {
     platform,

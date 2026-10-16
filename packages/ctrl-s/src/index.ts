@@ -21,11 +21,13 @@ export {
   createWorkspaceInputSchema,
   createConversationInputSchema,
   createMessageInputSchema,
+  upsertMessagesInputSchema,
   workspaceExportSchema,
   type Workspace,
   type Conversation,
   type Message,
   type MessageRole,
+  type UpsertMessagesInput,
   type WorkspaceExport,
 } from './domain';
 

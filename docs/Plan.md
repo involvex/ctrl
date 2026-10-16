@@ -7,7 +7,9 @@ Lokale Agent-Plattform mit Expo (Android/Web), Electron (Desktop), Bun-Gateway (
 - **Gateway als eigener Prozess:** Bun + TypeScript in `packages/ctrl-a`, kompiliert mit `bun build --compile`. Eingebettet, lokaler Daemon oder LAN-Server.
 - **Desktop-Shell:** Electron. Startet und überwacht das Gateway; Tray, Autostart, Updates, Secrets.
 - **Mobile und Web:** Separate Expo-Apps (`apps/mobile`, `apps/web`) mit Expo Router.
-- **Alle Clients sind gleichwertig:** Desktop-Renderer, Android, PWA und CLI sprechen nur das Gateway-Protokoll (`@involvex/ctrl-s` / später `ctrl-i`).
+- **Local-first identity:** Persona and transcript live on each client. Generators are interchangeable (on-device LiteRT, cloud via host, peer PC gateway). Opening chat does not require the gateway.
+- **Gateway is the home node:** Tools, MCP, channels, backups, and append-only sync when reachable — not a requirement to chat.
+- **Clients speak the gateway protocol when paired** (`@involvex/ctrl-s` / `ctrl-i`); on-device LiteRT is a local generator plug inside the same chat UI.
 - **Rust später:** Backend `agentd` ersetzt das Gateway schrittweise, abgesichert durch Contract-Tests (`ctrl-t`).
 - **Nicht im Scope:** Flutter, Ionic als Hauptarchitektur, alles in Rust.
 - **Naming & Publish:** Siehe [Namespace_and_Design.md](Namespace_and_Design.md) und [ADR-0002](adr/ADR-0002-ctrl-naming-and-publish.md). Nur `ctrl-f5` ist publishable.
@@ -30,7 +32,7 @@ Electron Desktop | Expo Android | Expo Web/PWA | CLI (ctrl-f5)
   Custom HTTP, CLI     LiteRT-LM          Discord, Slack
 ```
 
-Regel: Die UI spricht nie direkt mit einem Provider, sondern immer über `AgentClient` und das Gateway.
+Regel: Cloud and PC providers go through the paired gateway. On-device LiteRT runs locally as a generator plug. Identity/transcript stay on the client; sync is append-only when the home node is up.
 
 ## 3. Monorepo
 
@@ -271,7 +273,9 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 12. Phase 7 Sync — **done** (MVP + 7b): host backups under `data/backups/` (`BackupStore`), `/api/v1/backups` create/list/get/restore, optional passphrase AES-256-GCM encryption, desktop panel + `ctrl-f5 backup`, contracts. No device↔device SQLite sync.
 13. Phase 8 Featured CLI (`ctrl-f5`) — **done**: LAN pair QR; gateway `0.0.0.0`; Metro host auto-fill; `start`/`stop`/`status`/`chat`/`backup`; `completion bash|powershell`.
 14. Phase 9 Rust `agentd` — optional. Provider selection persists in `data/provider.json` (non-secret); desktop/mobile/web provider + knowledge + tools + channels lockstep. Desktop nav panels are exclusive (one open at a time; Escape closes). Telegram Bot API send adapter (real); Discord/Slack still mock.
-15. Phase 10 — Full product build (in progress):
-    - Mobile UX affordances (nav rows / fields / CTAs) + sticky inference mode (`gateway` | `litert` in AsyncStorage) so chat respects LiteRT.
-    - Expo 58 Android release path: `compileSdk` / `targetSdk` 37, prebuild + `android:release`.
-    - Next: Discord/Slack real adapters; desktop macOS/Linux packaging; vector search / richer extractors; optional Phase 9 `agentd`.
+15. Phase 10 — Local-first chat (done this slice):
+    - One chat UI with generator picker `litert` | `gateway` | `zen`; `/on-device` is model setup only.
+    - Local brain (`ctrl.mobile.brain.v1`) + append-only sync when gateway health succeeds.
+    - Empty Android ABI counts as arm64 for LiteRT policy; policy disables LiteRT only, not chat.
+    - Standalone `android:release` = Gradle `assembleRelease` (embedded JS; no Metro `:8081`/`:8082`).
+    - Out of this pass: Rust `agentd`, Discord/Slack real SDKs, vector search.
