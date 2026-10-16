@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +17,21 @@ import {
 } from '@involvex/ctrl-i';
 import type { ProviderId } from '@involvex/ctrl-s';
 import { loadSavedConnection } from '../src/connection/storage';
+import {
+  loadInferenceMode,
+  saveInferenceMode,
+  type InferenceMode,
+} from '../src/device/inference-mode';
+import {
+  Field,
+  GhostButton,
+  ModeChip,
+  NavRow,
+  PrimaryButton,
+  Section,
+  colors,
+  fonts,
+} from '../src/ui';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -28,7 +42,7 @@ export default function SettingsScreen() {
   const [deviceUrl, setDeviceUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'gateway' | 'litert'>('gateway');
+  const [mode, setMode] = useState<InferenceMode>('gateway');
 
   const refresh = useCallback(async (url: string) => {
     const next = await getProviderStatus(url);
@@ -38,8 +52,16 @@ export default function SettingsScreen() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      const saved = await loadSavedConnection();
+      const [saved, inference] = await Promise.all([
+        loadSavedConnection(),
+        loadInferenceMode(),
+      ]);
+      if (cancelled) {
+        return;
+      }
+      setMode(inference);
       if (!saved) {
         setError('not paired');
         return;
@@ -50,22 +72,37 @@ export default function SettingsScreen() {
       try {
         await refresh(saved.gatewayUrl);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
+
+  const openChat = useCallback(() => {
+    if (mode === 'litert') {
+      router.push('/on-device' as Href);
+      return;
+    }
+    router.push('/chat' as Href);
+  }, [mode, router]);
 
   const select = useCallback(
     async (id: ProviderId) => {
-      if (!gatewayUrl) {
-        return;
-      }
       if (id === 'litert') {
+        await saveInferenceMode('litert');
         setMode('litert');
         setError(null);
         router.push('/on-device' as Href);
         return;
       }
+      if (!gatewayUrl) {
+        return;
+      }
+      await saveInferenceMode('gateway');
       setMode('gateway');
       setBusy(true);
       setError(null);
@@ -109,140 +146,144 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.link}>← back</Text>
-        </Pressable>
+        <GhostButton
+          label="← back"
+          onPress={() => {
+            router.back();
+          }}
+          style={styles.back}
+        />
         <Text style={styles.title}>settings</Text>
+        <ModeChip mode={mode} />
         <Text style={styles.meta}>
-          providers · memory uses gateway workspace · MCP via host tools
+          Providers for gateway chat · LiteRT runs on this phone
         </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Text style={styles.label}>mode</Text>
-        <Text style={styles.meta}>
-          {mode === 'litert'
-            ? 'on-device LiteRT (phone)'
-            : `gateway · ${status?.active ?? '…'}`}
-        </Text>
 
-        <Text style={styles.label}>API key (zen / kilo / openai)</Text>
-        <TextInput
-          style={styles.input}
-          value={keyDraft}
-          onChangeText={setKeyDraft}
-          secureTextEntry
-          placeholderTextColor="#6b7f72"
-          placeholder="paste key then select provider"
-        />
-        <Text style={styles.label}>model</Text>
-        <TextInput
-          style={styles.input}
-          value={modelDraft}
-          onChangeText={setModelDraft}
-          placeholderTextColor="#6b7f72"
-          placeholder="model id"
-          autoCapitalize="none"
-        />
-        <Text style={styles.label}>paired PC URL (device provider)</Text>
-        <TextInput
-          style={styles.input}
-          value={deviceUrl}
-          onChangeText={setDeviceUrl}
-          placeholderTextColor="#6b7f72"
-          placeholder="http://192.168.x.x:7331"
-          autoCapitalize="none"
-        />
+        <Section
+          title="Credentials"
+          hint="Editable fields before selecting a provider."
+        >
+          <Field
+            label="API key (zen / kilo / openai)"
+            value={keyDraft}
+            onChangeText={setKeyDraft}
+            secureTextEntry
+            placeholder="paste key then select provider"
+          />
+          <Field
+            label="Model"
+            value={modelDraft}
+            onChangeText={setModelDraft}
+            placeholder="model id"
+            autoCapitalize="none"
+          />
+          <Field
+            label="Paired PC URL (device provider)"
+            value={deviceUrl}
+            onChangeText={setDeviceUrl}
+            placeholder="http://192.168.x.x:7331"
+            autoCapitalize="none"
+          />
+        </Section>
 
-        {(status?.providers ?? []).map((p) => (
+        <Section
+          title="Gateway providers"
+          hint="Bordered rows are tappable. Active row uses accent border."
+        >
+          {(status?.providers ?? []).map((p) => (
+            <Pressable
+              key={p.id}
+              style={({ pressed }) => [
+                styles.provider,
+                p.id === status?.active && mode === 'gateway'
+                  ? styles.providerActive
+                  : null,
+                pressed && styles.pressed,
+              ]}
+              disabled={busy}
+              onPress={() => {
+                void select(p.id);
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.providerTitle}>
+                {p.id === status?.active && mode === 'gateway' ? '● ' : '○ '}
+                {p.label}
+              </Text>
+              <Text style={styles.meta}>
+                {p.description}
+                {p.unavailableReason ? ` · ${p.unavailableReason}` : ''}
+              </Text>
+            </Pressable>
+          ))}
+        </Section>
+
+        <Section title="On-device">
           <Pressable
-            key={p.id}
-            style={[
+            style={({ pressed }) => [
               styles.provider,
-              p.id === status?.active && mode === 'gateway'
-                ? styles.providerActive
-                : null,
+              mode === 'litert' ? styles.providerActive : null,
+              pressed && styles.pressed,
             ]}
-            disabled={busy}
             onPress={() => {
-              void select(p.id);
+              void select('litert');
             }}
+            accessibilityRole="button"
           >
             <Text style={styles.providerTitle}>
-              {p.id === status?.active && mode === 'gateway' ? '● ' : '○ '}
-              {p.label}
+              {mode === 'litert' ? '● ' : '○ '}On-device LiteRT
             </Text>
             <Text style={styles.meta}>
-              {p.description}
-              {p.unavailableReason ? ` · ${p.unavailableReason}` : ''}
+              Sticky mode — chat opens /on-device until you pick a gateway
+              provider.
             </Text>
           </Pressable>
-        ))}
+        </Section>
 
-        <Pressable
-          style={styles.provider}
+        {busy ? <ActivityIndicator color={colors.accent} /> : null}
+
+        <PrimaryButton label="open chat" onPress={openChat} />
+        <NavRow
+          label="On-device screen"
           onPress={() => {
-            void select('litert');
+            router.push('/on-device' as Href);
           }}
-        >
-          <Text style={styles.providerTitle}>
-            {mode === 'litert' ? '● ' : '○ '}On-device LiteRT
-          </Text>
-          <Text style={styles.meta}>
-            Run models on this phone (opens /on-device when available).
-          </Text>
-        </Pressable>
-
-        {busy ? <ActivityIndicator color="#00ff66" /> : null}
-        <Pressable onPress={() => router.push('/chat' as Href)}>
-          <Text style={styles.link}>open chat →</Text>
-        </Pressable>
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000000' },
+  root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 24, gap: 10 },
+  back: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 8 },
   title: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
+    color: colors.accent,
+    fontFamily: fonts.mono,
     fontSize: 22,
     fontWeight: '700',
   },
-  link: { color: '#00ff66', fontFamily: 'monospace', marginVertical: 4 },
-  label: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    fontSize: 12,
-    marginTop: 8,
-  },
   meta: {
-    color: '#6b7f72',
-    fontFamily: 'monospace',
+    color: colors.muted,
+    fontFamily: fonts.mono,
     fontSize: 11,
     lineHeight: 16,
   },
-  error: { color: '#ff6666', fontFamily: 'monospace', fontSize: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#00ff66',
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#111613',
-  },
+  error: { color: colors.danger, fontFamily: fonts.mono, fontSize: 12 },
   provider: {
     borderWidth: 1,
-    borderColor: '#1f3328',
-    backgroundColor: '#0a0f0c',
+    borderColor: colors.charcoal,
+    backgroundColor: colors.panel,
     padding: 12,
     gap: 4,
   },
-  providerActive: { borderColor: '#00ff66' },
+  providerActive: { borderColor: colors.accent },
+  pressed: { opacity: 0.75 },
   providerTitle: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
+    color: colors.accent,
+    fontFamily: fonts.mono,
     fontWeight: '700',
   },
 });

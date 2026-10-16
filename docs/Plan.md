@@ -271,3 +271,7 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 12. Phase 7 Sync — **done** (MVP + 7b): host backups under `data/backups/` (`BackupStore`), `/api/v1/backups` create/list/get/restore, optional passphrase AES-256-GCM encryption, desktop panel + `ctrl-f5 backup`, contracts. No device↔device SQLite sync.
 13. Phase 8 Featured CLI (`ctrl-f5`) — **done**: LAN pair QR; gateway `0.0.0.0`; Metro host auto-fill; `start`/`stop`/`status`/`chat`/`backup`; `completion bash|powershell`.
 14. Phase 9 Rust `agentd` — optional. Provider selection persists in `data/provider.json` (non-secret); desktop/mobile/web provider + knowledge + tools + channels lockstep. Desktop nav panels are exclusive (one open at a time; Escape closes). Telegram Bot API send adapter (real); Discord/Slack still mock.
+15. Phase 10 — Full product build (in progress):
+    - Mobile UX affordances (nav rows / fields / CTAs) + sticky inference mode (`gateway` | `litert` in AsyncStorage) so chat respects LiteRT.
+    - Expo 58 Android release path: `compileSdk` / `targetSdk` 37, prebuild + `android:release`.
+    - Next: Discord/Slack real adapters; desktop macOS/Linux packaging; vector search / richer extractors; optional Phase 9 `agentd`.

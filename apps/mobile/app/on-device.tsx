@@ -22,6 +22,7 @@ import {
   backendForPolicy,
   probeDeviceCapabilities,
 } from '../src/device/capabilities';
+import { saveInferenceMode } from '../src/device/inference-mode';
 import {
   DEFAULT_MODEL_URL,
   describeDownloadError,
@@ -31,6 +32,16 @@ import {
   normalizeModelPath,
   saveModelSource,
 } from '../src/device/model-source';
+import {
+  GhostButton,
+  ModeChip,
+  NavRow,
+  PrimaryButton,
+  Section,
+  StatusPanel,
+  colors,
+  fonts,
+} from '../src/ui';
 
 function LitertChat({
   pathOrUrl,
@@ -331,46 +342,56 @@ export default function OnDeviceScreen() {
       ? `Policy blocked: ${decision.reasons.join('; ') || 'not allowed'}. Charge/cool the device, then re-probe — or use gateway chat.`
       : null;
 
+  const switchToGatewayChat = useCallback(() => {
+    void (async () => {
+      await saveInferenceMode('gateway');
+      router.push('/chat' as Href);
+    })();
+  }, [router]);
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.link}>← back</Text>
-        </Pressable>
+        <GhostButton
+          label="← back"
+          onPress={() => {
+            router.back();
+          }}
+          style={styles.back}
+        />
         <Text style={styles.title}>on-device</Text>
+        <ModeChip mode="litert" />
         <Text style={styles.meta}>
-          LiteRT-LM inference on this phone (policy → load → generate).
+          LiteRT-LM inference on this phone (policy → load → generate). Sticky
+          until you switch back to gateway.
         </Text>
 
         {busy || !caps || !decision ? (
-          <ActivityIndicator color="#00ff66" />
+          <ActivityIndicator color={colors.accent} />
         ) : (
           <>
-            <View style={styles.panel}>
-              <Text style={styles.meta}>
-                {caps.platform} · api {caps.apiLevel ?? '—'} · ram{' '}
-                {caps.totalMemoryMb ?? '—'} MB · litert{' '}
-                {caps.litertAvailable ? 'yes' : 'no'}
-              </Text>
-              <Text style={styles.meta}>
-                battery{' '}
-                {caps.batteryLevel !== null
-                  ? `${Math.round(caps.batteryLevel * 100)}%`
-                  : '—'}{' '}
-                · {caps.batteryState}
-                {caps.lowPowerMode ? ' · low-power' : ''}
-              </Text>
-              <Text style={styles.meta}>
-                policy · {decision.allowed ? 'allowed' : 'blocked'}
-                {decision.reasons.length
-                  ? ` · ${decision.reasons.join('; ')}`
-                  : ''}
-              </Text>
-            </View>
-            <Pressable style={styles.linkBtn} onPress={() => void refresh()}>
-              <Text style={styles.link}>re-probe capabilities</Text>
-            </Pressable>
+            <StatusPanel
+              lines={[
+                `${caps.platform} · api ${caps.apiLevel ?? '—'} · ram ${caps.totalMemoryMb ?? '—'} MB · litert ${caps.litertAvailable ? 'yes' : 'no'}`,
+                `battery ${
+                  caps.batteryLevel !== null
+                    ? `${Math.round(caps.batteryLevel * 100)}%`
+                    : '—'
+                } · ${caps.batteryState}${caps.lowPowerMode ? ' · low-power' : ''}`,
+                `policy · ${decision.allowed ? 'allowed' : 'blocked'}${
+                  decision.reasons.length
+                    ? ` · ${decision.reasons.join('; ')}`
+                    : ''
+                }`,
+              ]}
+            />
+            <PrimaryButton
+              label="re-probe capabilities"
+              onPress={() => {
+                void refresh();
+              }}
+            />
 
             {canRun ? (
               <LitertChat
@@ -382,40 +403,49 @@ export default function OnDeviceScreen() {
                 onSourceChange={setModelSource}
               />
             ) : (
-              <View style={styles.panel}>
+              <StatusPanel>
                 <Text style={styles.error}>
                   {offlineHint ??
                     'Need an arm64 Android/iOS dev or release build with LiteRT linked, plus policy green (battery/thermal/RAM).'}
                 </Text>
-                <Pressable onPress={() => router.push('/chat' as Href)}>
-                  <Text style={styles.link}>fallback → gateway chat</Text>
-                </Pressable>
-              </View>
+                <PrimaryButton
+                  label="switch to gateway chat"
+                  onPress={switchToGatewayChat}
+                />
+              </StatusPanel>
             )}
           </>
         )}
 
-        <Pressable onPress={() => router.push('/settings' as Href)}>
-          <Text style={styles.link}>provider settings →</Text>
-        </Pressable>
-        <Pressable onPress={() => router.push('/chat' as Href)}>
-          <Text style={styles.link}>gateway chat →</Text>
-        </Pressable>
+        <Section title="Other">
+          <NavRow
+            label="Provider settings"
+            onPress={() => {
+              router.push('/settings' as Href);
+            }}
+          />
+          <NavRow
+            label="Switch to gateway chat"
+            subtitle="Clears LiteRT sticky mode"
+            onPress={switchToGatewayChat}
+          />
+        </Section>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000000' },
+  root: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: 24, gap: 12 },
+  back: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 8 },
   title: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
+    color: colors.accent,
+    fontFamily: fonts.mono,
     fontSize: 22,
     fontWeight: '700',
   },
-  link: { color: '#00ff66', fontFamily: 'monospace' },
+  link: { color: colors.accent, fontFamily: fonts.mono },
   linkBtn: { paddingVertical: 4 },
   label: {
     color: '#00ff66',

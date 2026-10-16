@@ -1,13 +1,5 @@
-import { Link, type Href } from 'expo-router';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { useRouter, type Href } from 'expo-router';
+import { ActivityIndicator, ScrollView, StyleSheet, Text } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +16,21 @@ import {
   guessDevHostIp,
 } from '../src/connection/dev-gateway';
 import { loadSavedConnection, saveConnection } from '../src/connection/storage';
+import {
+  loadInferenceMode,
+  saveInferenceMode,
+  type InferenceMode,
+} from '../src/device/inference-mode';
+import {
+  Field,
+  ModeChip,
+  NavRow,
+  PrimaryButton,
+  Section,
+  StatusPanel,
+  colors,
+  fonts,
+} from '../src/ui';
 
 function isLoopbackUrl(url: string): boolean {
   try {
@@ -35,6 +42,7 @@ function isLoopbackUrl(url: string): boolean {
 }
 
 export default function IndexScreen() {
+  const router = useRouter();
   const [gatewayUrl, setGatewayUrl] = useState(() => defaultGatewayUrl());
   const [token, setToken] = useState('');
   const [health, setHealth] = useState('idle');
@@ -45,12 +53,17 @@ export default function IndexScreen() {
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [devHost, setDevHost] = useState<string | null>(null);
+  const [inferenceMode, setInferenceMode] = useState<InferenceMode>('gateway');
 
   useEffect(() => {
     void (async () => {
       const guessed = guessDevHostIp();
       setDevHost(guessed);
-      const saved = await loadSavedConnection();
+      const [saved, mode] = await Promise.all([
+        loadSavedConnection(),
+        loadInferenceMode(),
+      ]);
+      setInferenceMode(mode);
       if (saved && !isLoopbackUrl(saved.gatewayUrl)) {
         setGatewayUrl(saved.gatewayUrl);
         setToken(saved.token);
@@ -62,6 +75,14 @@ export default function IndexScreen() {
       setReady(true);
     })();
   }, []);
+
+  const openChat = useCallback(() => {
+    if (inferenceMode === 'litert') {
+      router.push('/on-device' as Href);
+      return;
+    }
+    router.push('/chat' as Href);
+  }, [inferenceMode, router]);
 
   const connect = useCallback(async () => {
     setBusy(true);
@@ -145,7 +166,7 @@ export default function IndexScreen() {
   if (!ready) {
     return (
       <SafeAreaView style={styles.root}>
-        <ActivityIndicator color="#00ff66" />
+        <ActivityIndicator color={colors.accent} />
       </SafeAreaView>
     );
   }
@@ -159,83 +180,114 @@ export default function IndexScreen() {
       >
         <Text style={styles.brand}>ctrl</Text>
         <Text style={styles.tagline}>local agent · mobile</Text>
-        <Link href="/scan" style={styles.link}>
-          scan pair QR →
-        </Link>
-        <Link href={'/chat' as Href} style={styles.link}>
-          chat →
-        </Link>
-        <Link href={'/knowledge' as Href} style={styles.link}>
-          knowledge / memory →
-        </Link>
-        <Link href={'/tools' as Href} style={styles.link}>
-          tools / MCP →
-        </Link>
-        <Link href={'/channels' as Href} style={styles.link}>
-          channels →
-        </Link>
-        <Link href={'/settings' as Href} style={styles.link}>
-          providers / settings →
-        </Link>
-        <Link href="/on-device" style={styles.link}>
-          on-device LiteRT →
-        </Link>
+        <ModeChip mode={inferenceMode} />
 
-        <Text style={styles.label}>Gateway URL</Text>
-        <Text style={styles.hint}>
-          {devHost
-            ? `Dev host from Metro: ${devHost} · port 7331`
-            : 'Use the LAN IP of the machine running ctrl-a (not 127.0.0.1).'}
-        </Text>
-        <TextInput
-          style={styles.input}
-          value={gatewayUrl}
-          onChangeText={setGatewayUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!busy}
-          placeholderTextColor="#6b7f72"
-          placeholder="http://192.168.x.x:7331"
-        />
-
-        <Text style={styles.label}>Pairing token</Text>
-        <Text style={styles.hint}>
-          Optional. Required when desktop / CLI LAN auth is enabled.
-        </Text>
-        <TextInput
-          style={styles.input}
-          value={token}
-          onChangeText={setToken}
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!busy}
-          secureTextEntry
-          placeholderTextColor="#6b7f72"
-          placeholder="from ctrl-f5 pair / desktop host"
-        />
-
-        <Pressable
-          style={[styles.button, busy && styles.buttonDisabled]}
-          onPress={() => {
-            void connect();
-          }}
-          disabled={busy}
+        <Section
+          title="Navigate"
+          hint="Tap a row — bordered tiles are actions, not plain labels."
         >
-          {busy ? (
-            <ActivityIndicator color="#000000" />
-          ) : (
-            <Text style={styles.buttonText}>connect + verify</Text>
-          )}
-        </Pressable>
+          <NavRow
+            label="Scan pair QR"
+            subtitle="Camera · LAN pairing"
+            onPress={() => {
+              router.push('/scan' as Href);
+            }}
+          />
+          <NavRow
+            label={
+              inferenceMode === 'litert' ? 'Chat (on-device)' : 'Chat (gateway)'
+            }
+            subtitle={
+              inferenceMode === 'litert'
+                ? 'Uses LiteRT on this phone'
+                : 'Streams via paired gateway'
+            }
+            onPress={openChat}
+          />
+          <NavRow
+            label="Knowledge / memory"
+            onPress={() => {
+              router.push('/knowledge' as Href);
+            }}
+          />
+          <NavRow
+            label="Tools / MCP"
+            onPress={() => {
+              router.push('/tools' as Href);
+            }}
+          />
+          <NavRow
+            label="Channels"
+            onPress={() => {
+              router.push('/channels' as Href);
+            }}
+          />
+          <NavRow
+            label="Providers / settings"
+            subtitle="Switch gateway vs LiteRT"
+            onPress={() => {
+              router.push('/settings' as Href);
+            }}
+          />
+          <NavRow
+            label="On-device LiteRT"
+            subtitle="Model download · import · generate"
+            onPress={() => {
+              void (async () => {
+                await saveInferenceMode('litert');
+                setInferenceMode('litert');
+                router.push('/on-device' as Href);
+              })();
+            }}
+          />
+        </Section>
 
-        <View style={styles.panel}>
-          <Text style={styles.meta}>health · {health}</Text>
-          <Text style={styles.meta}>pairing · {pairing}</Text>
-          <Text style={styles.meta}>workspaces · {workspaces}</Text>
-          <Text style={styles.meta}>
-            demo [{streamState}] · {streamText || '…'}
-          </Text>
-        </View>
+        <Section title="Connect" hint="Editable fields — green border + fill.">
+          <Field
+            label="Gateway URL"
+            hint={
+              devHost
+                ? `Dev host from Metro: ${devHost} · port 7331`
+                : 'Use the LAN IP of the machine running ctrl-a (not 127.0.0.1).'
+            }
+            value={gatewayUrl}
+            onChangeText={setGatewayUrl}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!busy}
+            placeholder="http://192.168.x.x:7331"
+          />
+          <Field
+            label="Pairing token"
+            hint="Optional. Required when desktop / CLI LAN auth is enabled."
+            value={token}
+            onChangeText={setToken}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!busy}
+            secureTextEntry
+            placeholder="from ctrl-f5 pair / desktop host"
+          />
+          <PrimaryButton
+            label="connect + verify"
+            onPress={() => {
+              void connect();
+            }}
+            busy={busy}
+            disabled={busy}
+          />
+        </Section>
+
+        <Section title="Status">
+          <StatusPanel
+            lines={[
+              `health · ${health}`,
+              `pairing · ${pairing}`,
+              `workspaces · ${workspaces}`,
+              `demo [${streamState}] · ${streamText || '…'}`,
+            ]}
+          />
+        </Section>
       </ScrollView>
     </SafeAreaView>
   );
@@ -244,80 +296,23 @@ export default function IndexScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: colors.bg,
   },
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingVertical: 32,
-    gap: 10,
+    gap: 12,
   },
   brand: {
-    color: '#00ff66',
+    color: colors.accent,
     fontSize: 48,
     fontWeight: '700',
     letterSpacing: 8,
-    fontFamily: 'monospace',
+    fontFamily: fonts.mono,
   },
   tagline: {
-    color: '#6b7f72',
-    fontFamily: 'monospace',
-    marginBottom: 8,
-  },
-  link: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    marginBottom: 8,
-    opacity: 0.9,
-  },
-  label: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    fontSize: 12,
-    opacity: 0.9,
-    marginTop: 8,
-  },
-  hint: {
-    color: '#6b7f72',
-    fontFamily: 'monospace',
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#00ff66',
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#111613',
-  },
-  button: {
-    backgroundColor: '#00ff66',
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#000000',
-    fontFamily: 'monospace',
-    fontWeight: '700',
-  },
-  panel: {
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#1f3328',
-    backgroundColor: '#0a0f0c',
-    padding: 14,
-    gap: 8,
-  },
-  meta: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
-    fontSize: 12,
-    opacity: 0.85,
+    color: colors.muted,
+    fontFamily: fonts.mono,
   },
 });

@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -23,6 +22,8 @@ import {
   type RunSession,
 } from '@involvex/ctrl-i';
 import { loadSavedConnection } from '../src/connection/storage';
+import { loadInferenceMode } from '../src/device/inference-mode';
+import { GhostButton, ModeChip, PrimaryButton, colors, fonts } from '../src/ui';
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -32,15 +33,26 @@ export default function ChatScreen() {
   const [streaming, setStreaming] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('loading…');
+  const [ready, setReady] = useState(false);
   const conversationIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const mode = await loadInferenceMode();
+      if (cancelled) {
+        return;
+      }
+      if (mode === 'litert') {
+        router.replace('/on-device' as Href);
+        return;
+      }
+
       const saved = await loadSavedConnection();
       if (!saved) {
         setStatus('not paired — connect first');
+        setReady(true);
         return;
       }
       setClientAuth({ token: saved.token || undefined });
@@ -61,10 +73,12 @@ export default function ChatScreen() {
         }
         conversationIdRef.current = cv.id;
         setMessages(await listMessages(saved.gatewayUrl, cv.id));
-        setStatus(`ok · ${ws.name}`);
+        setStatus(`gateway · ${ws.name}`);
+        setReady(true);
       } catch (err) {
         if (!cancelled) {
           setStatus(err instanceof Error ? err.message : String(err));
+          setReady(true);
         }
       }
     })();
@@ -72,7 +86,7 @@ export default function ChatScreen() {
       cancelled = true;
       sessionRef.current?.close();
     };
-  }, []);
+  }, [router]);
 
   const send = useCallback(() => {
     const content = draft.trim();
@@ -107,6 +121,7 @@ export default function ChatScreen() {
           void listMessages(gatewayUrl, conversationId).then((items) => {
             setMessages(items);
             setStreaming('');
+            return undefined;
           });
         }
       },
@@ -117,17 +132,36 @@ export default function ChatScreen() {
     });
   }, [busy, draft, gatewayUrl]);
 
+  if (!ready) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <ActivityIndicator color={colors.accent} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
       <View style={styles.top}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={styles.link}>← back</Text>
-        </Pressable>
+        <GhostButton
+          label="← back"
+          onPress={() => {
+            router.back();
+          }}
+          style={styles.topBtn}
+        />
         <Text style={styles.title}>chat</Text>
-        <Pressable onPress={() => router.push('/settings' as Href)}>
-          <Text style={styles.link}>settings</Text>
-        </Pressable>
+        <GhostButton
+          label="settings"
+          onPress={() => {
+            router.push('/settings' as Href);
+          }}
+          style={styles.topBtn}
+        />
+      </View>
+      <View style={styles.modeRow}>
+        <ModeChip mode="gateway" />
       </View>
       <Text style={styles.meta}>{status}</Text>
       <FlatList
@@ -158,89 +192,78 @@ export default function ChatScreen() {
           value={draft}
           onChangeText={setDraft}
           placeholder="message…"
-          placeholderTextColor="#6b7f72"
+          placeholderTextColor={colors.muted}
           editable={!busy}
           onSubmitEditing={send}
         />
-        <Pressable
-          style={[styles.send, busy && styles.sendDisabled]}
+        <PrimaryButton
+          label="send"
           onPress={send}
+          busy={busy}
           disabled={busy}
-        >
-          {busy ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.sendText}>send</Text>
-          )}
-        </Pressable>
+          style={styles.send}
+        />
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000000' },
+  root: { flex: 1, backgroundColor: colors.bg },
   top: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 8,
+    gap: 8,
   },
+  topBtn: { paddingHorizontal: 10, paddingVertical: 8 },
   title: {
-    color: '#00ff66',
-    fontFamily: 'monospace',
+    color: colors.accent,
+    fontFamily: fonts.mono,
     fontWeight: '700',
     fontSize: 18,
   },
-  link: { color: '#00ff66', fontFamily: 'monospace' },
+  modeRow: { paddingHorizontal: 16, marginTop: 8 },
   meta: {
-    color: '#6b7f72',
-    fontFamily: 'monospace',
+    color: colors.muted,
+    fontFamily: fonts.mono,
     fontSize: 11,
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginVertical: 8,
   },
   list: { flex: 1, paddingHorizontal: 16 },
   bubble: {
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#1f3328',
+    borderColor: colors.charcoal,
   },
   user: { backgroundColor: '#14201a', alignSelf: 'flex-end', maxWidth: '88%' },
   assistant: {
-    backgroundColor: '#0a0f0c',
+    backgroundColor: colors.panel,
     alignSelf: 'flex-start',
     maxWidth: '92%',
   },
-  bubbleText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 13 },
+  bubbleText: { color: colors.accent, fontFamily: fonts.mono, fontSize: 13 },
   composer: {
     flexDirection: 'row',
     gap: 8,
     padding: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1f3328',
+    borderTopColor: colors.charcoal,
+    alignItems: 'stretch',
   },
   input: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#00ff66',
-    color: '#00ff66',
-    fontFamily: 'monospace',
+    borderColor: colors.accent,
+    color: colors.accent,
+    fontFamily: fonts.mono,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#111613',
+    backgroundColor: colors.field,
   },
-  send: {
-    backgroundColor: '#00ff66',
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  sendDisabled: { opacity: 0.6 },
-  sendText: {
-    color: '#000',
-    fontFamily: 'monospace',
-    fontWeight: '700',
-  },
+  send: { paddingHorizontal: 16, justifyContent: 'center' },
 });
