@@ -154,6 +154,9 @@ export default function IndexScreen() {
         <Link href={'/tools' as Href} style={styles.link}>
           tools / MCP →
         </Link>
+        <Link href={'/channels' as Href} style={styles.link}>
+          channels →
+        </Link>
       </View>
     </ScrollView>
   );

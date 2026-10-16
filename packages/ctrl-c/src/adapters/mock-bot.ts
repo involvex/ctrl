@@ -44,6 +44,5 @@ function createMockBotAdapter(kind: ChannelKind): ChannelAdapter {
   };
 }
 
-export const telegramAdapter = createMockBotAdapter('telegram');
 export const discordAdapter = createMockBotAdapter('discord');
 export const slackAdapter = createMockBotAdapter('slack');

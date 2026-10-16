@@ -10,6 +10,7 @@ import {
   clientControlMessageSchema,
   createAttachmentInputSchema,
   createBackupInputSchema,
+  restoreBackupInputSchema,
   createChannelInputSchema,
   createConversationInputSchema,
   createMemoryInputSchema,
@@ -499,7 +500,9 @@ export async function startServer(): Promise<StartedGateway> {
         if (backupRestoreMatch && req.method === 'POST') {
           const backupId = backupRestoreMatch[1]!;
           try {
-            const result = backups.restore(backupId);
+            const body: unknown = await req.json().catch(() => ({}));
+            const input = restoreBackupInputSchema.parse(body ?? {});
+            const result = backups.restore(backupId, input);
             return json(req, {
               backupId: result.backupId,
               workspaceIds: result.workspaces.map((w) => w.id),

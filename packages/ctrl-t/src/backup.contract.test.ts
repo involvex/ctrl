@@ -65,5 +65,23 @@ describe('contract: host backups', () => {
     expect(
       messages.some((m) => m.role === 'user' && m.content === 'snapshot me')
     ).toBe(true);
+
+    const enc = await createBackup(baseUrl(), {
+      label: 'enc-contract',
+      workspaceIds: [ws.id],
+      passphrase: 'contract-pass',
+    });
+    expect(enc.encrypted).toBe(true);
+    let denied = false;
+    try {
+      await restoreBackup(baseUrl(), enc.id);
+    } catch {
+      denied = true;
+    }
+    expect(denied).toBe(true);
+    const encRestored = await restoreBackup(baseUrl(), enc.id, {
+      passphrase: 'contract-pass',
+    });
+    expect(encRestored.workspaceIds.length).toBe(1);
   });
 });

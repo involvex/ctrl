@@ -122,6 +122,7 @@ export function App() {
   const [channelName, setChannelName] = useState('webhook');
   const [backupItems, setBackupItems] = useState<HostBackupManifest[]>([]);
   const [backupLabel, setBackupLabel] = useState('manual');
+  const [backupPassphrase, setBackupPassphrase] = useState('');
   const [providerStatus, setProviderStatus] =
     useState<ProviderStatusResponse | null>(null);
   const [providerKeyDraft, setProviderKeyDraft] = useState('');
@@ -516,24 +517,42 @@ export function App() {
       return;
     }
     try {
-      await createBackup(gatewayUrl, {
+      const passphrase = backupPassphrase.trim();
+      const createOpts: {
+        label?: string;
+        workspaceIds?: string[];
+        passphrase?: string;
+      } = {
         label: backupLabel.trim() || undefined,
         workspaceIds: workspace ? [workspace.id] : undefined,
-      });
+      };
+      if (passphrase.length >= 8) {
+        createOpts.passphrase = passphrase;
+      }
+      await createBackup(gatewayUrl, createOpts);
       await refreshBackups();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [backupLabel, gatewayUrl, refreshBackups, workspace]);
+  }, [backupLabel, backupPassphrase, gatewayUrl, refreshBackups, workspace]);
 
   const onRestoreBackup = useCallback(
-    async (id: string) => {
+    async (id: string, encrypted: boolean) => {
       if (!gatewayUrl.startsWith('http')) {
         return;
       }
       try {
-        const result = await restoreBackup(gatewayUrl, id);
+        const passphrase = backupPassphrase.trim();
+        if (encrypted && passphrase.length < 8) {
+          setError('enter passphrase (≥8 chars) to restore encrypted backup');
+          return;
+        }
+        const restoreOpts: { passphrase?: string } = {};
+        if (encrypted && passphrase) {
+          restoreOpts.passphrase = passphrase;
+        }
+        const result = await restoreBackup(gatewayUrl, id, restoreOpts);
         const restored = result.items[0];
         if (restored) {
           setWorkspace(restored);
@@ -551,7 +570,7 @@ export function App() {
         setError(err instanceof Error ? err.message : String(err));
       }
     },
-    [gatewayUrl, refreshBackups]
+    [backupPassphrase, gatewayUrl, refreshBackups]
   );
 
   const onCreateWebhookChannel = useCallback(async () => {
@@ -984,8 +1003,8 @@ export function App() {
         <aside className="host-panel knowledge-panel">
           <p className="host-title">host backups</p>
           <p className="meta">
-            Snapshots on this machine (`data/backups`). Restore creates new
-            workspaces — no peer SQLite sync.
+            Snapshots on this machine (`data/backups`). Optional passphrase (≥8)
+            encrypts at rest (AES-256-GCM). Restore creates new workspaces.
           </p>
           <div className="host-row">
             <input
@@ -993,6 +1012,14 @@ export function App() {
               value={backupLabel}
               onChange={(e) => setBackupLabel(e.target.value)}
               placeholder="label"
+            />
+            <input
+              className="host-input"
+              type="password"
+              value={backupPassphrase}
+              onChange={(e) => setBackupPassphrase(e.target.value)}
+              placeholder="passphrase (optional)"
+              autoComplete="new-password"
             />
             <button
               type="button"
@@ -1017,13 +1044,14 @@ export function App() {
             {backupItems.map((b) => (
               <li key={b.id}>
                 <code>{b.label ?? b.id.slice(0, 8)}</code> · {b.workspaceCount}{' '}
-                ws · {new Date(b.createdAt).toLocaleString()}
+                ws · {b.encrypted ? 'encrypted · ' : ''}
+                {new Date(b.createdAt).toLocaleString()}
                 <div className="host-row">
                   <button
                     type="button"
                     className="ghost-btn"
                     onClick={() => {
-                      void onRestoreBackup(b.id);
+                      void onRestoreBackup(b.id, b.encrypted);
                     }}
                   >
                     restore

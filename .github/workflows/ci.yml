@@ -51,6 +51,21 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test:contracts
 
+  mobile-check:
+    name: mobile-check
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - name: Mobile typecheck
+        run: bun run --filter @involvex/ctrl-mobile check
+      - name: Mobile unit tests
+        run: bun test apps/mobile/src/device
+
   desktop-package-win:
     name: desktop-package-win
     runs-on: windows-latest
@@ -93,6 +108,7 @@ jobs:
       - validate
       - build-packages
       - contract-tests
+      - mobile-check
       - desktop-package-win
     steps:
       - name: Check job results
@@ -100,8 +116,10 @@ jobs:
           echo "validate=${{ needs.validate.result }}"
           echo "build-packages=${{ needs.build-packages.result }}"
           echo "contract-tests=${{ needs.contract-tests.result }}"
+          echo "mobile-check=${{ needs.mobile-check.result }}"
           echo "desktop-package-win=${{ needs.desktop-package-win.result }}"
           test "${{ needs.validate.result }}" = "success"
           test "${{ needs.build-packages.result }}" = "success"
           test "${{ needs.contract-tests.result }}" = "success"
+          test "${{ needs.mobile-check.result }}" = "success"
           test "${{ needs.desktop-package-win.result }}" = "success"

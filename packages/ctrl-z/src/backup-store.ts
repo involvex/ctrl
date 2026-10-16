@@ -1,10 +1,15 @@
 import {
   createBackupInputSchema,
+  hostBackupEncryptedSnapshotSchema,
   hostBackupManifestSchema,
+  hostBackupPlainSnapshotSchema,
   hostBackupSnapshotSchema,
+  restoreBackupInputSchema,
   type CreateBackupInput,
   type HostBackupManifest,
+  type HostBackupPlainSnapshot,
   type HostBackupSnapshot,
+  type RestoreBackupInput,
   type Workspace,
   type WorkspaceExport,
 } from '@involvex/ctrl-s';
@@ -16,10 +21,41 @@ import {
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import { decryptUtf8, encryptUtf8 } from './backup-crypto';
 import type { Store } from './store';
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+function decryptSnapshot(
+  snap: HostBackupSnapshot,
+  passphrase: string | undefined
+): HostBackupPlainSnapshot {
+  if (!snap.encrypted) {
+    return snap;
+  }
+  if (!passphrase) {
+    throw new Error('passphrase required for encrypted backup');
+  }
+  const json = decryptUtf8(
+    {
+      salt: snap.salt,
+      iv: snap.iv,
+      tag: snap.tag,
+      ciphertext: snap.ciphertext,
+    },
+    passphrase
+  );
+  const workspaces = JSON.parse(json) as unknown;
+  return hostBackupPlainSnapshotSchema.parse({
+    version: 1,
+    id: snap.id,
+    createdAt: snap.createdAt,
+    label: snap.label,
+    encrypted: false,
+    workspaces,
+  });
 }
 
 /**
@@ -46,13 +82,16 @@ export class BackupStore {
         const raw = JSON.parse(readFileSync(full, 'utf8')) as unknown;
         const snap = hostBackupSnapshotSchema.parse(raw);
         const st = statSync(full);
+        const workspaceCount = snap.encrypted
+          ? snap.workspaceCount
+          : snap.workspaces.length;
         items.push(
           hostBackupManifestSchema.parse({
             id: snap.id,
             createdAt: snap.createdAt,
             label: snap.label,
             encrypted: snap.encrypted,
-            workspaceCount: snap.workspaces.length,
+            workspaceCount,
             bytes: st.size,
           })
         );
@@ -60,7 +99,6 @@ export class BackupStore {
         // Skip corrupt files.
       }
     }
-    // Copy then sort — Array#toSorted needs ES2023 lib; Bun check target is older.
     const sorted = items.slice();
     sorted.sort((a, b) => b.createdAt - a.createdAt);
     return sorted;
@@ -75,6 +113,15 @@ export class BackupStore {
     } catch {
       return null;
     }
+  }
+
+  /** Return plaintext dump; decrypts when passphrase is provided for encrypted snaps. */
+  getPlain(id: string, passphrase?: string): HostBackupPlainSnapshot | null {
+    const snap = this.get(id);
+    if (!snap) {
+      return null;
+    }
+    return decryptSnapshot(snap, passphrase);
   }
 
   create(rawInput: CreateBackupInput = {}): HostBackupManifest {
@@ -101,14 +148,30 @@ export class BackupStore {
     );
     const id = newId();
     const createdAt = Date.now();
-    const snapshot = hostBackupSnapshotSchema.parse({
-      version: 1,
-      id,
-      createdAt,
-      label: input.label ?? null,
-      encrypted: false,
-      workspaces: dumps,
-    });
+    const label = input.label ?? null;
+
+    let snapshot: HostBackupSnapshot;
+    if (input.passphrase) {
+      const blob = encryptUtf8(JSON.stringify(dumps), input.passphrase);
+      snapshot = hostBackupEncryptedSnapshotSchema.parse({
+        version: 1,
+        id,
+        createdAt,
+        label,
+        encrypted: true,
+        workspaceCount: dumps.length,
+        ...blob,
+      });
+    } else {
+      snapshot = hostBackupPlainSnapshotSchema.parse({
+        version: 1,
+        id,
+        createdAt,
+        label,
+        encrypted: false,
+        workspaces: dumps,
+      });
+    }
 
     const full = path.join(this.dir, `${id}.json`);
     const body = JSON.stringify(snapshot, null, 2);
@@ -117,21 +180,25 @@ export class BackupStore {
     return hostBackupManifestSchema.parse({
       id,
       createdAt,
-      label: snapshot.label,
-      encrypted: false,
+      label,
+      encrypted: Boolean(input.passphrase),
       workspaceCount: dumps.length,
       bytes: Buffer.byteLength(body, 'utf8'),
     });
   }
 
   /** Restore each workspace dump as a new workspace (safe default). */
-  restore(id: string): { backupId: string; workspaces: Workspace[] } {
-    const snap = this.get(id);
-    if (!snap) {
+  restore(
+    id: string,
+    rawInput: RestoreBackupInput = { asNew: true }
+  ): { backupId: string; workspaces: Workspace[] } {
+    const input = restoreBackupInputSchema.parse(rawInput);
+    const plain = this.getPlain(id, input.passphrase);
+    if (!plain) {
       throw new Error('backup not found');
     }
     const workspaces: Workspace[] = [];
-    for (const dump of snap.workspaces) {
+    for (const dump of plain.workspaces) {
       workspaces.push(this.store.importWorkspace(dump));
     }
     return { backupId: id, workspaces };

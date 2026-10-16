@@ -35,6 +35,22 @@ describe('BackupStore', () => {
       expect(conversations.length).toBe(1);
       const messages = store.listMessages(conversations[0]!.id);
       expect(messages.some((m) => m.content === 'hello backup')).toBe(true);
+
+      const enc = backups.create({
+        label: 'secret',
+        passphrase: 'test-pass-ok',
+        workspaceIds: [ws.id],
+      });
+      expect(enc.encrypted).toBe(true);
+      expect(() => backups.restore(enc.id)).toThrow(/passphrase/);
+      expect(() =>
+        backups.restore(enc.id, { asNew: true, passphrase: 'wrong-pass' })
+      ).toThrow(/invalid passphrase|corrupt/);
+      const encRestored = backups.restore(enc.id, {
+        asNew: true,
+        passphrase: 'test-pass-ok',
+      });
+      expect(encRestored.workspaces[0]!.name).toBe('alpha');
     } finally {
       db.close();
       rmSync(root, { recursive: true, force: true });

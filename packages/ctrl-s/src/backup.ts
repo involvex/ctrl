@@ -13,22 +13,48 @@ export const hostBackupManifestSchema = z.object({
 
 export type HostBackupManifest = z.infer<typeof hostBackupManifestSchema>;
 
-export const hostBackupSnapshotSchema = z.object({
+const backupMeta = {
   version: z.literal(1),
   id: z.string().min(1),
   createdAt: z.number().int().nonnegative(),
   label: z.string().min(1).nullable(),
-  /** Reserved for Phase 7b passphrase encryption. */
+};
+
+export const hostBackupPlainSnapshotSchema = z.object({
+  ...backupMeta,
   encrypted: z.literal(false),
   workspaces: z.array(workspaceExportSchema),
 });
 
+export const hostBackupEncryptedSnapshotSchema = z.object({
+  ...backupMeta,
+  encrypted: z.literal(true),
+  workspaceCount: z.number().int().nonnegative(),
+  salt: z.string().min(1),
+  iv: z.string().min(1),
+  tag: z.string().min(1),
+  ciphertext: z.string().min(1),
+});
+
+export const hostBackupSnapshotSchema = z.discriminatedUnion('encrypted', [
+  hostBackupPlainSnapshotSchema,
+  hostBackupEncryptedSnapshotSchema,
+]);
+
 export type HostBackupSnapshot = z.infer<typeof hostBackupSnapshotSchema>;
+export type HostBackupPlainSnapshot = z.infer<
+  typeof hostBackupPlainSnapshotSchema
+>;
+export type HostBackupEncryptedSnapshot = z.infer<
+  typeof hostBackupEncryptedSnapshotSchema
+>;
 
 export const createBackupInputSchema = z.object({
   label: z.string().min(1).max(200).optional(),
   /** When set, only these workspace IDs are included; default = all. */
   workspaceIds: z.array(z.string().min(1)).optional(),
+  /** When set (≥8 chars), snapshot is AES-256-GCM encrypted at rest. */
+  passphrase: z.string().min(8).max(500).optional(),
 });
 
 export type CreateBackupInput = z.infer<typeof createBackupInputSchema>;
@@ -36,6 +62,8 @@ export type CreateBackupInput = z.infer<typeof createBackupInputSchema>;
 export const restoreBackupInputSchema = z.object({
   /** When true, restore as new workspaces (safe default). */
   asNew: z.boolean().default(true),
+  /** Required when the backup was created with a passphrase. */
+  passphrase: z.string().min(8).max(500).optional(),
 });
 
 export type RestoreBackupInput = z.infer<typeof restoreBackupInputSchema>;

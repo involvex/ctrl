@@ -6,13 +6,14 @@ export const CLI_COMMANDS = [
   'health',
   'demo',
   'chat',
+  'backup',
   'pair',
   'completion',
 ] as const;
 
 export type CompletionShell = 'bash' | 'powershell';
 
-const FLAGS = '--url --port --host --token';
+const FLAGS = '--url --port --host --token --label --passphrase --workspace';
 
 /** Print installable completion scripts for bash or PowerShell. */
 export function completionScript(shell: CompletionShell): string {
@@ -38,9 +39,16 @@ export function completionScript(shell: CompletionShell): string {
       '    completion)',
       '      COMPREPLY=( $(compgen -W "bash powershell" -- "$cur") )',
       '      ;;',
+      '    backup)',
+      '      if [[ ${COMP_CWORD} -eq 2 ]]; then',
+      '        COMPREPLY=( $(compgen -W "list create restore" -- "$cur") )',
+      '      else',
+      `        COMPREPLY=( $(compgen -W "${FLAGS}" -- "$cur") )`,
+      '      fi',
+      '      ;;',
       '    *)',
       '      case "$prev" in',
-      '        --url|--port|--host|--token)',
+      '        --url|--port|--host|--token|--label|--passphrase|--workspace)',
       '          COMPREPLY=()',
       '          ;;',
       '        *)',
@@ -66,7 +74,7 @@ export function completionScript(shell: CompletionShell): string {
     'Register-ArgumentCompleter -Native -CommandName ctrl-f5 -ScriptBlock {',
     '  param($wordToComplete, $commandAst, $cursorPosition)',
     `  $cmds = @(${cmdList})`,
-    "  $flags = @('--url', '--port', '--host', '--token')",
+    "  $flags = @('--url', '--port', '--host', '--token', '--label', '--passphrase', '--workspace')",
     '  $elements = @($commandAst.CommandElements)',
     '  if ($elements.Count -le 2) {',
     '    $cmds | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {',
@@ -77,6 +85,12 @@ export function completionScript(shell: CompletionShell): string {
     '  $sub = $elements[1].Extent.Text',
     "  if ($sub -eq 'completion') {",
     "    @('bash', 'powershell') | Where-Object { $_ -like \"$wordToComplete*\" } | ForEach-Object {",
+    "      [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)",
+    '    }',
+    '    return',
+    '  }',
+    "  if ($sub -eq 'backup' -and $elements.Count -le 3) {",
+    "    @('list', 'create', 'restore') | Where-Object { $_ -like \"$wordToComplete*\" } | ForEach-Object {",
     "      [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)",
     '    }',
     '    return',

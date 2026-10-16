@@ -303,7 +303,10 @@ export async function createBackup(
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`createBackup failed: ${res.status}`);
+    const detail = await res.text().catch(() => '');
+    throw new Error(
+      `createBackup failed: ${res.status}${detail ? ` ${detail}` : ''}`
+    );
   }
   return hostBackupManifestSchema.parse(await readJson(res));
 }
@@ -324,18 +327,25 @@ export async function getBackup(
 
 export async function restoreBackup(
   baseUrl: string,
-  backupId: string
+  backupId: string,
+  input: { passphrase?: string; asNew?: boolean } = {}
 ): Promise<{ backupId: string; workspaceIds: string[]; items: Workspace[] }> {
   const res = await fetch(
     `${normalizeBaseUrl(baseUrl)}/api/v1/backups/${backupId}/restore`,
     {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: '{}',
+      body: JSON.stringify({
+        asNew: input.asNew ?? true,
+        ...(input.passphrase ? { passphrase: input.passphrase } : {}),
+      }),
     }
   );
   if (!res.ok) {
-    throw new Error(`restoreBackup failed: ${res.status}`);
+    const detail = await res.text().catch(() => '');
+    throw new Error(
+      `restoreBackup failed: ${res.status}${detail ? ` ${detail}` : ''}`
+    );
   }
   return z
     .object({
