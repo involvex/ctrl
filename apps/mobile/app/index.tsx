@@ -9,7 +9,6 @@ import {
   getPairingStatus,
   listWorkspaces,
   setClientAuth,
-  streamDemo,
 } from '@involvex/ctrl-i';
 import {
   defaultGatewayUrl,
@@ -18,7 +17,6 @@ import {
 import { loadSavedConnection, saveConnection } from '../src/connection/storage';
 import {
   loadGeneratorMode,
-  saveGeneratorMode,
   type GeneratorMode,
 } from '../src/device/inference-mode';
 import {
@@ -48,8 +46,6 @@ export default function IndexScreen() {
   const [health, setHealth] = useState('idle');
   const [pairing, setPairing] = useState('idle');
   const [workspaces, setWorkspaces] = useState('—');
-  const [streamState, setStreamState] = useState('idle');
-  const [streamText, setStreamText] = useState('');
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const [devHost, setDevHost] = useState<string | null>(null);
@@ -85,8 +81,6 @@ export default function IndexScreen() {
     setHealth('checking…');
     setPairing('checking…');
     setWorkspaces('—');
-    setStreamText('');
-    setStreamState('idle');
 
     const url = gatewayUrl.trim();
     const authToken = token.trim();
@@ -124,35 +118,7 @@ export default function IndexScreen() {
       } catch (err) {
         setWorkspaces(err instanceof Error ? err.message : String(err));
       }
-
-      setStreamState('connecting');
-      streamDemo(url, {
-        onEvent: (event) => {
-          if (event.type === 'run.started') {
-            setStreamState('streaming');
-            setStreamText('');
-          }
-          if (event.type === 'message.delta') {
-            setStreamText((prev) => prev + event.text);
-          }
-          if (event.type === 'run.completed') {
-            setStreamState('done');
-            setBusy(false);
-          }
-          if (event.type === 'run.failed') {
-            setStreamState(`failed: ${event.error.message}`);
-            setBusy(false);
-          }
-        },
-        onError: (err) => {
-          setStreamState(`error: ${err.message}`);
-          setBusy(false);
-        },
-        onClose: () => {
-          setStreamState((s) => (s === 'streaming' ? 'done' : s));
-          setBusy(false);
-        },
-      });
+      setBusy(false);
     } catch (err) {
       setHealth(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -178,67 +144,17 @@ export default function IndexScreen() {
         <Text style={styles.tagline}>local agent · mobile</Text>
         <ModeChip mode={inferenceMode} />
 
-        <Section
-          title="Navigate"
-          hint="Tap a row — bordered tiles are actions, not plain labels."
-        >
-          <NavRow
-            label="Scan pair QR"
-            subtitle="Camera · LAN pairing"
-            onPress={() => {
-              router.push('/scan' as Href);
-            }}
-          />
-          <NavRow
-            label="Chat"
-            subtitle="One transcript · swap On this phone / This PC / Cloud"
-            onPress={openChat}
-          />
-          <NavRow
-            label="Knowledge / memory"
-            onPress={() => {
-              router.push('/knowledge' as Href);
-            }}
-          />
-          <NavRow
-            label="Tools / MCP"
-            onPress={() => {
-              router.push('/tools' as Href);
-            }}
-          />
-          <NavRow
-            label="Channels"
-            onPress={() => {
-              router.push('/channels' as Href);
-            }}
-          />
-          <NavRow
-            label="Providers / settings"
-            subtitle="Keys · make this the generator"
-            onPress={() => {
-              router.push('/settings' as Href);
-            }}
-          />
-          <NavRow
-            label="Model setup"
-            subtitle="LiteRT download · import · policy"
-            onPress={() => {
-              void (async () => {
-                await saveGeneratorMode('litert');
-                setInferenceMode('litert');
-                router.push('/on-device' as Href);
-              })();
-            }}
-          />
+        <Section title="Chat" hint="One transcript · pick who answers inside.">
+          <PrimaryButton label="Open chat" onPress={openChat} />
         </Section>
 
-        <Section title="Connect" hint="Editable fields — green border + fill.">
+        <Section title="Connect" hint="Pair this phone with your PC gateway.">
           <Field
             label="Gateway URL"
             hint={
               devHost
                 ? `Dev host from Metro: ${devHost} · port 7331`
-                : 'Use the LAN IP of the machine running ctrl-a (not 127.0.0.1).'
+                : 'LAN IP of the machine running ctrl-a (not 127.0.0.1).'
             }
             value={gatewayUrl}
             onChangeText={setGatewayUrl}
@@ -266,16 +182,69 @@ export default function IndexScreen() {
             busy={busy}
             disabled={busy}
           />
-        </Section>
-
-        <Section title="Status">
           <StatusPanel
             lines={[
               `health · ${health}`,
               `pairing · ${pairing}`,
               `workspaces · ${workspaces}`,
-              `demo [${streamState}] · ${streamText || '…'}`,
             ]}
+          />
+        </Section>
+
+        <Section
+          title="On this phone"
+          hint="LiteRT model files only — does not change chat until you pick the generator."
+        >
+          <NavRow
+            label="Model setup"
+            subtitle="Download · import · policy (no auto-load)"
+            onPress={() => {
+              router.push('/on-device' as Href);
+            }}
+          />
+        </Section>
+
+        <Section title="Host" hint="PC-side providers and pairing.">
+          <NavRow
+            label="Providers / settings"
+            subtitle="API keys · This PC / Cloud"
+            onPress={() => {
+              router.push('/settings' as Href);
+            }}
+          />
+          <NavRow
+            label="Scan pair QR"
+            subtitle="Camera · LAN pairing"
+            onPress={() => {
+              router.push('/scan' as Href);
+            }}
+          />
+        </Section>
+
+        <Section
+          title="Advanced"
+          hint="Needs the PC online. Skip until chat + model feel solid."
+        >
+          <NavRow
+            label="Knowledge / memory"
+            subtitle="Needs PC online"
+            onPress={() => {
+              router.push('/knowledge' as Href);
+            }}
+          />
+          <NavRow
+            label="Tools / MCP"
+            subtitle="Needs PC online"
+            onPress={() => {
+              router.push('/tools' as Href);
+            }}
+          />
+          <NavRow
+            label="Channels"
+            subtitle="Needs PC online"
+            onPress={() => {
+              router.push('/channels' as Href);
+            }}
           />
         </Section>
       </ScrollView>

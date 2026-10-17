@@ -42,63 +42,171 @@ import {
   fonts,
 } from '../src/ui';
 
-function ModelSetup({
+/**
+ * Mounted only after the user taps Load model.
+ * autoLoad is always false — nativeCreateConversation aborts the process if
+ * load runs with a bad/partial file (JNI mid == null).
+ */
+function ModelEngineHost({
   pathOrUrl,
   backend,
-  decision,
   onReprobe,
-  onSourceChange,
+  onLoaded,
+  onFailed,
+  onUnloadRequest,
 }: {
   pathOrUrl: string;
   backend: 'cpu' | 'gpu' | 'npu';
-  decision: PolicyDecision;
   onReprobe: () => Promise<PolicyDecision | null>;
-  onSourceChange: (next: string) => void;
+  onLoaded: (detail: string) => void;
+  onFailed: (message: string) => void;
+  onUnloadRequest: () => void;
 }) {
   const engine = useModel(pathOrUrl, {
     backend,
-    autoLoad: !isRemoteModelUrl(pathOrUrl),
+    autoLoad: false,
     enableMemoryTracking: true,
     systemPrompt: 'You are ctrl on-device assistant. Be concise.',
     maxOutputTokens: 512,
     maxContextTokens: 2048,
   });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      try {
+        if (isRemoteModelUrl(pathOrUrl)) {
+          onFailed(
+            'Download the model first — Load only works on a local path.'
+          );
+          return;
+        }
+        const size = ModelRegistry.getFileSizeBytes(pathOrUrl);
+        if (size <= 0) {
+          onFailed(
+            `File not readable (${pathOrUrl}). Re-import the .litertlm file.`
+          );
+          return;
+        }
+        const fresh = await onReprobe();
+        if (fresh && !fresh.allowed) {
+          onFailed(
+            `policy blocked: ${fresh.reasons.join('; ') || 'not allowed'}`
+          );
+          return;
+        }
+        if (!engine.isReady) {
+          await engine.load();
+        }
+        if (cancelled) {
+          return;
+        }
+        const mem = engine.memoryEstimate?.verdict
+          ? ` · memory ${engine.memoryEstimate.verdict}`
+          : '';
+        onLoaded(`model ready · ${(size / (1024 * 1024)).toFixed(0)} MB${mem}`);
+      } catch (err: unknown) {
+        if (!cancelled) {
+          onFailed(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Mount once per path — intentional.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathOrUrl]);
+
+  return (
+    <View style={styles.block}>
+      {loading ? (
+        <ActivityIndicator color={colors.accent} />
+      ) : engine.isReady ? (
+        <Text style={styles.meta}>
+          engine loaded
+          {engine.memoryEstimate?.verdict
+            ? ` · ${engine.memoryEstimate.verdict}`
+            : ''}
+        </Text>
+      ) : (
+        <Text style={styles.meta}>engine idle</Text>
+      )}
+      <Pressable
+        style={styles.linkBtn}
+        onPress={() => {
+          void (async () => {
+            try {
+              await engine.deleteModel();
+            } catch {
+              // ignore
+            }
+            onUnloadRequest();
+          })();
+        }}
+      >
+        <Text style={styles.link}>unload engine / switch source</Text>
+      </Pressable>
+      {engine.error ? <Text style={styles.error}>{engine.error}</Text> : null}
+    </View>
+  );
+}
+
+/** Download / import / path UI — never mounts useModel. */
+function ModelSourcePanel({
+  pathOrUrl,
+  backend,
+  decision,
+  engineArmed,
+  onSourceChange,
+  onArmEngine,
+}: {
+  pathOrUrl: string;
+  backend: 'cpu' | 'gpu' | 'npu';
+  decision: PolicyDecision;
+  engineArmed: boolean;
+  onSourceChange: (next: string) => void;
+  onArmEngine: () => void;
+}) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [manualProgress, setManualProgress] = useState(0);
   const [busyAction, setBusyAction] = useState<'idle' | 'download' | 'import'>(
     'idle'
   );
 
-  const downloading =
-    busyAction === 'download' ||
-    (engine.downloadProgress > 0 && engine.downloadProgress < 1);
-  const downloadPct = Math.round(
-    (busyAction === 'download' ? manualProgress : engine.downloadProgress) * 100
-  );
+  const downloading = busyAction === 'download';
+  const downloadPct = Math.round(manualProgress * 100);
+  const remote = isRemoteModelUrl(pathOrUrl);
+  const sourceLabel = remote
+    ? 'HuggingFace URL (download)'
+    : `local · ${pathOrUrl.split(/[/\\]/).pop() ?? pathOrUrl}`;
 
-  const onDownloadAndLoad = useCallback(() => {
+  const onDownload = useCallback(() => {
     setLocalError(null);
     setBusyAction('download');
     setManualProgress(0);
     void (async () => {
       try {
-        if (isRemoteModelUrl(pathOrUrl)) {
-          const localPath = await downloadModelWithRetry(pathOrUrl, {
-            attempts: 3,
-            onProgress: setManualProgress,
-          });
-          await saveModelSource(localPath);
-          onSourceChange(localPath);
+        if (!isRemoteModelUrl(pathOrUrl)) {
+          setLocalError('Source is already local. Tap Load model instead.');
           return;
         }
-        await engine.load();
+        const localPath = await downloadModelWithRetry(pathOrUrl, {
+          attempts: 3,
+          onProgress: setManualProgress,
+        });
+        await saveModelSource(localPath);
+        onSourceChange(localPath);
       } catch (err: unknown) {
         setLocalError(describeDownloadError(err));
         try {
-          if (isRemoteModelUrl(pathOrUrl)) {
-            ModelRegistry.deleteFile(pathOrUrl);
-          }
-          await engine.deleteModel();
+          ModelRegistry.deleteFile(pathOrUrl);
         } catch {
           // ignore
         }
@@ -106,7 +214,7 @@ function ModelSetup({
         setBusyAction('idle');
       }
     })();
-  }, [engine, onSourceChange, pathOrUrl]);
+  }, [onSourceChange, pathOrUrl]);
 
   const onImportFromFilesystem = useCallback(() => {
     setLocalError(null);
@@ -147,43 +255,43 @@ function ModelSetup({
     })();
   }, [onSourceChange]);
 
-  const onClearCache = useCallback(() => {
+  const onResetToDefaultUrl = useCallback(() => {
     setLocalError(null);
     void (async () => {
       try {
-        ModelRegistry.deleteFile(DEFAULT_MODEL_URL);
-        await engine.deleteModel();
+        try {
+          ModelRegistry.deleteFile(DEFAULT_MODEL_URL);
+        } catch {
+          // ignore
+        }
         await saveModelSource(DEFAULT_MODEL_URL);
         onSourceChange(DEFAULT_MODEL_URL);
       } catch (err: unknown) {
         setLocalError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, [engine, onSourceChange]);
+  }, [onSourceChange]);
 
-  const onVerifyLoad = useCallback(() => {
+  const onLoadTap = useCallback(() => {
     setLocalError(null);
-    void (async () => {
-      const fresh = await onReprobe();
-      if (fresh && !fresh.allowed) {
+    if (remote) {
+      setLocalError('Download first, then Load model on the local file.');
+      return;
+    }
+    try {
+      const size = ModelRegistry.getFileSizeBytes(pathOrUrl);
+      if (size <= 0) {
         setLocalError(
-          `policy blocked: ${fresh.reasons.join('; ') || 'not allowed'}`
+          `File not readable (${pathOrUrl}). Re-import the .litertlm file.`
         );
         return;
       }
-      try {
-        if (!engine.isReady) {
-          await engine.load();
-        }
-      } catch (err: unknown) {
-        setLocalError(err instanceof Error ? err.message : String(err));
-      }
-    })();
-  }, [engine, onReprobe]);
-
-  const sourceLabel = isRemoteModelUrl(pathOrUrl)
-    ? 'HuggingFace URL (download)'
-    : `local · ${pathOrUrl.split(/[/\\]/).pop() ?? pathOrUrl}`;
+    } catch (err: unknown) {
+      setLocalError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    onArmEngine();
+  }, [onArmEngine, pathOrUrl, remote]);
 
   return (
     <View style={styles.block}>
@@ -194,68 +302,71 @@ function ModelSetup({
           : ''}
       </Text>
       <Text style={styles.meta}>source · {sourceLabel}</Text>
-      {!engine.isReady ? (
-        <View style={styles.block}>
-          <Pressable
-            style={[styles.button, downloading && styles.buttonDisabled]}
-            onPress={onDownloadAndLoad}
-            disabled={busyAction !== 'idle'}
-          >
-            {busyAction === 'download' ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {downloading
-                  ? `downloading ${downloadPct}%`
-                  : isRemoteModelUrl(pathOrUrl)
-                    ? 'download + load (~2.6 GB, 3 retries)'
-                    : 'load local model'}
-              </Text>
-            )}
-          </Pressable>
-          {downloading ? (
-            <View style={styles.progressTrack}>
-              <View
-                style={[styles.progressFill, { width: `${downloadPct}%` }]}
-              />
-            </View>
-          ) : null}
-          <Pressable
-            style={[
-              styles.secondaryBtn,
-              busyAction !== 'idle' && styles.buttonDisabled,
-            ]}
-            onPress={onImportFromFilesystem}
-            disabled={busyAction !== 'idle'}
-          >
-            <Text style={styles.secondaryText}>
-              import .litertlm from filesystem
+      <Text style={styles.meta}>
+        Engine stays unloaded until you tap Load model (avoids native crash on
+        open).
+      </Text>
+
+      {remote ? (
+        <Pressable
+          style={[styles.button, downloading && styles.buttonDisabled]}
+          onPress={onDownload}
+          disabled={busyAction !== 'idle'}
+        >
+          {busyAction === 'download' ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.buttonText}>
+              {downloading
+                ? `downloading ${downloadPct}%`
+                : 'download (~2.6 GB, 3 retries)'}
             </Text>
-          </Pressable>
-          <Text style={styles.meta}>
-            Prefer: download gemma-4-E2B-it.litertlm on a PC, copy to the phone,
-            then Import. Chat uses this model when generator is On this phone.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.block}>
-          <Text style={styles.meta}>
-            model ready
-            {engine.memoryEstimate?.verdict
-              ? ` · memory ${engine.memoryEstimate.verdict}`
-              : ''}
-          </Text>
-          <Pressable style={styles.linkBtn} onPress={onVerifyLoad}>
-            <Text style={styles.link}>re-verify load</Text>
-          </Pressable>
-          <Pressable style={styles.linkBtn} onPress={onClearCache}>
-            <Text style={styles.link}>clear model cache / switch source</Text>
-          </Pressable>
-        </View>
-      )}
-      {(localError ?? engine.error) ? (
-        <Text style={styles.error}>{localError ?? engine.error}</Text>
+          )}
+        </Pressable>
       ) : null}
+
+      {downloading ? (
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${downloadPct}%` }]} />
+        </View>
+      ) : null}
+
+      <Pressable
+        style={[
+          styles.secondaryBtn,
+          busyAction !== 'idle' && styles.buttonDisabled,
+        ]}
+        onPress={onImportFromFilesystem}
+        disabled={busyAction !== 'idle'}
+      >
+        <Text style={styles.secondaryText}>
+          import .litertlm from filesystem
+        </Text>
+      </Pressable>
+
+      {!remote && !engineArmed ? (
+        <Pressable
+          style={[
+            styles.button,
+            busyAction !== 'idle' && styles.buttonDisabled,
+          ]}
+          onPress={onLoadTap}
+          disabled={busyAction !== 'idle'}
+        >
+          <Text style={styles.buttonText}>Load model</Text>
+        </Pressable>
+      ) : null}
+
+      <Pressable style={styles.linkBtn} onPress={onResetToDefaultUrl}>
+        <Text style={styles.link}>reset source to default download URL</Text>
+      </Pressable>
+
+      <Text style={styles.meta}>
+        Prefer: download gemma-4-E2B-it.litertlm on a PC, copy to the phone,
+        then Import. Chat uses this file when generator is On this phone.
+      </Text>
+
+      {localError ? <Text style={styles.error}>{localError}</Text> : null}
     </View>
   );
 }
@@ -266,6 +377,8 @@ export default function OnDeviceScreen() {
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
   const [busy, setBusy] = useState(true);
   const [modelSource, setModelSource] = useState(DEFAULT_MODEL_URL);
+  const [engineArmed, setEngineArmed] = useState(false);
+  const [engineMessage, setEngineMessage] = useState<string | null>(null);
 
   const probePolicy = useCallback(async (): Promise<PolicyDecision | null> => {
     const next = await probeDeviceCapabilities();
@@ -292,6 +405,8 @@ export default function OnDeviceScreen() {
       const saved = await loadSavedModelSource();
       if (!cancelled) {
         setModelSource(saved);
+        setEngineArmed(false);
+        setEngineMessage(null);
       }
       await probePolicy();
       if (!cancelled) {
@@ -302,6 +417,12 @@ export default function OnDeviceScreen() {
       cancelled = true;
     };
   }, [probePolicy]);
+
+  const onSourceChange = useCallback((next: string) => {
+    setModelSource(next);
+    setEngineArmed(false);
+    setEngineMessage(null);
+  }, []);
 
   const backend = backendForPolicy(decision?.backend ?? null);
   const canSetup = Boolean(caps?.litertAvailable);
@@ -363,14 +484,49 @@ export default function OnDeviceScreen() {
             ) : null}
 
             {canSetup ? (
-              <ModelSetup
-                key={modelSource}
-                pathOrUrl={modelSource}
-                backend={backend}
-                decision={decision}
-                onReprobe={probePolicy}
-                onSourceChange={setModelSource}
-              />
+              <>
+                <ModelSourcePanel
+                  pathOrUrl={modelSource}
+                  backend={backend}
+                  decision={decision}
+                  engineArmed={engineArmed}
+                  onSourceChange={onSourceChange}
+                  onArmEngine={() => {
+                    setEngineMessage(null);
+                    setEngineArmed(true);
+                  }}
+                />
+                {engineArmed ? (
+                  <ModelEngineHost
+                    key={modelSource}
+                    pathOrUrl={modelSource}
+                    backend={backend}
+                    onReprobe={probePolicy}
+                    onLoaded={(detail) => {
+                      setEngineMessage(detail);
+                    }}
+                    onFailed={(message) => {
+                      setEngineArmed(false);
+                      setEngineMessage(`load failed · ${message}`);
+                    }}
+                    onUnloadRequest={() => {
+                      setEngineArmed(false);
+                      setEngineMessage(null);
+                    }}
+                  />
+                ) : null}
+                {engineMessage ? (
+                  <Text
+                    style={
+                      engineMessage.startsWith('load failed')
+                        ? styles.error
+                        : styles.meta
+                    }
+                  >
+                    {engineMessage}
+                  </Text>
+                ) : null}
+              </>
             ) : null}
           </>
         )}
