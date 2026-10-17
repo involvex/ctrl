@@ -1,5 +1,12 @@
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -41,10 +48,87 @@ import {
   saveGeneratorMode,
   type GeneratorMode,
 } from '../src/device/inference-mode';
-import { useLitertEngine } from '../src/device/use-litert-engine';
+import {
+  useLitertEngine,
+  type LitertEngineStatus,
+} from '../src/device/use-litert-engine';
 import { GhostButton, PrimaryButton, colors, fonts } from '../src/ui';
 
 const GENERATORS: GeneratorMode[] = ['litert', 'gateway', 'zen'];
+
+type LitertGenerate = (prompt: string) => Promise<string>;
+
+/** Mounts only when generator is litert — keeps useModel off gateway/zen paths. */
+function LitertEngineHost({
+  systemPrompt,
+  onStatus,
+  generateRef,
+}: {
+  systemPrompt: string;
+  onStatus: (status: LitertEngineStatus) => void;
+  generateRef: MutableRefObject<LitertGenerate | null>;
+}) {
+  const litert = useLitertEngine(systemPrompt);
+
+  useEffect(() => {
+    onStatus(litert.status);
+  }, [litert.status, onStatus]);
+
+  useEffect(() => {
+    generateRef.current = litert.generate;
+    return () => {
+      generateRef.current = null;
+    };
+  }, [generateRef, litert.generate]);
+
+  return null;
+}
+
+function deriveStatus(
+  mode: GeneratorMode,
+  hostOnline: boolean | null,
+  litert: LitertEngineStatus | null,
+  event: string | null
+): string {
+  if (event) {
+    return event;
+  }
+  if (mode === 'litert') {
+    if (litert?.unavailableReason) {
+      return `On this phone · ${litert.unavailableReason}`;
+    }
+    if (litert?.ready) {
+      return 'On this phone · model ready';
+    }
+    if (litert?.loadedOnce) {
+      return 'On this phone · loading model…';
+    }
+    return 'On this phone · send to load model';
+  }
+  if (hostOnline === false) {
+    return `${generatorLabel(mode)} · PC offline`;
+  }
+  if (hostOnline === true) {
+    return `${generatorLabel(mode)} · host online`;
+  }
+  return `${generatorLabel(mode)} · checking host…`;
+}
+
+function litertHint(litert: LitertEngineStatus | null): string {
+  if (!litert) {
+    return 'engine idle';
+  }
+  if (litert.unavailableReason) {
+    return litert.unavailableReason;
+  }
+  if (litert.ready) {
+    return 'model ready';
+  }
+  if (litert.loadedOnce) {
+    return 'loading model…';
+  }
+  return 'send to load model';
+}
 
 export default function ChatScreen() {
   const router = useRouter();
@@ -52,16 +136,19 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState('');
   const [streaming, setStreaming] = useState('');
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState('loading…');
+  const [eventStatus, setEventStatus] = useState<string | null>(null);
   const [syncLine, setSyncLine] = useState('sync · idle');
   const [syncing, setSyncing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [hostOnline, setHostOnline] = useState<boolean | null>(null);
+  const [litertStatus, setLitertStatus] = useState<LitertEngineStatus | null>(
+    null
+  );
   const gatewayConversationIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
   const brainRef = useRef<BrainState | null>(null);
-
-  const litert = useLitertEngine(brain?.persona ?? 'You are ctrl. Be concise.');
+  const syncingRef = useRef(false);
+  const litertGenerateRef = useRef<LitertGenerate | null>(null);
 
   const persist = useCallback(async (next: BrainState) => {
     brainRef.current = next;
@@ -110,31 +197,36 @@ export default function ChatScreen() {
 
   const runSync = useCallback(async () => {
     const current = brainRef.current;
-    if (!current || syncing) {
+    if (!current || syncingRef.current) {
       return;
     }
+    syncingRef.current = true;
     setSyncing(true);
     setSyncLine('sync · running…');
-    const result = await syncBrainWithGateway(current);
-    if (result.ok) {
-      brainRef.current = result.brain;
-      setBrain(result.brain);
-      const conv = result.brain.conversations.find(
-        (c) => c.id === result.brain.activeConversationId
-      );
-      if (conv?.gatewayConversationId) {
-        gatewayConversationIdRef.current = conv.gatewayConversationId;
+    try {
+      const result = await syncBrainWithGateway(current);
+      if (result.ok) {
+        brainRef.current = result.brain;
+        setBrain(result.brain);
+        const conv = result.brain.conversations.find(
+          (c) => c.id === result.brain.activeConversationId
+        );
+        if (conv?.gatewayConversationId) {
+          gatewayConversationIdRef.current = conv.gatewayConversationId;
+        }
+        setHostOnline(true);
+        setSyncLine(
+          `sync · ok · +${result.pulled} pulled · +${result.pushed} pushed`
+        );
+      } else {
+        setHostOnline(false);
+        setSyncLine(`sync · skipped · ${result.reason}`);
       }
-      setHostOnline(true);
-      setSyncLine(
-        `sync · ok · +${result.pulled} pulled · +${result.pushed} pushed`
-      );
-    } else {
-      setHostOnline(false);
-      setSyncLine(`sync · skipped · ${result.reason}`);
+    } finally {
+      syncingRef.current = false;
+      setSyncing(false);
     }
-    setSyncing(false);
-  }, [syncing]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,7 +248,7 @@ export default function ChatScreen() {
       if (conv?.gatewayConversationId) {
         gatewayConversationIdRef.current = conv.gatewayConversationId;
       }
-      setStatus(`${generatorLabel(aligned.generator)} · local brain`);
+      setEventStatus(null);
       await refreshHost();
     })();
     return () => {
@@ -167,14 +259,23 @@ export default function ChatScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let active = true;
       void (async () => {
         const online = await refreshHost();
-        if (online && brainRef.current) {
-          await runSync();
+        if (!active || !online || !brainRef.current) {
+          return;
         }
+        await runSync();
       })();
+      return () => {
+        active = false;
+      };
     }, [refreshHost, runSync])
   );
+
+  const onLitertStatus = useCallback((next: LitertEngineStatus) => {
+    setLitertStatus(next);
+  }, []);
 
   const selectGenerator = useCallback(
     async (mode: GeneratorMode) => {
@@ -186,36 +287,30 @@ export default function ChatScreen() {
       const next = setBrainGenerator(current, mode);
       await persist(next);
       await saveGeneratorMode(mode);
+      setEventStatus(null);
+      if (mode !== 'litert') {
+        setLitertStatus(null);
+      }
 
       if (mode === 'litert') {
-        if (litert.status.unavailableReason) {
-          setStatus(`On this phone · ${litert.status.unavailableReason}`);
-        } else {
-          setStatus('On this phone · ready');
-        }
         return;
       }
 
       const saved = await refreshHost();
       if (!saved) {
-        setStatus(
-          `${generatorLabel(mode)} · PC offline — chat stays local; Sync when home`
-        );
         return;
       }
       if (mode === 'zen') {
         try {
           await updateProviderConfig(saved.gatewayUrl, { active: 'zen' });
         } catch (err) {
-          setStatus(
+          setEventStatus(
             `Cloud · ${err instanceof Error ? err.message : String(err)}`
           );
-          return;
         }
       }
-      setStatus(`${generatorLabel(mode)} · host online`);
     },
-    [litert.status.unavailableReason, persist, refreshHost]
+    [persist, refreshHost]
   );
 
   const send = useCallback(() => {
@@ -227,6 +322,7 @@ export default function ChatScreen() {
     setDraft('');
     setBusy(true);
     setStreaming('');
+    setEventStatus(null);
 
     void (async () => {
       let next = appendLocalMessage(current, {
@@ -240,19 +336,25 @@ export default function ChatScreen() {
 
       if (mode === 'litert') {
         try {
-          if (litert.status.unavailableReason) {
-            throw new Error(litert.status.unavailableReason);
+          const generate = litertGenerateRef.current;
+          if (!generate) {
+            throw new Error(
+              'On-device engine starting — wait a moment, then send again.'
+            );
           }
-          const reply = await litert.generate(content);
+          if (litertStatus?.unavailableReason) {
+            throw new Error(litertStatus.unavailableReason);
+          }
+          const reply = await generate(content);
           next = appendLocalMessage(brainRef.current ?? next, {
             role: 'assistant',
             content: reply,
             origin: 'local',
           });
           await persist(next);
-          setStatus('On this phone · replied');
+          setEventStatus('On this phone · replied');
         } catch (err) {
-          setStatus(
+          setEventStatus(
             `On this phone · ${err instanceof Error ? err.message : String(err)}`
           );
         } finally {
@@ -263,7 +365,7 @@ export default function ChatScreen() {
 
       const saved = await refreshHost();
       if (!saved) {
-        setStatus(`${generatorLabel(mode)} · PC offline`);
+        setEventStatus(`${generatorLabel(mode)} · PC offline`);
         setBusy(false);
         return;
       }
@@ -304,36 +406,53 @@ export default function ChatScreen() {
                   });
                   await persist(withAssistant);
                   setStreaming('');
-                  setStatus(`${generatorLabel(mode)} · replied`);
+                  setEventStatus(`${generatorLabel(mode)} · replied`);
                   await runSync();
                 })();
               }
               if (event.type === 'run.failed') {
                 setBusy(false);
-                setStatus(event.error.message);
+                setEventStatus(event.error.message);
                 setStreaming('');
               }
             },
             onError: (err) => {
               setBusy(false);
-              setStatus(err.message);
+              setEventStatus(err.message);
             },
           }
         );
       } catch (err) {
         setBusy(false);
-        setStatus(err instanceof Error ? err.message : String(err));
+        setEventStatus(err instanceof Error ? err.message : String(err));
       }
     })();
   }, [
     busy,
     draft,
     ensureGatewayConversation,
-    litert,
+    litertStatus,
     persist,
     refreshHost,
     runSync,
   ]);
+
+  const mode = brain?.generator ?? 'litert';
+  const status = useMemo(
+    () =>
+      brain
+        ? deriveStatus(brain.generator, hostOnline, litertStatus, eventStatus)
+        : 'loading…',
+    [brain, eventStatus, hostOnline, litertStatus]
+  );
+  const detailHint =
+    mode === 'litert'
+      ? litertHint(litertStatus)
+      : hostOnline === false
+        ? 'PC offline'
+        : hostOnline === true
+          ? 'PC online'
+          : 'checking host…';
 
   if (!brain) {
     return (
@@ -344,23 +463,17 @@ export default function ChatScreen() {
   }
 
   const messages = listActiveMessages(brain);
-  const mode = brain.generator;
-  const hostHint =
-    mode === 'litert'
-      ? litert.status.unavailableReason
-        ? litert.status.unavailableReason
-        : litert.status.ready
-          ? 'model ready'
-          : 'model loading / setup needed'
-      : hostOnline === false
-        ? 'PC offline'
-        : hostOnline === true
-          ? 'PC online'
-          : 'checking host…';
 
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
+      {mode === 'litert' ? (
+        <LitertEngineHost
+          systemPrompt={brain.persona}
+          onStatus={onLitertStatus}
+          generateRef={litertGenerateRef}
+        />
+      ) : null}
       <View style={styles.top}>
         <GhostButton
           label="← back"
@@ -420,7 +533,7 @@ export default function ChatScreen() {
 
       <Text style={styles.meta}>{status}</Text>
       <Text style={styles.meta}>
-        {syncLine} · {hostHint}
+        {syncLine} · {detailHint}
       </Text>
 
       <FlatList
@@ -501,8 +614,9 @@ export default function ChatScreen() {
                 <Text style={styles.sheetRowTitle}>{generatorLabel(g)}</Text>
                 <Text style={styles.meta}>
                   {g === 'litert'
-                    ? (litert.status.unavailableReason ??
-                      'LiteRT on this phone')
+                    ? mode === 'litert'
+                      ? litertHint(litertStatus)
+                      : 'Loads only when selected'
                     : g === 'gateway'
                       ? hostOnline === false
                         ? 'PC offline'

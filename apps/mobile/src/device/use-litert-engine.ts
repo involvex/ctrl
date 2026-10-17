@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { evaluateOnDevicePolicy, type PolicyDecision } from '@involvex/ctrl-s';
 import { useModel } from 'react-native-litert-lm';
 import { backendForPolicy, probeDeviceCapabilities } from './capabilities';
@@ -14,19 +14,23 @@ export type LitertEngineStatus = {
   unavailableReason: string | null;
   decision: PolicyDecision | null;
   modelSource: string;
+  /** True after first successful load/generate attempt started. */
+  loadedOnce: boolean;
 };
 
 /**
- * Shared LiteRT engine for the single chat UI.
- * Policy failure only disables this generator — callers keep other modes.
+ * LiteRT engine for chat. Mount only when generator === 'litert'.
+ * autoLoad is always false — load on first generate to avoid OOM on chat open.
  */
 export function useLitertEngine(systemPrompt: string) {
+  // Freeze prompt at mount so brain hydrate does not remount the native engine.
+  const [frozenPrompt] = useState(systemPrompt);
   const [modelSource, setModelSource] = useState(DEFAULT_MODEL_URL);
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
-  const [capsReady, setCapsReady] = useState(false);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(
     null
   );
+  const [loadedOnce, setLoadedOnce] = useState(false);
 
   const probe = useCallback(async () => {
     const caps = await probeDeviceCapabilities();
@@ -58,9 +62,6 @@ export function useLitertEngine(systemPrompt: string) {
         setModelSource(saved);
       }
       await probe();
-      if (!cancelled) {
-        setCapsReady(true);
-      }
     })();
     return () => {
       cancelled = true;
@@ -68,17 +69,12 @@ export function useLitertEngine(systemPrompt: string) {
   }, [probe]);
 
   const backend = backendForPolicy(decision?.backend ?? null);
-  const autoLoad =
-    capsReady &&
-    Boolean(decision?.allowed) &&
-    !isRemoteModelUrl(modelSource) &&
-    !unavailableReason;
 
   const engine = useModel(modelSource, {
     backend,
-    autoLoad,
+    autoLoad: false,
     enableMemoryTracking: true,
-    systemPrompt,
+    systemPrompt: frozenPrompt,
     maxOutputTokens: 512,
     maxContextTokens: 2048,
   });
@@ -91,12 +87,13 @@ export function useLitertEngine(systemPrompt: string) {
           `On-device blocked: ${fresh.reasons.join('; ') || 'not allowed'}`
         );
       }
+      if (isRemoteModelUrl(modelSource)) {
+        throw new Error(
+          'Model not downloaded. Open Model setup to download or import a .litertlm file.'
+        );
+      }
       if (!engine.isReady) {
-        if (isRemoteModelUrl(modelSource)) {
-          throw new Error(
-            'Model not downloaded. Open Model setup to download or import a .litertlm file.'
-          );
-        }
+        setLoadedOnce(true);
         await engine.load();
       }
       return engine.generate(prompt.trim());
@@ -104,13 +101,25 @@ export function useLitertEngine(systemPrompt: string) {
     [engine, modelSource, probe]
   );
 
-  const status: LitertEngineStatus = {
-    ready: engine.isReady && !unavailableReason,
-    generating: engine.isGenerating,
-    unavailableReason: unavailableReason ?? engine.error,
-    decision,
-    modelSource,
-  };
+  const status: LitertEngineStatus = useMemo(
+    () => ({
+      ready: engine.isReady && !unavailableReason,
+      generating: engine.isGenerating,
+      unavailableReason: unavailableReason ?? engine.error,
+      decision,
+      modelSource,
+      loadedOnce: loadedOnce || engine.isReady,
+    }),
+    [
+      decision,
+      engine.error,
+      engine.isGenerating,
+      engine.isReady,
+      loadedOnce,
+      modelSource,
+      unavailableReason,
+    ]
+  );
 
   return { status, generate, probe, setModelSource };
 }

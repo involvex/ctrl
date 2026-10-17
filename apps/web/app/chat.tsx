@@ -56,6 +56,7 @@ export default function ChatScreen() {
   const gatewayConversationIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
   const brainRef = useRef<BrainState | null>(null);
+  const syncingRef = useRef(false);
 
   const persist = useCallback(async (next: BrainState) => {
     brainRef.current = next;
@@ -104,31 +105,36 @@ export default function ChatScreen() {
 
   const runSync = useCallback(async () => {
     const current = brainRef.current;
-    if (!current || syncing) {
+    if (!current || syncingRef.current) {
       return;
     }
+    syncingRef.current = true;
     setSyncing(true);
     setSyncLine('sync · running…');
-    const result = await syncBrainWithGateway(current);
-    if (result.ok) {
-      brainRef.current = result.brain;
-      setBrain(result.brain);
-      const conv = result.brain.conversations.find(
-        (c) => c.id === result.brain.activeConversationId
-      );
-      if (conv?.gatewayConversationId) {
-        gatewayConversationIdRef.current = conv.gatewayConversationId;
+    try {
+      const result = await syncBrainWithGateway(current);
+      if (result.ok) {
+        brainRef.current = result.brain;
+        setBrain(result.brain);
+        const conv = result.brain.conversations.find(
+          (c) => c.id === result.brain.activeConversationId
+        );
+        if (conv?.gatewayConversationId) {
+          gatewayConversationIdRef.current = conv.gatewayConversationId;
+        }
+        setHostOnline(true);
+        setSyncLine(
+          `sync · ok · +${result.pulled} pulled · +${result.pushed} pushed`
+        );
+      } else {
+        setHostOnline(false);
+        setSyncLine(`sync · skipped · ${result.reason}`);
       }
-      setHostOnline(true);
-      setSyncLine(
-        `sync · ok · +${result.pulled} pulled · +${result.pushed} pushed`
-      );
-    } else {
-      setHostOnline(false);
-      setSyncLine(`sync · skipped · ${result.reason}`);
+    } finally {
+      syncingRef.current = false;
+      setSyncing(false);
     }
-    setSyncing(false);
-  }, [syncing]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
