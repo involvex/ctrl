@@ -27,7 +27,10 @@
             "minSdkVersion": 26,
             "compileSdkVersion": 37,
             "targetSdkVersion": 37,
-            "buildArchs": ["arm64-v8a"]
+            "kotlinVersion": "2.3.0",
+            "buildArchs": [
+              "arm64-v8a"
+            ]
           }
         }
       ],
@@ -55,7 +58,8 @@
         {
           "iCloudContainerEnvironment": "Production"
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,
