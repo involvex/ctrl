@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import net from 'node:net';
 import path from 'node:path';
 
 export type GatewayStatus =
@@ -23,10 +24,32 @@ const HEALTH_POLL_MS = 200;
 const STOP_TIMEOUT_MS = 5_000;
 const MAX_BACKOFF_MS = 10_000;
 
-function pickPort(): number {
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.once('listening', () => {
+      server.close(() => {
+        resolve(true);
+      });
+    });
+    server.listen(port, '0.0.0.0');
+  });
+}
+
+/**
+ * Prefer 7331 so mobile / CLI defaults match the desktop host.
+ * Fall back to a high ephemeral port when 7331 is taken.
+ */
+async function pickPort(): Promise<number> {
   const fromEnv = Number(process.env['CTRL_A_PORT']);
   if (Number.isFinite(fromEnv) && fromEnv > 0) {
     return fromEnv;
+  }
+  if (await isPortFree(7331)) {
+    return 7331;
   }
   return 40_000 + Math.floor(Math.random() * 20_000);
 }
@@ -176,7 +199,7 @@ export class GatewayManager {
   }
 
   private async spawnOnce(): Promise<void> {
-    this.port = pickPort();
+    this.port = await pickPort();
     this.url = `http://127.0.0.1:${this.port}`;
 
     const { command, args, cwd } = this.resolveSpawn();

@@ -143,13 +143,17 @@ async function pair(args: string[]): Promise<void> {
   }
   process.stdout.write(`\nScan with Expo → scan pair QR\n\n`);
 
+  // Windows terminals struggle with small QR modules — use a larger glyph grid.
   const qr = await qrToString(encoded, {
     type: 'terminal',
-    small: true,
+    small: process.platform !== 'win32',
     errorCorrectionLevel: 'M',
   });
   process.stdout.write(qr);
   process.stdout.write(`\npayload  ${encoded}\n`);
+  process.stdout.write(
+    `(paste that payload into mobile Connect if the QR is hard to scan)\n`
+  );
 
   try {
     const status = await getPairingStatus(payload.gatewayUrl);

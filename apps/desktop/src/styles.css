@@ -126,6 +126,22 @@ body,
   font-size: 0.7rem;
 }
 
+.pair-qr {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--charcoal);
+}
+
+.pair-qr-img {
+  width: 180px;
+  height: 180px;
+  image-rendering: pixelated;
+  border: 1px solid var(--charcoal);
+  align-self: flex-start;
+}
+
 .actions {
   margin-left: auto;
   display: flex;

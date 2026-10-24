@@ -41,6 +41,7 @@ import {
   type ToolDefinition,
 } from '@involvex/ctrl-s';
 import { Markdown } from './markdown';
+import { PairQr } from './pair-qr';
 
 type PendingApproval = {
   approvalId: string;
@@ -853,7 +854,9 @@ export function App() {
               save key
             </button>
           </div>
-          {lanUrls.length > 0 ? (
+          {lanUrls[0] && gatewayToken ? (
+            <PairQr gatewayUrl={lanUrls[0]} token={gatewayToken} />
+          ) : lanUrls.length > 0 ? (
             <p className="meta">
               mobile: use LAN URL + Bearer token from safeStorage
             </p>

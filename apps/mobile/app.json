@@ -28,9 +28,7 @@
             "compileSdkVersion": 37,
             "targetSdkVersion": 37,
             "kotlinVersion": "2.3.0",
-            "buildArchs": [
-              "arm64-v8a"
-            ]
+            "buildArchs": ["arm64-v8a"]
           }
         }
       ],

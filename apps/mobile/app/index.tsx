@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
@@ -14,13 +14,18 @@ import {
   defaultGatewayUrl,
   guessDevHostIp,
 } from '../src/connection/dev-gateway';
-import { loadSavedConnection, saveConnection } from '../src/connection/storage';
+import {
+  connectionFromScanData,
+  loadSavedConnection,
+  saveConnection,
+} from '../src/connection/storage';
 import {
   loadGeneratorMode,
   type GeneratorMode,
 } from '../src/device/inference-mode';
 import {
   Field,
+  GhostButton,
   ModeChip,
   NavRow,
   PrimaryButton,
@@ -50,31 +55,57 @@ export default function IndexScreen() {
   const [ready, setReady] = useState(false);
   const [devHost, setDevHost] = useState<string | null>(null);
   const [inferenceMode, setInferenceMode] = useState<GeneratorMode>('litert');
+  const [pastePayload, setPastePayload] = useState('');
+  const [pasteError, setPasteError] = useState<string | null>(null);
+
+  const hydrateConnection = useCallback(async () => {
+    const guessed = guessDevHostIp();
+    setDevHost(guessed);
+    const [saved, mode] = await Promise.all([
+      loadSavedConnection(),
+      loadGeneratorMode(),
+    ]);
+    setInferenceMode(mode);
+    if (saved && !isLoopbackUrl(saved.gatewayUrl)) {
+      setGatewayUrl(saved.gatewayUrl);
+      setToken(saved.token);
+    } else if (guessed) {
+      setGatewayUrl(`http://${guessed}:7331`);
+    } else {
+      setGatewayUrl(defaultGatewayUrl());
+    }
+  }, []);
 
   useEffect(() => {
     void (async () => {
-      const guessed = guessDevHostIp();
-      setDevHost(guessed);
-      const [saved, mode] = await Promise.all([
-        loadSavedConnection(),
-        loadGeneratorMode(),
-      ]);
-      setInferenceMode(mode);
-      if (saved && !isLoopbackUrl(saved.gatewayUrl)) {
-        setGatewayUrl(saved.gatewayUrl);
-        setToken(saved.token);
-      } else if (guessed) {
-        setGatewayUrl(`http://${guessed}:7331`);
-      } else {
-        setGatewayUrl(defaultGatewayUrl());
-      }
+      await hydrateConnection();
       setReady(true);
     })();
-  }, []);
+  }, [hydrateConnection]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void hydrateConnection();
+    }, [hydrateConnection])
+  );
 
   const openChat = useCallback(() => {
     router.push('/chat' as Href);
   }, [router]);
+
+  const applyPastePayload = useCallback(() => {
+    setPasteError(null);
+    const connection = connectionFromScanData(pastePayload);
+    if (!connection) {
+      setPasteError(
+        'Not a ctrl pair payload — paste the JSON line from desktop / ctrl-f5 pair.'
+      );
+      return;
+    }
+    setGatewayUrl(connection.gatewayUrl);
+    setToken(connection.token);
+    setPastePayload('');
+  }, [pastePayload]);
 
   const connect = useCallback(async () => {
     setBusy(true);
@@ -91,8 +122,6 @@ export default function IndexScreen() {
     }
 
     try {
-      await saveConnection({ gatewayUrl: url, token: authToken });
-
       const status = await getPairingStatus(url);
       const lanHint =
         status.urls && status.urls.length > 0 ? ` · lan ${status.urls[0]}` : '';
@@ -109,6 +138,7 @@ export default function IndexScreen() {
 
       const h = await checkHealth(url);
       setHealth(`ok · ${h.version}`);
+      await saveConnection({ gatewayUrl: url, token: authToken });
 
       try {
         const items = await listWorkspaces(url);
@@ -148,13 +178,38 @@ export default function IndexScreen() {
           <PrimaryButton label="Open chat" onPress={openChat} />
         </Section>
 
-        <Section title="Connect" hint="Pair this phone with your PC gateway.">
+        <Section
+          title="Connect"
+          hint="Best path: scan the QR from desktop Host (or ctrl-f5 pair)."
+        >
+          <PrimaryButton
+            label="Scan pair QR"
+            onPress={() => {
+              router.push('/scan' as Href);
+            }}
+          />
+          <Field
+            label="Or paste pair payload"
+            hint="JSON line from desktop “copy pair payload” / ctrl-f5 pair."
+            value={pastePayload}
+            onChangeText={setPastePayload}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!busy}
+            placeholder='{"v":1,"gatewayUrl":"http://…","token":"…"}'
+          />
+          <GhostButton
+            label="Apply pasted payload"
+            onPress={applyPastePayload}
+            disabled={busy || pastePayload.trim().length === 0}
+          />
+          {pasteError ? <Text style={styles.error}>{pasteError}</Text> : null}
           <Field
             label="Gateway URL"
             hint={
               devHost
-                ? `Dev host from Metro: ${devHost} · port 7331`
-                : 'LAN IP of the machine running ctrl-a (not 127.0.0.1).'
+                ? `Dev host from Metro: ${devHost} · prefer port 7331`
+                : 'LAN IP of the PC running ctrl (not 127.0.0.1).'
             }
             value={gatewayUrl}
             onChangeText={setGatewayUrl}
@@ -165,14 +220,14 @@ export default function IndexScreen() {
           />
           <Field
             label="Pairing token"
-            hint="Optional. Required when desktop / CLI LAN auth is enabled."
+            hint="Filled by Scan / paste. Required when the PC enables LAN auth."
             value={token}
             onChangeText={setToken}
             autoCapitalize="none"
             autoCorrect={false}
             editable={!busy}
             secureTextEntry
-            placeholder="from ctrl-f5 pair / desktop host"
+            placeholder="from desktop Host / ctrl-f5 pair"
           />
           <PrimaryButton
             label="connect + verify"
@@ -204,19 +259,12 @@ export default function IndexScreen() {
           />
         </Section>
 
-        <Section title="Host" hint="PC-side providers and pairing.">
+        <Section title="Host" hint="PC-side providers once paired.">
           <NavRow
             label="Providers / settings"
             subtitle="API keys · This PC / Cloud"
             onPress={() => {
               router.push('/settings' as Href);
-            }}
-          />
-          <NavRow
-            label="Scan pair QR"
-            subtitle="Camera · LAN pairing"
-            onPress={() => {
-              router.push('/scan' as Href);
             }}
           />
         </Section>
@@ -273,5 +321,10 @@ const styles = StyleSheet.create({
   tagline: {
     color: colors.muted,
     fontFamily: fonts.mono,
+  },
+  error: {
+    color: colors.danger,
+    fontFamily: fonts.mono,
+    fontSize: 12,
   },
 });

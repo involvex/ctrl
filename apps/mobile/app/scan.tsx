@@ -21,7 +21,9 @@ const BARCODE_TYPES = ['qr'] as Array<'qr'>;
 export default function ScanPairScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
-  const [status, setStatus] = useState('point at ctrl-f5 pair QR');
+  const [status, setStatus] = useState(
+    'point at desktop Host QR (or ctrl-f5 pair)'
+  );
   const [busy, setBusy] = useState(false);
   const handled = useRef(false);
 
@@ -76,7 +78,7 @@ export default function ScanPairScreen() {
         <StatusBar style="light" />
         <Text style={styles.title}>camera permission</Text>
         <Text style={styles.meta}>
-          Needed to scan the gateway pair QR from ctrl-f5 pair.
+          Needed to scan the pair QR from desktop Host or ctrl-f5 pair.
         </Text>
         <Pressable
           style={styles.button}
