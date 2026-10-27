@@ -286,7 +286,8 @@ export default function ChatHomeScreen() {
         brainRef.current = loaded;
         setBrain(loaded);
         const conv = activeConversation(loaded);
-        gatewayConversationIdRef.current = conv?.gatewayConversationId ?? null;
+        gatewayConversationIdRef.current =
+          conv?.gatewayConversationId ?? null;
         const online = await refreshHost();
         if (!active || !online || !brainRef.current) {
           return;
