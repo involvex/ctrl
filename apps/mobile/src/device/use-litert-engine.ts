@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { evaluateOnDevicePolicy, type PolicyDecision } from '@involvex/ctrl-s';
 import { useModel } from 'react-native-litert-lm';
 import { backendForPolicy, probeDeviceCapabilities } from './capabilities';
+import { ModelRegistry } from 'react-native-litert-lm';
 import {
   DEFAULT_MODEL_URL,
   isRemoteModelUrl,
@@ -58,8 +59,27 @@ export function useLitertEngine(systemPrompt: string) {
     let cancelled = false;
     void (async () => {
       const saved = await loadSavedModelSource();
-      if (!cancelled) {
-        setModelSource(saved);
+      if (cancelled) {
+        return;
+      }
+      setModelSource(saved);
+      if (isRemoteModelUrl(saved)) {
+        setUnavailableReason(
+          'Model not downloaded. Open Model setup to download or import a .litertlm file.'
+        );
+        return;
+      }
+      let size = 0;
+      try {
+        size = ModelRegistry.getFileSizeBytes(saved);
+      } catch {
+        size = 0;
+      }
+      if (size <= 0) {
+        setUnavailableReason(
+          `Model file not readable. Re-import from Model setup.`
+        );
+        return;
       }
       await probe();
     })();
@@ -90,6 +110,17 @@ export function useLitertEngine(systemPrompt: string) {
       if (isRemoteModelUrl(modelSource)) {
         throw new Error(
           'Model not downloaded. Open Model setup to download or import a .litertlm file.'
+        );
+      }
+      let size = 0;
+      try {
+        size = ModelRegistry.getFileSizeBytes(modelSource);
+      } catch {
+        size = 0;
+      }
+      if (size <= 0) {
+        throw new Error(
+          `Model file not readable (${modelSource}). Re-import from Model setup.`
         );
       }
       if (!engine.isReady) {

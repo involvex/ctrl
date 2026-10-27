@@ -5,3 +5,4 @@ export { Field } from './Field';
 export { PrimaryButton, GhostButton } from './Buttons';
 export { StatusPanel } from './StatusPanel';
 export { ModeChip } from './ModeChip';
+export { AppDrawer } from './AppDrawer';

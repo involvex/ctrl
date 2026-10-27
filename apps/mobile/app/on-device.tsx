@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as DocumentPicker from 'expo-document-picker';
 import {
   evaluateOnDevicePolicy,
   type DeviceCapabilities,
@@ -28,7 +27,6 @@ import {
   downloadModelWithRetry,
   isRemoteModelUrl,
   loadSavedModelSource,
-  normalizeModelPath,
   saveModelSource,
 } from '../src/device/model-source';
 import {
@@ -221,32 +219,16 @@ function ModelSourcePanel({
     setBusyAction('import');
     void (async () => {
       try {
-        const result = await DocumentPicker.getDocumentAsync({
-          type: ['application/octet-stream', 'application/x-litertlm', '*/*'],
-          copyToCacheDirectory: true,
-          multiple: false,
-        });
-        if (result.canceled || !result.assets?.[0]?.uri) {
+        const { importLitertModelFromPicker } =
+          await import('../src/device/import-model');
+        const result = await importLitertModelFromPicker();
+        if (!result.ok) {
+          if (result.error !== 'Import cancelled.') {
+            setLocalError(result.error);
+          }
           return;
         }
-        const asset = result.assets[0];
-        const name = (asset.name ?? asset.uri).toLowerCase();
-        if (!name.includes('.litertlm') && !name.endsWith('.litertlm')) {
-          setLocalError(
-            'Pick a .litertlm model file (e.g. gemma-4-E2B-it.litertlm).'
-          );
-          return;
-        }
-        const localPath = normalizeModelPath(asset.uri);
-        const size = ModelRegistry.getFileSizeBytes(localPath);
-        if (size <= 0) {
-          setLocalError(
-            `Imported path not readable (${localPath}). Try copying the file into app storage first.`
-          );
-          return;
-        }
-        await saveModelSource(localPath);
-        onSourceChange(localPath);
+        onSourceChange(result.path);
       } catch (err: unknown) {
         setLocalError(err instanceof Error ? err.message : String(err));
       } finally {

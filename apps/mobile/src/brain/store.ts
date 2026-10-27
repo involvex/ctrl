@@ -16,6 +16,8 @@ export type BrainMessage = {
   createdAt: number;
   updatedAt: number;
   origin: BrainMessageOrigin;
+  /** Which provider answered (cascade tag). */
+  provider?: string;
 };
 
 export type BrainConversation = {
@@ -106,6 +108,7 @@ export function appendLocalMessage(
     role: BrainMessage['role'];
     content: string;
     origin?: BrainMessageOrigin;
+    provider?: string;
   }
 ): BrainState {
   const now = Date.now();
@@ -117,6 +120,7 @@ export function appendLocalMessage(
     createdAt: now,
     updatedAt: now,
     origin: input.origin ?? 'local',
+    provider: input.provider,
   };
   const conversations = state.conversations.map((c) => {
     if (c.id !== state.activeConversationId) {
