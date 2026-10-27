@@ -35,9 +35,12 @@ import {
   type AgentConfig,
 } from '../src/agents/config';
 import {
+  activeConversation,
   appendLocalMessage,
+  createLocalConversation,
   listActiveMessages,
   loadBrain,
+  maybeTitleFromFirstMessage,
   saveBrain,
   setBrainGenerator,
   setGatewayConversationId,
@@ -256,9 +259,7 @@ export default function ChatHomeScreen() {
       const conv = aligned.conversations.find(
         (c) => c.id === aligned.activeConversationId
       );
-      if (conv?.gatewayConversationId) {
-        gatewayConversationIdRef.current = conv.gatewayConversationId;
-      }
+      gatewayConversationIdRef.current = conv?.gatewayConversationId ?? null;
       setEventStatus(null);
       await refreshHost();
     })();
@@ -272,15 +273,20 @@ export default function ChatHomeScreen() {
     useCallback(() => {
       let active = true;
       void (async () => {
-        const [agentCfg, providers] = await Promise.all([
+        const [agentCfg, providers, loaded] = await Promise.all([
           loadAgentConfig(),
           loadProviderStack(),
+          loadBrain(),
         ]);
         if (!active) {
           return;
         }
         setAgent(agentCfg);
         setStack(providers);
+        brainRef.current = loaded;
+        setBrain(loaded);
+        const conv = activeConversation(loaded);
+        gatewayConversationIdRef.current = conv?.gatewayConversationId ?? null;
         const online = await refreshHost();
         if (!active || !online || !brainRef.current) {
           return;
@@ -292,6 +298,20 @@ export default function ChatHomeScreen() {
       };
     }, [refreshHost, runSync])
   );
+
+  const startNewChat = useCallback(() => {
+    const current = brainRef.current;
+    if (!current || busy) {
+      return;
+    }
+    void (async () => {
+      const next = createLocalConversation(current);
+      gatewayConversationIdRef.current = null;
+      await persist(next);
+      setEventStatus('new chat');
+      setStreaming('');
+    })();
+  }, [busy, persist]);
 
   const onLitertStatus = useCallback((next: LitertEngineStatus) => {
     setLitertStatus(next);
@@ -334,6 +354,7 @@ export default function ChatHomeScreen() {
         content,
         origin: 'local',
       });
+      next = maybeTitleFromFirstMessage(next, content);
       await persist(next);
 
       try {
@@ -459,14 +480,23 @@ export default function ChatHomeScreen() {
           onPress={() => setDrawerOpen(true)}
           style={styles.topBtn}
         />
-        <Text style={styles.title}>chat</Text>
-        <GhostButton
-          label={syncing ? 'sync…' : 'sync'}
-          onPress={() => {
-            void runSync();
-          }}
-          style={styles.topBtn}
-        />
+        <Text style={styles.title} numberOfLines={1}>
+          {activeConversation(brain)?.title ?? 'chat'}
+        </Text>
+        <View style={styles.topRight}>
+          <GhostButton
+            label="new"
+            onPress={startNewChat}
+            style={styles.topBtn}
+          />
+          <GhostButton
+            label={syncing ? 'sync…' : 'sync'}
+            onPress={() => {
+              void runSync();
+            }}
+            style={styles.topBtn}
+          />
+        </View>
       </View>
 
       <View style={styles.modeRow}>
@@ -578,11 +608,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   topBtn: { paddingHorizontal: 10, paddingVertical: 8 },
+  topRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   title: {
+    flex: 1,
     color: colors.accent,
     fontFamily: fonts.mono,
     fontWeight: '700',
-    fontSize: 18,
+    fontSize: 16,
+    textAlign: 'center',
   },
   modeRow: {
     flexDirection: 'row',

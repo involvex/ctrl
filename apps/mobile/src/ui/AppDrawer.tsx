@@ -17,6 +17,11 @@ export type DrawerLink = {
 
 const DEFAULT_LINKS: DrawerLink[] = [
   {
+    label: 'Conversations',
+    subtitle: 'New · history · rename',
+    href: '/conversations' as Href,
+  },
+  {
     label: 'Providers',
     subtitle: 'Order · cascade',
     href: '/providers' as Href,

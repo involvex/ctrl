@@ -170,3 +170,97 @@ export function activeConversation(
 ): BrainConversation | undefined {
   return state.conversations.find((c) => c.id === state.activeConversationId);
 }
+
+export function listConversations(state: BrainState): BrainConversation[] {
+  return state.conversations.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+export function createLocalConversation(
+  state: BrainState,
+  title = 'New chat'
+): BrainState {
+  const id = newId('conv');
+  const now = Date.now();
+  return {
+    ...state,
+    activeConversationId: id,
+    conversations: [{ id, title, updatedAt: now }, ...state.conversations],
+  };
+}
+
+export function switchConversation(
+  state: BrainState,
+  conversationId: string
+): BrainState {
+  if (!state.conversations.some((c) => c.id === conversationId)) {
+    return state;
+  }
+  return { ...state, activeConversationId: conversationId };
+}
+
+export function renameConversation(
+  state: BrainState,
+  conversationId: string,
+  title: string
+): BrainState {
+  const trimmed = title.trim() || 'Chat';
+  return {
+    ...state,
+    conversations: state.conversations.map((c) => {
+      if (c.id !== conversationId) {
+        return c;
+      }
+      return { ...c, title: trimmed, updatedAt: Date.now() };
+    }),
+  };
+}
+
+/** Delete a conversation and its messages. Keeps at least one conversation. */
+export function deleteConversation(
+  state: BrainState,
+  conversationId: string
+): BrainState {
+  if (state.conversations.length <= 1) {
+    return state;
+  }
+  const conversations = state.conversations.filter(
+    (c) => c.id !== conversationId
+  );
+  const messages = state.messages.filter(
+    (m) => m.conversationId !== conversationId
+  );
+  const activeConversationId =
+    state.activeConversationId === conversationId
+      ? (conversations[0]?.id ?? state.activeConversationId)
+      : state.activeConversationId;
+  return {
+    ...state,
+    conversations,
+    messages,
+    activeConversationId,
+  };
+}
+
+/** Set title from first user message when still the default placeholder. */
+export function maybeTitleFromFirstMessage(
+  state: BrainState,
+  userContent: string
+): BrainState {
+  const conv = activeConversation(state);
+  if (!conv) {
+    return state;
+  }
+  if (conv.title !== 'Chat' && conv.title !== 'New chat') {
+    return state;
+  }
+  // Caller should invoke after appendLocalMessage so count includes this turn.
+  const userCount = state.messages.filter(
+    (m) => m.conversationId === state.activeConversationId && m.role === 'user'
+  ).length;
+  if (userCount !== 1) {
+    return state;
+  }
+  const title =
+    userContent.trim().slice(0, 48).replace(/\s+/g, ' ') || 'New chat';
+  return renameConversation(state, conv.id, title);
+}
