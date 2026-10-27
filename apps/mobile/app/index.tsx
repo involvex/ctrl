@@ -59,6 +59,10 @@ import {
   useLitertEngine,
   type LitertEngineStatus,
 } from '../src/device/use-litert-engine';
+import {
+  attachTextFileToChat,
+  formatAttachmentDraft,
+} from '../src/chat/attach-text';
 import { isCancelledError, runProviderCascade } from '../src/providers/cascade';
 import {
   enabledProviders,
@@ -336,6 +340,29 @@ export default function ChatHomeScreen() {
     setEventStatus('cancelled');
   }, []);
 
+  const attachFile = useCallback(() => {
+    if (busy) {
+      return;
+    }
+    setEventStatus('picking file…');
+    void (async () => {
+      const result = await attachTextFileToChat({
+        gatewayConversationId: gatewayConversationIdRef.current,
+      });
+      if (!result.ok) {
+        if (result.error !== 'cancelled') {
+          setEventStatus(result.error);
+        } else {
+          setEventStatus(null);
+        }
+        return;
+      }
+      const chunk = formatAttachmentDraft(result.filename, result.text);
+      setDraft((prev) => (prev.trim() ? `${prev.trim()}\n\n${chunk}` : chunk));
+      setEventStatus(result.message);
+    })();
+  }, [busy]);
+
   const send = useCallback(() => {
     const content = draft.trim();
     const current = brainRef.current;
@@ -578,6 +605,12 @@ export default function ChatHomeScreen() {
       />
 
       <View style={styles.composer}>
+        <GhostButton
+          label="file"
+          onPress={attachFile}
+          disabled={busy}
+          style={styles.attach}
+        />
         <TextInput
           style={styles.input}
           value={draft}
@@ -701,4 +734,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.field,
   },
   send: { paddingHorizontal: 16, justifyContent: 'center' },
+  attach: { paddingHorizontal: 10, justifyContent: 'center' },
 });

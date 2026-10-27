@@ -132,3 +132,85 @@ export function modeLabel(mode: AgentMode): string {
   }
   return 'Ask';
 }
+
+export function isPresetPersonaId(id: string): boolean {
+  return PERSONA_PRESETS.some((p) => p.id === id);
+}
+
+function newPersonaId(): string {
+  return `persona_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function createPersona(
+  config: AgentConfig,
+  input: { name: string; instructions: string }
+): AgentConfig {
+  const name = input.name.trim() || 'Custom persona';
+  const instructions =
+    input.instructions.trim() ||
+    'You are a helpful assistant. Be clear and practical.';
+  const persona: AgentPersona = {
+    id: newPersonaId(),
+    name,
+    instructions,
+    updatedAt: Date.now(),
+  };
+  return {
+    ...config,
+    activePersonaId: persona.id,
+    personas: [persona, ...config.personas],
+  };
+}
+
+export function updatePersona(
+  config: AgentConfig,
+  personaId: string,
+  input: { name: string; instructions: string }
+): AgentConfig {
+  const name = input.name.trim() || 'Persona';
+  const instructions = input.instructions.trim();
+  return {
+    ...config,
+    personas: config.personas.map((p) => {
+      if (p.id !== personaId) {
+        return p;
+      }
+      return {
+        ...p,
+        name,
+        instructions,
+        updatedAt: Date.now(),
+      };
+    }),
+  };
+}
+
+/** Delete a persona. Presets can be removed locally; keeps at least one. */
+export function deletePersona(
+  config: AgentConfig,
+  personaId: string
+): AgentConfig {
+  if (config.personas.length <= 1) {
+    return config;
+  }
+  const personas = config.personas.filter((p) => p.id !== personaId);
+  const activePersonaId =
+    config.activePersonaId === personaId
+      ? (personas[0]?.id ?? config.activePersonaId)
+      : config.activePersonaId;
+  return { ...config, personas, activePersonaId };
+}
+
+export function resetPersonaToPreset(
+  config: AgentConfig,
+  personaId: string
+): AgentConfig {
+  const preset = PERSONA_PRESETS.find((p) => p.id === personaId);
+  if (!preset) {
+    return config;
+  }
+  return updatePersona(config, personaId, {
+    name: preset.name,
+    instructions: preset.instructions,
+  });
+}
