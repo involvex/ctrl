@@ -1,18 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ProviderDragList } from '../src/providers/ProviderDragList';
 import {
   loadProviderStack,
-  moveProvider,
+  reorderProviders,
   saveProviderStack,
   setProviderEnabled,
   type ProviderStack,
@@ -22,7 +16,7 @@ import { GhostButton, Section, colors, fonts } from '../src/ui';
 export default function ProvidersScreen() {
   const router = useRouter();
   const [stack, setStack] = useState<ProviderStack | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -30,14 +24,26 @@ export default function ProvidersScreen() {
     })();
   }, []);
 
-  const persist = useCallback(async (next: ProviderStack) => {
-    setStack(next);
-    setBusy(true);
-    try {
-      await saveProviderStack(next);
-    } finally {
-      setBusy(false);
-    }
+  const onReorder = useCallback((from: number, to: number) => {
+    setStack((current) => {
+      if (!current) {
+        return current;
+      }
+      const next = reorderProviders(current, from, to);
+      void saveProviderStack(next);
+      return next;
+    });
+  }, []);
+
+  const onToggle = useCallback((id: string, enabled: boolean) => {
+    setStack((current) => {
+      if (!current) {
+        return current;
+      }
+      const next = setProviderEnabled(current, id, enabled);
+      void saveProviderStack(next);
+      return next;
+    });
   }, []);
 
   if (!stack) {
@@ -51,7 +57,10 @@ export default function ProvidersScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        scrollEnabled={!dragging}
+      >
         <GhostButton
           label="← back"
           onPress={() => {
@@ -66,49 +75,13 @@ export default function ProvidersScreen() {
         </Text>
 
         <Section title="Priority order">
-          {stack.order.map((id, index) => {
-            const entry = stack.entries[id];
-            if (!entry) {
-              return null;
-            }
-            return (
-              <View key={id} style={styles.card}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.cardTitle}>
-                    {index + 1}. {entry.label}
-                  </Text>
-                  <Pressable
-                    onPress={() => {
-                      void persist(
-                        setProviderEnabled(stack, id, !entry.enabled)
-                      );
-                    }}
-                  >
-                    <Text style={styles.toggle}>
-                      {entry.enabled ? 'ON' : 'OFF'}
-                    </Text>
-                  </Pressable>
-                </View>
-                <Text style={styles.meta}>kind · {entry.kind}</Text>
-                <View style={styles.row}>
-                  <GhostButton
-                    label="↑"
-                    disabled={busy || index === 0}
-                    onPress={() => {
-                      void persist(moveProvider(stack, id, 'up'));
-                    }}
-                  />
-                  <GhostButton
-                    label="↓"
-                    disabled={busy || index === stack.order.length - 1}
-                    onPress={() => {
-                      void persist(moveProvider(stack, id, 'down'));
-                    }}
-                  />
-                </View>
-              </View>
-            );
-          })}
+          <ProviderDragList
+            stack={stack}
+            busy={dragging}
+            onDraggingChange={setDragging}
+            onReorder={onReorder}
+            onToggle={onToggle}
+          />
         </Section>
 
         <Text style={styles.meta}>
@@ -128,7 +101,7 @@ export default function ProvidersScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: 24, gap: 12 },
+  scroll: { padding: 24, gap: 12, paddingBottom: 48 },
   back: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 8 },
   title: {
     color: colors.accent,
@@ -142,30 +115,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
-  card: {
-    borderWidth: 1,
-    borderColor: colors.charcoal,
-    padding: 12,
-    gap: 8,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cardTitle: {
-    color: colors.accent,
-    fontFamily: fonts.mono,
-    fontWeight: '700',
-    fontSize: 13,
-    flex: 1,
-  },
-  toggle: {
-    color: colors.accent,
-    fontFamily: fonts.mono,
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  row: { flexDirection: 'row', gap: 8 },
 });

@@ -94,10 +94,30 @@ export function moveProvider(
   if (swapWith < 0 || swapWith >= stack.order.length) {
     return stack;
   }
+  return reorderProviders(stack, idx, swapWith);
+}
+
+/** Move the item at fromIndex to toIndex (0-based). */
+export function reorderProviders(
+  stack: ProviderStack,
+  fromIndex: number,
+  toIndex: number
+): ProviderStack {
+  if (
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= stack.order.length ||
+    toIndex >= stack.order.length
+  ) {
+    return stack;
+  }
   const order = stack.order.slice();
-  const tmp = order[idx]!;
-  order[idx] = order[swapWith]!;
-  order[swapWith] = tmp;
+  const [item] = order.splice(fromIndex, 1);
+  if (!item) {
+    return stack;
+  }
+  order.splice(toIndex, 0, item);
   return { ...stack, order };
 }
 
