@@ -19,8 +19,9 @@ import {
   type AgentConfig,
   type AgentMode,
 } from '../src/agents/config';
+import { syncAgentProfilesWithGateway } from '../src/agents/sync';
 import { loadBrain, saveBrain, setBrainPersona } from '../src/brain/store';
-import { GhostButton, Section, colors, fonts } from '../src/ui';
+import { GhostButton, PrimaryButton, Section, colors, fonts } from '../src/ui';
 
 const MODES: AgentMode[] = ['ask', 'plan', 'auto'];
 
@@ -28,6 +29,7 @@ export default function AgentsScreen() {
   const router = useRouter();
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [busy, setBusy] = useState(false);
+  const [syncLine, setSyncLine] = useState('sync · idle');
 
   useEffect(() => {
     void (async () => {
@@ -46,6 +48,33 @@ export default function AgentsScreen() {
       setBusy(false);
     }
   }, []);
+
+  const runSync = useCallback(() => {
+    if (!config || busy) {
+      return;
+    }
+    setBusy(true);
+    setSyncLine('sync · running…');
+    void (async () => {
+      try {
+        const result = await syncAgentProfilesWithGateway(config);
+        if (result.ok) {
+          setConfig(result.config);
+          const brain = await loadBrain();
+          await saveBrain(
+            setBrainPersona(brain, buildSystemPrompt(result.config))
+          );
+          setSyncLine(
+            `sync · ok · +${result.pulled} pulled · +${result.pushed} pushed`
+          );
+        } else {
+          setSyncLine(`sync · skipped · ${result.reason}`);
+        }
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, [busy, config]);
 
   if (!config) {
     return (
@@ -70,6 +99,14 @@ export default function AgentsScreen() {
         <Text style={styles.meta}>
           Mode and persona shape the system prompt for every generator.
         </Text>
+
+        <Section title="PC sync">
+          <Text style={styles.meta}>
+            Round-trip personas with the paired gateway agent_profiles.
+          </Text>
+          <PrimaryButton label="sync personas" busy={busy} onPress={runSync} />
+          <Text style={styles.meta}>{syncLine}</Text>
+        </Section>
 
         <Section title="Mode">
           <View style={styles.modeRow}>

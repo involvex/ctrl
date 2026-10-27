@@ -8,6 +8,7 @@ import {
 } from '@involvex/ctrl-r';
 import {
   clientControlMessageSchema,
+  createAgentProfileInputSchema,
   createAttachmentInputSchema,
   createBackupInputSchema,
   restoreBackupInputSchema,
@@ -21,6 +22,7 @@ import {
   inboundWebhookSchema,
   knowledgeSearchInputSchema,
   sendChannelMessageInputSchema,
+  updateAgentProfileInputSchema,
   updateMemoryInputSchema,
   updateProviderConfigInputSchema,
   upsertIdentityInputSchema,
@@ -449,6 +451,28 @@ export async function startServer(): Promise<StartedGateway> {
 
         if (req.method === 'GET' && url.pathname === '/api/v1/profiles') {
           return json(req, { items: store.listAgentProfiles() });
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/v1/profiles') {
+          const body: unknown = await req.json();
+          const input = createAgentProfileInputSchema.parse(body);
+          return json(req, store.createAgentProfile(input), 201);
+        }
+
+        const profileMatch = /^\/api\/v1\/profiles\/([^/]+)$/.exec(
+          url.pathname
+        );
+        if (profileMatch && req.method === 'PATCH') {
+          const profileId = profileMatch[1]!;
+          const body: unknown = await req.json();
+          const input = updateAgentProfileInputSchema.parse(body);
+          try {
+            return json(req, store.updateAgentProfile(profileId, input));
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const status = message.includes('not found') ? 404 : 400;
+            return json(req, { error: message }, status);
+          }
         }
 
         if (req.method === 'GET' && url.pathname === '/api/v1/audit') {

@@ -1,11 +1,13 @@
 import {
   agentEventSchema,
+  agentProfileSchema,
   attachmentSchema,
   channelIdentitySchema,
   channelMessageSchema,
   channelPublicSchema,
   contextInspectSchema,
   conversationSchema,
+  createAgentProfileInputSchema,
   createBackupInputSchema,
   healthResponseSchema,
   hostBackupManifestSchema,
@@ -17,10 +19,12 @@ import {
   pairingStatusSchema,
   providerStatusResponseSchema,
   toolDefinitionSchema,
+  updateAgentProfileInputSchema,
   updateProviderConfigInputSchema,
   workspaceExportSchema,
   workspaceSchema,
   type AgentEvent,
+  type AgentProfile,
   type Attachment,
   type ChannelIdentity,
   type ChannelKind,
@@ -57,6 +61,7 @@ export {
 } from './auth';
 
 export type {
+  AgentProfile,
   CreateBackupInput,
   HostBackupManifest,
   HostBackupSnapshot,
@@ -148,6 +153,56 @@ export async function listTools(baseUrl: string): Promise<ToolDefinition[]> {
   return z
     .object({ items: z.array(toolDefinitionSchema) })
     .parse(await readJson(res)).items;
+}
+
+export async function listAgentProfiles(
+  baseUrl: string
+): Promise<AgentProfile[]> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/profiles`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`listAgentProfiles failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(agentProfileSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function createAgentProfile(
+  baseUrl: string,
+  input: z.infer<typeof createAgentProfileInputSchema>
+): Promise<AgentProfile> {
+  const body = createAgentProfileInputSchema.parse(input);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/profiles`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`createAgentProfile failed: ${res.status}`);
+  }
+  return agentProfileSchema.parse(await readJson(res));
+}
+
+export async function updateAgentProfile(
+  baseUrl: string,
+  profileId: string,
+  input: z.infer<typeof updateAgentProfileInputSchema>
+): Promise<AgentProfile> {
+  const body = updateAgentProfileInputSchema.parse(input);
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/profiles/${encodeURIComponent(profileId)}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`updateAgentProfile failed: ${res.status}`);
+  }
+  return agentProfileSchema.parse(await readJson(res));
 }
 
 export async function listMcpServers(

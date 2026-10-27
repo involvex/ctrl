@@ -8,6 +8,9 @@ export type AgentPersona = {
   id: string;
   name: string;
   instructions: string;
+  /** Linked gateway agent_profiles row when synced. */
+  gatewayProfileId?: string;
+  updatedAt?: number;
 };
 
 export type AgentConfig = {

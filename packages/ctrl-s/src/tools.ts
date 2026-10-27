@@ -38,6 +38,14 @@ export const createAgentProfileInputSchema = z.object({
   runTimeoutMs: z.number().int().positive().optional(),
 });
 
+export const updateAgentProfileInputSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  instructions: z.string().max(20_000).optional(),
+  toolNames: z.array(z.string()).optional(),
+  requireApprovalFor: z.array(z.string()).optional(),
+  runTimeoutMs: z.number().int().positive().optional(),
+});
+
 export const auditActionSchema = z.enum([
   'run.started',
   'run.completed',

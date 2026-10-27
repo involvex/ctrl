@@ -36,6 +36,7 @@ export {
   toolDefinitionSchema,
   agentProfileSchema,
   createAgentProfileInputSchema,
+  updateAgentProfileInputSchema,
   auditActionSchema,
   auditEntrySchema,
   clientControlMessageSchema,

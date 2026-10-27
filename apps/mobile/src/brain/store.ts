@@ -172,9 +172,7 @@ export function activeConversation(
 }
 
 export function listConversations(state: BrainState): BrainConversation[] {
-  return state.conversations
-    .slice()
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  return state.conversations.slice().sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export function createLocalConversation(
@@ -186,10 +184,7 @@ export function createLocalConversation(
   return {
     ...state,
     activeConversationId: id,
-    conversations: [
-      { id, title, updatedAt: now },
-      ...state.conversations,
-    ],
+    conversations: [{ id, title, updatedAt: now }, ...state.conversations],
   };
 }
 
@@ -260,8 +255,7 @@ export function maybeTitleFromFirstMessage(
   }
   // Caller should invoke after appendLocalMessage so count includes this turn.
   const userCount = state.messages.filter(
-    (m) =>
-      m.conversationId === state.activeConversationId && m.role === 'user'
+    (m) => m.conversationId === state.activeConversationId && m.role === 'user'
   ).length;
   if (userCount !== 1) {
     return state;

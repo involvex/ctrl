@@ -367,6 +367,54 @@ export class Store {
     return profile;
   }
 
+  getAgentProfile(profileId: string): AgentProfile | null {
+    return this.listAgentProfiles().find((p) => p.id === profileId) ?? null;
+  }
+
+  updateAgentProfile(
+    profileId: string,
+    input: {
+      name?: string;
+      instructions?: string;
+      toolNames?: string[];
+      requireApprovalFor?: string[];
+      runTimeoutMs?: number;
+    }
+  ): AgentProfile {
+    const existing = this.getAgentProfile(profileId);
+    if (!existing) {
+      throw new Error(`agent profile not found: ${profileId}`);
+    }
+    const now = Date.now();
+    const profile = agentProfileSchema.parse({
+      ...existing,
+      name: input.name ?? existing.name,
+      instructions: input.instructions ?? existing.instructions,
+      toolNames: input.toolNames ?? existing.toolNames,
+      requireApprovalFor:
+        input.requireApprovalFor ?? existing.requireApprovalFor,
+      runTimeoutMs: input.runTimeoutMs ?? existing.runTimeoutMs,
+      updatedAt: now,
+    });
+    this.db
+      .query(
+        `UPDATE agent_profiles SET
+          name = ?, instructions = ?, tool_names = ?,
+          require_approval_for = ?, run_timeout_ms = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        profile.name,
+        profile.instructions,
+        JSON.stringify(profile.toolNames),
+        JSON.stringify(profile.requireApprovalFor),
+        profile.runTimeoutMs,
+        profile.updatedAt,
+        profile.id
+      );
+    return profile;
+  }
+
   appendAudit(entry: {
     workspaceId?: string | null;
     conversationId?: string | null;
