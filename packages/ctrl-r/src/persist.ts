@@ -37,6 +37,8 @@ export const persistedProviderSchema = z.object({
   litert: z
     .object({
       modelId: z.string().optional(),
+      baseUrl: z.string().url().optional(),
+      model: z.string().optional(),
     })
     .optional(),
   device: z
@@ -83,7 +85,11 @@ export function savePersistedProvider(
       ...(config.llama.model ? { model: config.llama.model } : {}),
       ...(config.llama.baseUrl ? { baseUrl: config.llama.baseUrl } : {}),
     },
-    litert: config.litert.modelId ? { modelId: config.litert.modelId } : {},
+    litert: {
+      ...(config.litert.modelId ? { modelId: config.litert.modelId } : {}),
+      ...(config.litert.baseUrl ? { baseUrl: config.litert.baseUrl } : {}),
+      ...(config.litert.model ? { model: config.litert.model } : {}),
+    },
     device: deviceUrl ? { gatewayUrl: deviceUrl } : {},
   };
   mkdirSync(path.dirname(filePath), { recursive: true });
@@ -123,6 +129,10 @@ export function applyPersistedToConfig(
       ...(persisted.litert?.modelId
         ? { modelId: persisted.litert.modelId }
         : {}),
+      ...(persisted.litert?.baseUrl
+        ? { baseUrl: persisted.litert.baseUrl }
+        : {}),
+      ...(persisted.litert?.model ? { model: persisted.litert.model } : {}),
     },
     device: {
       ...base.device,

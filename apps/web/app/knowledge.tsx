@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -217,7 +217,7 @@ export default function KnowledgeScreen() {
           <Text style={styles.body}>{preview}</Text>
         </View>
       ) : null}
-      <Pressable onPress={() => router.push('/tools' as Href)}>
+      <Pressable onPress={() => router.push('/tools')}>
         <Text style={styles.link}>tools / MCP →</Text>
       </Pressable>
     </ScrollView>

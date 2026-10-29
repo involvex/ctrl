@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -519,7 +519,7 @@ export default function OnDeviceScreen() {
             onPress={() => {
               void (async () => {
                 await saveGeneratorMode('litert');
-                router.push('/chat' as Href);
+                router.push('/chat');
               })();
             }}
           />
@@ -527,13 +527,13 @@ export default function OnDeviceScreen() {
             label="Open chat"
             subtitle="Always /chat — pick generator there"
             onPress={() => {
-              router.push('/chat' as Href);
+              router.push('/chat');
             }}
           />
           <NavRow
             label="Provider settings"
             onPress={() => {
-              router.push('/settings' as Href);
+              router.push('/settings');
             }}
           />
         </Section>

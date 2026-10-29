@@ -4,6 +4,7 @@ import {
   ZEN_BASE_URL,
   ZEN_DEFAULT_MODEL,
   providerConfigSchema,
+  type LocalBackendInfo,
   type ProviderConfig,
   type ProviderDescriptor,
   type ProviderId,
@@ -57,7 +58,7 @@ function initialConfig(env: NodeJS.ProcessEnv): ProviderConfig {
     explicit === 'mock'
   ) {
     active =
-      explicit === 'openai-compatible' ? 'openai' : (explicit as ProviderId);
+      explicit === 'openai-compatible' ? 'openai' : (explicit);
   } else if (env['CTRL_OPENAI_API_KEY'] ?? env['OPENAI_API_KEY']) {
     active = 'openai';
   }
@@ -80,10 +81,16 @@ function initialConfig(env: NodeJS.ProcessEnv): ProviderConfig {
     },
     llama: {
       model: env['CTRL_LLAMA_MODEL'] ?? 'local',
-      baseUrl: env['CTRL_OPENAI_BASE_URL'] ?? 'http://127.0.0.1:8080/v1',
+      baseUrl:
+        env['CTRL_LLAMA_BASE_URL'] ??
+        env['CTRL_OPENAI_BASE_URL'] ??
+        'http://127.0.0.1:8080/v1',
     },
     litert: {
       modelId: env['CTRL_LITERT_MODEL'] ?? 'GEMMA_4_E2B_IT',
+      baseUrl:
+        env['CTRL_LITERT_LM_BASE_URL'] ?? 'http://127.0.0.1:9379/v1',
+      model: env['CTRL_LITERT_LM_MODEL'],
     },
     device: {
       gatewayUrl: env['CTRL_DEVICE_GATEWAY_URL'],
@@ -150,8 +157,22 @@ function buildProvider(
         defaultModel: modelOverride ?? config.llama.model ?? 'local',
       });
     }
-    case 'litert':
+    case 'litert': {
+      const litertBase = config.litert.baseUrl?.trim();
+      if (litertBase) {
+        return new OpenAICompatibleProvider({
+          id: 'litert',
+          apiKey: secrets.openai ?? 'local',
+          baseUrl: litertBase,
+          defaultModel:
+            modelOverride ??
+            config.litert.model ??
+            config.litert.modelId ??
+            'local',
+        });
+      }
       return new LiteRTProvider(config.litert.modelId);
+    }
     case 'device': {
       const url = config.device.gatewayUrl;
       if (!url) {
@@ -210,7 +231,34 @@ export class ProviderRuntime {
     return this.config;
   }
 
-  status(): ProviderStatusResponse {
+  /** List models for the active provider, or a specific catalog id. */
+  async listModels(
+    providerId?: ProviderId
+  ): Promise<Array<{ id: string; displayName?: string }>> {
+    const target = providerId ?? this.config.active;
+    if (target === this.config.active) {
+      const models = await this.provider.listModels();
+      return models.map((m) => ({
+        id: m.id,
+        displayName: m.displayName,
+      }));
+    }
+    const prev = this.config.active;
+    try {
+      this.config = { ...this.config, active: target };
+      const temp = this.safeBuild();
+      const models = await temp.listModels();
+      return models.map((m) => ({
+        id: m.id,
+        displayName: m.displayName,
+      }));
+    } finally {
+      this.config = { ...this.config, active: prev };
+      this.provider = this.safeBuild();
+    }
+  }
+
+  status(localBackends?: LocalBackendInfo[]): ProviderStatusResponse {
     const providers = listProviderCatalog().map((entry) => {
       const configured = this.isConfigured(entry.id);
       const available = this.isAvailable(entry.id);
@@ -230,6 +278,7 @@ export class ProviderRuntime {
       model: this.config.model,
       config: this.publicConfig(),
       providers,
+      ...(localBackends ? { localBackends } : {}),
     };
   }
 
@@ -294,6 +343,8 @@ export class ProviderRuntime {
         ...this.config,
         litert: {
           modelId: input.litert.modelId ?? this.config.litert.modelId,
+          baseUrl: input.litert.baseUrl ?? this.config.litert.baseUrl,
+          model: input.litert.model ?? this.config.litert.model,
         },
       };
     }
@@ -371,16 +422,16 @@ export class ProviderRuntime {
   private isConfigured(id: ProviderId): boolean {
     switch (id) {
       case 'mock':
-      case 'litert':
+      case 'llama':
         return true;
+      case 'litert':
+        return Boolean(this.config.litert.baseUrl?.trim());
       case 'openai':
         return Boolean(this.secrets.openai);
       case 'zen':
         return Boolean(this.secrets.zen ?? this.secrets.openai);
       case 'kilo':
         return Boolean(this.secrets.kilo ?? this.secrets.openai);
-      case 'llama':
-        return true;
       case 'device':
         return Boolean(this.deviceGatewayUrl ?? this.config.device.gatewayUrl);
       default:
@@ -390,14 +441,14 @@ export class ProviderRuntime {
 
   private isAvailable(id: ProviderId): boolean {
     if (id === 'litert') {
-      return false; // gateway process — use mobile
+      return Boolean(this.config.litert.baseUrl?.trim());
     }
     return this.isConfigured(id) || id === 'mock' || id === 'llama';
   }
 
   private unavailableReason(id: ProviderId): string | undefined {
-    if (id === 'litert') {
-      return 'LiteRT runs on mobile only';
+    if (id === 'litert' && !this.config.litert.baseUrl?.trim()) {
+      return 'Start litert-lm on the PC (default :9379) or use LiteRT on mobile';
     }
     if (!this.isConfigured(id)) {
       return 'not configured';

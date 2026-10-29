@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -158,14 +158,14 @@ export default function ChannelsScreen() {
 
         <Pressable
           onPress={() => {
-            router.push('/tools' as Href);
+            router.push('/tools');
           }}
         >
           <Text style={styles.link}>tools / MCP →</Text>
         </Pressable>
         <Pressable
           onPress={() => {
-            router.push('/chat' as Href);
+            router.push('/chat');
           }}
         >
           <Text style={styles.link}>chat →</Text>

@@ -26,4 +26,15 @@ contextBridge.exposeInMainWorld('ctrlDesktop', {
     ipcRenderer.invoke('secrets:setOpenAiKey', key),
   hasOpenAiKey: (): Promise<boolean> =>
     ipcRenderer.invoke('secrets:hasOpenAiKey'),
+  listLocalBackends: (): Promise<unknown> =>
+    ipcRenderer.invoke('localBackends:list'),
+  startLocalBackend: (id: string): Promise<unknown> =>
+    ipcRenderer.invoke('localBackends:start', id),
+  stopLocalBackend: (id: string): Promise<unknown> =>
+    ipcRenderer.invoke('localBackends:stop', id),
+  setLocalBackendBin: (
+    id: string,
+    binPath: string
+  ): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke('localBackends:setBin', { id, binPath }),
 });

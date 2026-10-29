@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  ackPairing,
   checkHealth,
   clearClientAuth,
   getPairingStatus,
@@ -124,6 +125,11 @@ export default function ConnectScreen() {
       const h = await checkHealth(url);
       setHealth(`ok · ${h.version}`);
       await saveConnection({ gatewayUrl: url, token: authToken });
+      try {
+        await ackPairing(url, { label: 'expo-connect' });
+      } catch {
+        // Best-effort for CLI pair exit.
+      }
 
       try {
         const items = await listWorkspaces(url);
@@ -135,7 +141,23 @@ export default function ConnectScreen() {
       }
       setBusy(false);
     } catch (err) {
-      setHealth(err instanceof Error ? err.message : String(err));
+      const host = (() => {
+        try {
+          return new URL(url).host;
+        } catch {
+          return url;
+        }
+      })();
+      const detail = err instanceof Error ? err.message : String(err);
+      const refused =
+        /ECONNREFUSED|Network request failed|Failed to fetch|unreachable/i.test(
+          detail
+        );
+      setHealth(
+        refused
+          ? `${host} unreachable (${detail}). Checklist: gateway running · same Wi‑Fi · Windows firewall allows port · use PC LAN IP (not 127.0.0.1)`
+          : `${host}: ${detail}`
+      );
       setBusy(false);
     }
   }, [gatewayUrl, token]);
@@ -172,7 +194,7 @@ export default function ConnectScreen() {
           <PrimaryButton
             label="Scan pair QR"
             onPress={() => {
-              router.push('/scan' as Href);
+              router.push('/scan');
             }}
           />
           <Field

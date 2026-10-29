@@ -32,7 +32,7 @@ function usage(): never {
 start/stop/status  Manage local ctrl-a gateway (pid under data/ctrl-a.pid).
 chat               One-shot or interactive TTY chat against a running gateway.
 backup             Host snapshot list / create / restore (optional --passphrase).
-pair               Print LAN QR; stays open until Ctrl+C for Expo scan.
+pair               Print LAN QR; exits 0 after phone pairing ack (or Ctrl+C).
 completion         Print shell tab-completion script (eval / source it).
 
 Env: CTRL_A_URL, CTRL_A_HOST, CTRL_GATEWAY_TOKEN, CTRL_BACKUP_PASSPHRASE, PORT, CTRL_DATA_DIR, CTRL_REPO_ROOT
@@ -170,18 +170,45 @@ async function pair(args: string[]): Promise<void> {
     );
   }
 
+  const startedAt = Date.now();
   process.stdout.write(
-    `\nWaiting for Expo scan — leave this open, Ctrl+C when done.\n`
+    `\nWaiting for phone pairing ack — Ctrl+C to cancel.\n`
   );
 
   await new Promise<void>((resolve) => {
-    const stop = (signal: string) => {
-      process.stdout.write(`\npair stopped (${signal})\n`);
+    let settled = false;
+    const finish = (msg: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearInterval(timer);
+      process.stdout.write(`\n${msg}\n`);
       resolve();
     };
+    const stop = (signal: string) => finish(`pair stopped (${signal})`);
     process.once('SIGINT', () => stop('SIGINT'));
     process.once('SIGTERM', () => stop('SIGTERM'));
     process.once('SIGBREAK', () => stop('SIGBREAK'));
+
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          const status = await getPairingStatus(payload.gatewayUrl);
+          const ackAt = status.lastAck?.at
+            ? Date.parse(status.lastAck.at)
+            : NaN;
+          if (Number.isFinite(ackAt) && ackAt >= startedAt - 2_000) {
+            const label = status.lastAck?.label
+              ? ` · ${status.lastAck.label}`
+              : '';
+            finish(`paired${label}`);
+          }
+        } catch {
+          // Gateway may restart briefly; keep polling.
+        }
+      })();
+    }, 1_000);
   });
 }
 

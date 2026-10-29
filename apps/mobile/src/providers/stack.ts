@@ -20,12 +20,12 @@ export type ProviderStack = {
 };
 
 export const DEFAULT_PROVIDER_STACK: ProviderStack = {
-  order: ['zen', 'gateway', 'litert'],
+  order: ['litert', 'gateway', 'zen'],
   entries: {
-    zen: {
-      id: 'zen',
-      label: 'Cloud (Zen / Kilo)',
-      kind: 'zen',
+    litert: {
+      id: 'litert',
+      label: 'On this phone',
+      kind: 'litert',
       enabled: true,
     },
     gateway: {
@@ -34,14 +34,36 @@ export const DEFAULT_PROVIDER_STACK: ProviderStack = {
       kind: 'gateway',
       enabled: true,
     },
-    litert: {
-      id: 'litert',
-      label: 'On this phone',
-      kind: 'litert',
+    zen: {
+      id: 'zen',
+      label: 'Cloud (Zen / Kilo)',
+      kind: 'zen',
       enabled: true,
     },
   },
 };
+
+/**
+ * Scope cascade to the user's generator chip.
+ * litert → on-device only; gateway/zen → host providers first, litert fallback last.
+ */
+export function providersForGenerator(
+  stack: ProviderStack,
+  generator: GeneratorMode
+): ProviderEntry[] {
+  const enabled = enabledProviders(stack);
+  if (generator === 'litert') {
+    const local = enabled.filter((p) => p.kind === 'litert');
+    if (local.length > 0) {
+      return local;
+    }
+    const litert = stack.entries['litert'];
+    return litert ? [{ ...litert, enabled: true }] : [];
+  }
+  const host = enabled.filter((p) => p.kind !== 'litert');
+  const local = enabled.filter((p) => p.kind === 'litert');
+  return [...host, ...local];
+}
 
 function isStack(value: unknown): value is ProviderStack {
   if (!value || typeof value !== 'object') {

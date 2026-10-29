@@ -33,9 +33,10 @@ describe('ProviderRuntime', () => {
     expect(runtime.getProvider().id).toBe('kilo');
   });
 
-  test('litert available=false on gateway runtime', () => {
+  test('litert available when litert-lm baseUrl is set (PC path)', () => {
     const runtime = new ProviderRuntime(emptyEnv);
     const litert = runtime.status().providers.find((p) => p.id === 'litert');
-    expect(litert?.available).toBe(false);
+    expect(litert?.available).toBe(true);
+    expect(litert?.configured).toBe(true);
   });
 });

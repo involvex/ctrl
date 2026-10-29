@@ -34,4 +34,18 @@ export {
   type LlamaSidecarConfig,
   type LlamaSidecarStatus,
 } from './llama-sidecar';
+export {
+  LitertLmSidecar,
+  createLitertLmSidecarFromEnv,
+  LITERT_LM_DEFAULT_PORT,
+  type LitertLmSidecarConfig,
+  type LitertLmSidecarStatus,
+} from './litert-sidecar';
+export {
+  LocalOpenAiSidecar,
+  probeOpenAiModels,
+  waitForOpenAi,
+  type LocalOpenAiSidecarConfig,
+  type LocalOpenAiSidecarStatus,
+} from './local-openai-sidecar';
 export { evaluateOnDevicePolicy } from './on-device-policy';

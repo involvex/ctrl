@@ -104,6 +104,25 @@ export async function getPairingStatus(
   return pairingStatusSchema.parse(await res.json());
 }
 
+/** Tell the gateway a phone finished health + save (CLI pair can exit). */
+export async function ackPairing(
+  baseUrl: string,
+  input: { label?: string } = {}
+): Promise<{ ok: boolean; lastAck: { at: string; label?: string } }> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/pairing/ack`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new Error(`pairing ack failed: ${res.status} ${res.statusText}`);
+  }
+  return (await res.json()) as {
+    ok: boolean;
+    lastAck: { at: string; label?: string };
+  };
+}
+
 export type { ProviderStatusResponse, UpdateProviderConfigInput };
 
 export async function getProviderStatus(
@@ -116,6 +135,26 @@ export async function getProviderStatus(
     throw new Error(`getProviderStatus failed: ${res.status}`);
   }
   return providerStatusResponseSchema.parse(await readJson(res));
+}
+
+export async function listModels(
+  baseUrl: string,
+  provider?: string
+): Promise<{
+  provider: string;
+  items: Array<{ id: string; displayName?: string }>;
+}> {
+  const qs = provider ? `?provider=${encodeURIComponent(provider)}` : '';
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/models${qs}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`listModels failed: ${res.status}`);
+  }
+  return (await readJson(res)) as {
+    provider: string;
+    items: Array<{ id: string; displayName?: string }>;
+  };
 }
 
 export async function updateProviderConfig(

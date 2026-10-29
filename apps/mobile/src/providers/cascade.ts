@@ -172,11 +172,11 @@ export async function runProviderCascade(
 
   for (const provider of providers) {
     throwIfCancelled(cb.isCancelled);
-    cb.onStatus(`trying ${provider.label}…`);
-    cb.onDelta('');
 
     try {
       if (provider.kind === 'litert') {
+        cb.onStatus(`${provider.label}…`);
+        cb.onDelta('');
         if (cb.litertUnavailable) {
           throw new Error(cb.litertUnavailable);
         }
@@ -196,8 +196,13 @@ export async function runProviderCascade(
       }
 
       if (!cb.gatewayUrl) {
-        throw new Error('PC offline');
+        // Skip cloud/PC quickly when unpaired — do not flash "trying Cloud…".
+        lastError = new Error('PC offline');
+        continue;
       }
+
+      cb.onStatus(`trying ${provider.label}…`);
+      cb.onDelta('');
 
       if (provider.kind === 'zen' || provider.kind === 'openai') {
         await updateProviderConfig(cb.gatewayUrl, { active: 'zen' });

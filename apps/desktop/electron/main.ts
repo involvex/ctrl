@@ -3,11 +3,13 @@ import path from 'node:path';
 import { getAutostart, setAutostart } from './autostart';
 import { GatewayManager } from './gateway-manager';
 import { registerDesktopIpc } from './ipc';
+import { LocalBackendsManager } from './local-backends';
 import { SecretVault } from './secrets';
 import { createAppTray } from './tray';
 import { UpdateManager } from './updater';
 
 let gateway: GatewayManager | null = null;
+let localBackends: LocalBackendsManager | null = null;
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 let vault: SecretVault | null = null;
@@ -83,6 +85,7 @@ async function bootstrap(): Promise<void> {
   await app.whenReady();
 
   vault = new SecretVault();
+  localBackends = new LocalBackendsManager();
   const envExtra: Record<string, string> = {};
   try {
     if (vault.isAvailable()) {
@@ -92,12 +95,20 @@ async function bootstrap(): Promise<void> {
         envExtra['CTRL_OPENAI_API_KEY'] = openaiKey;
         envExtra['CTRL_PROVIDER'] = process.env['CTRL_PROVIDER'] ?? 'openai';
       }
+      for (const id of ['llama', 'litert-lm'] as const) {
+        const bin = vault.get(`localBin:${id}`);
+        if (bin) {
+          localBackends.setBinPath(id, bin);
+        }
+      }
     }
   } catch (err) {
     process.stderr.write(
       `[ctrl-desktop] safeStorage unavailable: ${err instanceof Error ? err.message : String(err)}\n`
     );
   }
+
+  Object.assign(envExtra, await localBackends.envExtras());
 
   gateway = new GatewayManager({
     repoRoot: resolveRepoRoot(),
@@ -113,6 +124,7 @@ async function bootstrap(): Promise<void> {
     gateway,
     vault,
     updates,
+    localBackends,
     getAutostart,
     setAutostart,
   });
@@ -146,10 +158,14 @@ app.on('before-quit', (event) => {
     isQuitting = true;
   }
   if (!gateway || gateway.getStatus().state === 'stopped') {
+    void localBackends?.stopAll();
     return;
   }
   event.preventDefault();
-  void gateway.stop().finally(() => {
+  void Promise.all([
+    gateway.stop(),
+    localBackends?.stopAll() ?? Promise.resolve(),
+  ]).finally(() => {
     app.exit(0);
   });
 });

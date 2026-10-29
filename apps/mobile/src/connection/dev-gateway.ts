@@ -26,7 +26,7 @@ export function guessDevHostIp(): string | null {
     return fromConfig;
   }
 
-  const go = Constants.expoGoConfig as { debuggerHost?: string } | null;
+  const go = Constants.expoGoConfig;
   const fromGo = hostFromUri(go?.debuggerHost ?? null);
   if (fromGo) {
     return fromGo;

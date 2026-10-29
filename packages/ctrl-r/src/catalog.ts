@@ -63,11 +63,13 @@ const CATALOG: Record<
   },
   litert: {
     id: 'litert',
-    label: 'On-device LiteRT',
+    label: 'LiteRT / litert-lm',
     kind: 'on-device-litert',
-    description: 'Run Gemma / LiteRT models on the phone (mobile).',
-    surfaces: ['mobile'],
+    description:
+      'Phone: on-device JNI. PC: OpenAI-compatible litert-lm (default :9379/v1).',
+    surfaces: ['mobile', 'gateway', 'desktop'],
     requiresApiKey: false,
+    defaultBaseUrl: 'http://127.0.0.1:9379/v1',
     defaultModel: 'GEMMA_4_E2B_IT',
   },
   device: {

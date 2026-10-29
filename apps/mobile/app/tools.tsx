@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -125,10 +125,10 @@ export default function ToolsScreen() {
           <Text style={styles.meta}>no tools registered</Text>
         ) : null}
 
-        <Pressable onPress={() => router.push('/knowledge' as Href)}>
+        <Pressable onPress={() => router.push('/knowledge')}>
           <Text style={styles.link}>knowledge / memory →</Text>
         </Pressable>
-        <Pressable onPress={() => router.push('/chat' as Href)}>
+        <Pressable onPress={() => router.push('/chat')}>
           <Text style={styles.link}>chat →</Text>
         </Pressable>
       </ScrollView>

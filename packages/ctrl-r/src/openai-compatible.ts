@@ -67,13 +67,38 @@ export class OpenAICompatibleProvider implements ModelProvider {
     return Promise.resolve({ streaming: true, tools: true });
   }
 
-  listModels(): Promise<ModelDescriptor[]> {
-    return Promise.resolve([
+  async listModels(): Promise<ModelDescriptor[]> {
+    try {
+      const res = await fetch(`${this.baseUrl}/models`, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      });
+      if (!res.ok) {
+        return [
+          {
+            id: this.defaultModel,
+            displayName: this.defaultModel,
+          },
+        ];
+      }
+      const body = (await res.json()) as {
+        data?: Array<{ id?: string; owned_by?: string }>;
+      };
+      const models = (body.data ?? [])
+        .map((row) => row.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+        .map((id) => ({ id, displayName: id }));
+      if (models.length > 0) {
+        return models;
+      }
+    } catch {
+      // fall through to default
+    }
+    return [
       {
         id: this.defaultModel,
         displayName: this.defaultModel,
       },
-    ]);
+    ];
   }
 
   async *generate(

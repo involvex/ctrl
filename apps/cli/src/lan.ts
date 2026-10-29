@@ -1,27 +1,34 @@
 import os from 'node:os';
 
-/** Prefer home Wi‑Fi / Ethernet over VPN / Hyper-V / Docker bridges. */
-function scoreLanAddress(ip: string): number {
+/** Interface names that usually are not phone-reachable Wi‑Fi / Ethernet. */
+const DEMOTE_IFACE =
+  /vethernet|hyper-v|docker|wsl|vbox|vmware|virtualbox|tailscale|zerotier|vpn|hamachi|radmin|npcap|loopback/i;
+
+function scoreLanEntry(ip: string, ifaceName: string): number {
+  let score = 0;
   if (ip.startsWith('192.168.')) {
-    return 300;
-  }
-  if (ip.startsWith('10.')) {
-    return 200;
-  }
-  const m = /^172\.(\d+)\./.exec(ip);
-  if (m) {
-    const octet = Number(m[1]);
-    if (octet >= 16 && octet <= 31) {
-      return 150;
+    score = 300;
+  } else if (ip.startsWith('10.')) {
+    score = 200;
+  } else {
+    const m = /^172\.(\d+)\./.exec(ip);
+    if (m) {
+      const octet = Number(m[1]);
+      if (octet >= 16 && octet <= 31) {
+        score = 150;
+      }
     }
   }
-  return 0;
+  if (DEMOTE_IFACE.test(ifaceName)) {
+    score -= 250;
+  }
+  return score;
 }
 
 export function listLanAddresses(): string[] {
   const nets = os.networkInterfaces();
-  const out: string[] = [];
-  for (const entries of Object.values(nets)) {
+  const scored: Array<{ ip: string; score: number }> = [];
+  for (const [ifaceName, entries] of Object.entries(nets)) {
     if (!entries) {
       continue;
     }
@@ -32,12 +39,15 @@ export function listLanAddresses(): string[] {
       if (entry.address.startsWith('169.254.')) {
         continue;
       }
-      out.push(entry.address);
+      scored.push({
+        ip: entry.address,
+        score: scoreLanEntry(entry.address, ifaceName),
+      });
     }
   }
-  return [...out].sort(
-    (a, b) => scoreLanAddress(b) - scoreLanAddress(a) || a.localeCompare(b)
-  );
+  return [...scored]
+    .sort((a, b) => b.score - a.score || a.ip.localeCompare(b.ip))
+    .map((row) => row.ip);
 }
 
 export function pickLanUrl(port: number, preferredHost?: string): string {

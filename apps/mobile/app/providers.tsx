@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { listModels } from '@involvex/ctrl-i';
+import { loadSavedConnection } from '../src/connection/storage';
 import { ProviderDragList } from '../src/providers/ProviderDragList';
 import {
   loadProviderStack,
@@ -17,11 +19,30 @@ export default function ProvidersScreen() {
   const router = useRouter();
   const [stack, setStack] = useState<ProviderStack | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [remoteModels, setRemoteModels] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
       setStack(await loadProviderStack());
     })();
+  }, []);
+
+  const refreshRemoteModels = useCallback(async () => {
+    const saved = await loadSavedConnection();
+    if (!saved?.gatewayUrl) {
+      setRemoteModels('PC offline — pair first to list remote models.');
+      return;
+    }
+    try {
+      const listed = await listModels(saved.gatewayUrl);
+      setRemoteModels(
+        listed.items.length === 0
+          ? `${listed.provider} · no models`
+          : `${listed.provider} · ${listed.items.map((m) => m.id).join(', ')}`
+      );
+    } catch (err) {
+      setRemoteModels(err instanceof Error ? err.message : String(err));
+    }
   }, []);
 
   const onReorder = useCallback((from: number, to: number) => {
@@ -82,6 +103,23 @@ export default function ProvidersScreen() {
             onReorder={onReorder}
             onToggle={onToggle}
           />
+        </Section>
+
+        <Section title="PC model list">
+          <GhostButton
+            label="Refresh remote models"
+            onPress={() => {
+              void refreshRemoteModels();
+            }}
+          />
+          {remoteModels ? (
+            <Text style={styles.meta}>{remoteModels}</Text>
+          ) : (
+            <Text style={styles.meta}>
+              When paired, refresh lists models from the PC gateway
+              (llama / litert-lm).
+            </Text>
+          )}
         </Section>
 
         <Text style={styles.meta}>

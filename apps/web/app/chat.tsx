@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -348,7 +348,7 @@ export default function ChatScreen() {
         </View>
         <Pressable
           onPress={() => {
-            router.push('/settings' as Href);
+            router.push('/settings');
           }}
         >
           <Text style={styles.link}>providers</Text>

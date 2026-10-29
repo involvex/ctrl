@@ -138,10 +138,14 @@ export {
 export {
   pairPayloadSchema,
   pairingStatusSchema,
+  pairingAckSchema,
+  pairingAckInputSchema,
   encodePairPayload,
   parsePairPayload,
   type PairPayload,
   type PairingStatus,
+  type PairingAck,
+  type PairingAckInput,
 } from './pairing';
 
 export {
@@ -151,12 +155,16 @@ export {
   providerConfigSchema,
   updateProviderConfigInputSchema,
   providerStatusResponseSchema,
+  localBackendInfoSchema,
+  modelsListResponseSchema,
   ZEN_BASE_URL,
   KILO_BASE_URL,
   ZEN_DEFAULT_MODEL,
   KILO_DEFAULT_MODEL,
   type ProviderId,
   type ProviderKind,
+  type LocalBackendInfo,
+  type ModelsListResponse,
   type ProviderDescriptor,
   type ProviderConfig,
   type UpdateProviderConfigInput,

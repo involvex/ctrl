@@ -1,4 +1,4 @@
-import { Link, type Href } from 'expo-router';
+import { Link } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -142,19 +142,19 @@ export default function IndexScreen() {
         demo [{streamState}]: {streamText || '…'}
       </Text>
       <View style={styles.nav}>
-        <Link href={'/chat' as Href} style={styles.link}>
+        <Link href={'/chat'} style={styles.link}>
           chat →
         </Link>
-        <Link href={'/settings' as Href} style={styles.link}>
+        <Link href={'/settings'} style={styles.link}>
           providers →
         </Link>
-        <Link href={'/knowledge' as Href} style={styles.link}>
+        <Link href={'/knowledge'} style={styles.link}>
           knowledge →
         </Link>
-        <Link href={'/tools' as Href} style={styles.link}>
+        <Link href={'/tools'} style={styles.link}>
           tools / MCP →
         </Link>
-        <Link href={'/channels' as Href} style={styles.link}>
+        <Link href={'/channels'} style={styles.link}>
           channels →
         </Link>
       </View>

@@ -3,6 +3,10 @@ import { z } from 'zod';
 import type { AutostartSettings } from './autostart';
 import type { GatewayManager, GatewayStatus } from './gateway-manager';
 import { listLanAddresses } from './lan';
+import type {
+  LocalBackendId,
+  LocalBackendsManager,
+} from './local-backends';
 import type { SecretVault } from './secrets';
 import type { UpdateManager, UpdateStatus } from './updater';
 
@@ -30,6 +34,7 @@ export type DesktopIpcDeps = {
   gateway: GatewayManager;
   vault: SecretVault | null;
   updates: UpdateManager;
+  localBackends: LocalBackendsManager;
   getAutostart: () => AutostartSettings;
   setAutostart: (next: { openAtLogin: boolean }) => AutostartSettings;
 };
@@ -98,5 +103,33 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
       return false;
     }
     return deps.vault.get('openaiApiKey') !== null;
+  });
+
+  const backendIdSchema = z.enum(['llama', 'litert-lm']);
+
+  ipcMain.handle('localBackends:list', () => deps.localBackends.snapshot());
+
+  ipcMain.handle('localBackends:start', async (_e, raw: unknown) => {
+    const id: LocalBackendId = backendIdSchema.parse(raw);
+    return deps.localBackends.start(id);
+  });
+
+  ipcMain.handle('localBackends:stop', async (_e, raw: unknown) => {
+    const id: LocalBackendId = backendIdSchema.parse(raw);
+    return deps.localBackends.stop(id);
+  });
+
+  ipcMain.handle('localBackends:setBin', (_e, raw: unknown) => {
+    const input = z
+      .object({
+        id: backendIdSchema,
+        binPath: z.string().min(1),
+      })
+      .parse(raw);
+    deps.localBackends.setBinPath(input.id, input.binPath);
+    if (deps.vault?.isAvailable()) {
+      deps.vault.set(`localBin:${input.id}`, input.binPath);
+    }
+    return { ok: true };
   });
 }

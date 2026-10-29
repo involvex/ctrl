@@ -1,4 +1,4 @@
-import { useRouter, type Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -83,7 +83,7 @@ export default function SettingsScreen() {
   }, [refresh]);
 
   const openChat = useCallback(() => {
-    router.push('/chat' as Href);
+    router.push('/chat');
   }, [router]);
 
   const select = useCallback(
@@ -249,7 +249,7 @@ export default function SettingsScreen() {
           label="Model setup"
           subtitle="LiteRT download · import · policy"
           onPress={() => {
-            router.push('/on-device' as Href);
+            router.push('/on-device');
           }}
         />
       </ScrollView>

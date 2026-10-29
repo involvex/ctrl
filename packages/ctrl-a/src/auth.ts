@@ -35,6 +35,7 @@ export function isPublicPath(pathname: string): boolean {
   return (
     pathname === '/healthz' ||
     pathname === '/api/v1/pairing' ||
+    pathname === '/api/v1/pairing/ack' ||
     pathname.startsWith('/hooks/v1/')
   );
 }

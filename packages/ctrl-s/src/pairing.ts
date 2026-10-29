@@ -33,6 +33,19 @@ export function parsePairPayload(raw: string): PairPayload | null {
   }
 }
 
+export const pairingAckSchema = z.object({
+  at: z.string().datetime(),
+  label: z.string().min(1).max(120).optional(),
+});
+
+export type PairingAck = z.infer<typeof pairingAckSchema>;
+
+export const pairingAckInputSchema = z.object({
+  label: z.string().min(1).max(120).optional(),
+});
+
+export type PairingAckInput = z.infer<typeof pairingAckInputSchema>;
+
 export const pairingStatusSchema = z.object({
   required: z.boolean(),
   port: z.number().int().positive().optional(),
@@ -43,6 +56,18 @@ export const pairingStatusSchema = z.object({
     })
     .passthrough()
     .optional(),
+  localBackends: z
+    .array(
+      z.object({
+        id: z.enum(['llama', 'litert-lm']),
+        port: z.number().int().positive(),
+        running: z.boolean(),
+        baseUrl: z.string().url().optional(),
+        modelsPreview: z.array(z.string()).default([]),
+      })
+    )
+    .optional(),
+  lastAck: pairingAckSchema.optional().nullable(),
 });
 
 export type PairingStatus = z.infer<typeof pairingStatusSchema>;

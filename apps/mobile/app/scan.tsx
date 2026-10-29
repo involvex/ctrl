@@ -10,7 +10,12 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { checkHealth, getPairingStatus, setClientAuth } from '@involvex/ctrl-i';
+import {
+  ackPairing,
+  checkHealth,
+  getPairingStatus,
+  setClientAuth,
+} from '@involvex/ctrl-i';
 import {
   connectionFromScanData,
   saveConnection,
@@ -47,6 +52,11 @@ export default function ScanPairScreen() {
         await saveConnection(connection);
         const pairing = await getPairingStatus(connection.gatewayUrl);
         const health = await checkHealth(connection.gatewayUrl);
+        try {
+          await ackPairing(connection.gatewayUrl, { label: 'expo-scan' });
+        } catch {
+          // Ack is best-effort for CLI exit; connection already saved.
+        }
         setStatus(
           `ok · ${health.service} ${health.version} · auth ${pairing.required ? 'required' : 'open'}`
         );
@@ -56,8 +66,17 @@ export default function ScanPairScreen() {
       } catch (err) {
         handled.current = false;
         setBusy(false);
+        const host = (() => {
+          try {
+            return new URL(connection.gatewayUrl).host;
+          } catch {
+            return connection.gatewayUrl;
+          }
+        })();
+        const detail = err instanceof Error ? err.message : String(err);
         setStatus(
-          `failed: ${err instanceof Error ? err.message : String(err)}`
+          `failed @ ${host}: ${detail}\n` +
+            'Check: gateway running · same Wi‑Fi · firewall · LAN IP (not 127.0.0.1)'
         );
       }
     },

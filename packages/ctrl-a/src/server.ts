@@ -2,8 +2,11 @@ import { ChannelManager } from '@involvex/ctrl-c';
 import { assembleContextPreview, ingestAttachment } from '@involvex/ctrl-k';
 import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
 import {
+  createLitertLmSidecarFromEnv,
   createLlamaSidecarFromEnv,
   createProviderRuntime,
+  probeOpenAiModels,
+  type LitertLmSidecar,
   type LlamaSidecar,
 } from '@involvex/ctrl-r';
 import {
@@ -21,6 +24,8 @@ import {
   healthResponseSchema,
   inboundWebhookSchema,
   knowledgeSearchInputSchema,
+  pairingAckInputSchema,
+  providerIdSchema,
   sendChannelMessageInputSchema,
   updateAgentProfileInputSchema,
   updateMemoryInputSchema,
@@ -30,6 +35,8 @@ import {
   type AgentEvent,
   type CreateAttachmentInput,
   type HealthResponse,
+  type LocalBackendInfo,
+  type PairingAck,
 } from '@involvex/ctrl-s';
 import {
   createApprovalGate,
@@ -225,17 +232,20 @@ export async function startServer(): Promise<StartedGateway> {
   channels.startWorker(750);
 
   let llama: LlamaSidecar | null = null;
+  let litertLm: LitertLmSidecar | null = null;
   try {
     llama = createLlamaSidecarFromEnv();
     if (llama) {
       const { baseUrl } = await llama.start();
-      process.env['CTRL_OPENAI_BASE_URL'] = baseUrl;
+      process.env['CTRL_LLAMA_BASE_URL'] = baseUrl;
+      process.env['CTRL_OPENAI_BASE_URL'] =
+        process.env['CTRL_OPENAI_BASE_URL'] ?? baseUrl;
       process.env['CTRL_OPENAI_API_KEY'] =
         process.env['CTRL_OPENAI_API_KEY'] ??
         process.env['OPENAI_API_KEY'] ??
         'local';
       if (!process.env['CTRL_PROVIDER']) {
-        process.env['CTRL_PROVIDER'] = 'openai';
+        process.env['CTRL_PROVIDER'] = 'llama';
       }
       process.stderr.write(`[ctrl-a] llama-server ${baseUrl}\n`);
     }
@@ -244,6 +254,27 @@ export async function startServer(): Promise<StartedGateway> {
       `[ctrl-a] llama-server failed: ${err instanceof Error ? err.message : String(err)}\n`
     );
     llama = null;
+  }
+
+  try {
+    litertLm = createLitertLmSidecarFromEnv();
+    if (litertLm) {
+      const { baseUrl } = await litertLm.start();
+      process.env['CTRL_LITERT_LM_BASE_URL'] = baseUrl;
+      process.env['CTRL_OPENAI_API_KEY'] =
+        process.env['CTRL_OPENAI_API_KEY'] ??
+        process.env['OPENAI_API_KEY'] ??
+        'local';
+      if (!process.env['CTRL_PROVIDER']) {
+        process.env['CTRL_PROVIDER'] = 'litert';
+      }
+      process.stderr.write(`[ctrl-a] litert-lm ${baseUrl}\n`);
+    }
+  } catch (err) {
+    process.stderr.write(
+      `[ctrl-a] litert-lm failed: ${err instanceof Error ? err.message : String(err)}\n`
+    );
+    litertLm = null;
   }
 
   const providerRuntime = createProviderRuntime(process.env, {
@@ -256,6 +287,68 @@ export async function startServer(): Promise<StartedGateway> {
   await mcp.connectConfigured();
   mcp.mountOn(registry);
   const profile = store.ensureDefaultProfile(registry.listNames());
+  let lastPairingAck: PairingAck | null = null;
+
+  async function collectLocalBackends(): Promise<LocalBackendInfo[]> {
+    const candidates: Array<{
+      id: 'llama' | 'litert-lm';
+      port: number;
+      baseUrl: string;
+      sidecar: LlamaSidecar | LitertLmSidecar | null;
+    }> = [
+      {
+        id: 'llama',
+        port: llama?.getPort() ?? 8080,
+        baseUrl: llama?.getBaseUrl() ?? 'http://127.0.0.1:8080/v1',
+        sidecar: llama,
+      },
+      {
+        id: 'litert-lm',
+        port: litertLm?.getPort() ?? 9379,
+        baseUrl: litertLm?.getBaseUrl() ?? 'http://127.0.0.1:9379/v1',
+        sidecar: litertLm,
+      },
+    ];
+    const out: LocalBackendInfo[] = [];
+    for (const c of candidates) {
+      const sidecarState = c.sidecar?.getStatus().state;
+      let running = sidecarState === 'running';
+      let modelsPreview: string[] = [];
+      if (!running) {
+        const probe = await probeOpenAiModels(c.baseUrl);
+        if (probe.ok) {
+          running = true;
+          modelsPreview = probe.models.slice(0, 8);
+        }
+      } else {
+        const probe = await probeOpenAiModels(c.baseUrl);
+        if (probe.ok) {
+          modelsPreview = probe.models.slice(0, 8);
+        }
+      }
+      out.push({
+        id: c.id,
+        port: c.port,
+        running,
+        baseUrl: c.baseUrl,
+        modelsPreview,
+        binFound: Boolean(c.sidecar),
+        ...(c.id === 'llama' && !c.sidecar
+          ? {
+              installHint:
+                'Install llama-server and set CTRL_LLAMA_BIN (or Start from desktop Host).',
+            }
+          : {}),
+        ...(c.id === 'litert-lm' && !c.sidecar
+          ? {
+              installHint:
+                'Install litert-lm and set CTRL_LITERT_LM_BIN (or Start from desktop Host).',
+            }
+          : {}),
+      });
+    }
+    return out;
+  }
 
   process.stderr.write(
     `[ctrl-a] provider ${providerRuntime.getProvider().id}\n`
@@ -296,12 +389,29 @@ export async function startServer(): Promise<StartedGateway> {
         }
 
         if (req.method === 'GET' && url.pathname === '/api/v1/pairing') {
+          const localBackends = await collectLocalBackends();
           return json(req, {
             required: Boolean(expectedToken),
             port,
             urls: listLanGatewayUrls(port),
             llama: llama?.getStatus() ?? { state: 'stopped' },
+            localBackends,
+            lastAck: lastPairingAck,
           });
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/v1/pairing/ack') {
+          const body = pairingAckInputSchema.parse(
+            await req.json().catch(() => ({}))
+          );
+          lastPairingAck = {
+            at: new Date().toISOString(),
+            ...(body.label ? { label: body.label } : {}),
+          };
+          process.stderr.write(
+            `[ctrl-a] pairing ack${body.label ? ` · ${body.label}` : ''}\n`
+          );
+          return json(req, { ok: true, lastAck: lastPairingAck });
         }
 
         if (req.method === 'GET' && url.pathname === '/api/v1/tools') {
@@ -309,7 +419,8 @@ export async function startServer(): Promise<StartedGateway> {
         }
 
         if (req.method === 'GET' && url.pathname === '/api/v1/provider') {
-          return json(req, providerRuntime.status());
+          const localBackends = await collectLocalBackends();
+          return json(req, providerRuntime.status(localBackends));
         }
 
         if (req.method === 'PATCH' && url.pathname === '/api/v1/provider') {
@@ -318,7 +429,20 @@ export async function startServer(): Promise<StartedGateway> {
           process.stderr.write(
             `[ctrl-a] provider → ${providerRuntime.getProvider().id}\n`
           );
-          return json(req, status);
+          const localBackends = await collectLocalBackends();
+          return json(req, { ...status, localBackends });
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/v1/models') {
+          const rawProvider = url.searchParams.get('provider');
+          const provider = rawProvider
+            ? providerIdSchema.parse(rawProvider)
+            : undefined;
+          const items = await providerRuntime.listModels(provider);
+          return json(req, {
+            provider: provider ?? providerRuntime.getConfig().active,
+            items,
+          });
         }
 
         const workspaceAttachments =
@@ -992,6 +1116,7 @@ export async function startServer(): Promise<StartedGateway> {
       channels.stopWorker();
       await mcp.close().catch(() => undefined);
       await llama?.stop().catch(() => undefined);
+      await litertLm?.stop().catch(() => undefined);
       await Promise.resolve(server.stop(true));
       db.close();
     } catch (err) {

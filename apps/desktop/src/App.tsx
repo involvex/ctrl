@@ -15,6 +15,7 @@ import {
   listMemory,
   listMessages,
   listTools,
+  listModels,
   listWorkspaces,
   restoreBackup,
   searchKnowledge,
@@ -80,6 +81,25 @@ type DesktopApi = {
   rotateGatewayToken: () => Promise<string | null>;
   setOpenAiKey: (key: string) => Promise<{ ok: boolean }>;
   hasOpenAiKey: () => Promise<boolean>;
+  listLocalBackends: () => Promise<LocalBackendRow[]>;
+  startLocalBackend: (id: string) => Promise<LocalBackendRow>;
+  stopLocalBackend: (id: string) => Promise<LocalBackendRow>;
+  setLocalBackendBin: (
+    id: string,
+    binPath: string
+  ) => Promise<{ ok: boolean }>;
+};
+
+type LocalBackendRow = {
+  id: string;
+  port: number;
+  running: boolean;
+  baseUrl: string;
+  modelsPreview: string[];
+  binFound: boolean;
+  binPath: string | null;
+  installHint: string;
+  error?: string;
 };
 
 declare global {
@@ -126,6 +146,10 @@ export function App() {
   const [backupPassphrase, setBackupPassphrase] = useState('');
   const [providerStatus, setProviderStatus] =
     useState<ProviderStatusResponse | null>(null);
+  const [localBackends, setLocalBackends] = useState<LocalBackendRow[]>([]);
+  const [modelItems, setModelItems] = useState<
+    Array<{ id: string; displayName?: string }>
+  >([]);
   const [providerKeyDraft, setProviderKeyDraft] = useState('');
   const [providerModelDraft, setProviderModelDraft] = useState('');
   const [toolItems, setToolItems] = useState<ToolDefinition[]>([]);
@@ -277,6 +301,30 @@ export function App() {
     };
   }, [openPanel]);
 
+  const refreshLocalBackends = useCallback(async () => {
+    const api = window.ctrlDesktop;
+    if (!api?.listLocalBackends) {
+      return;
+    }
+    try {
+      setLocalBackends(await api.listLocalBackends());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  const refreshModels = useCallback(async () => {
+    if (!gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      const listed = await listModels(gatewayUrl);
+      setModelItems(listed.items);
+    } catch {
+      setModelItems([]);
+    }
+  }, [gatewayUrl]);
+
   const refreshProviders = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {
       return;
@@ -285,10 +333,12 @@ export function App() {
       const provider = await getProviderStatus(gatewayUrl);
       setProviderStatus(provider);
       setProviderModelDraft(provider.model ?? '');
+      await refreshLocalBackends();
+      await refreshModels();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [gatewayUrl]);
+  }, [gatewayUrl, refreshLocalBackends, refreshModels]);
 
   const refreshTools = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {
@@ -656,7 +706,9 @@ export function App() {
             type="button"
             className={`ghost-btn${hostOpen ? ' ghost-btn-active' : ''}`}
             onClick={() => {
-              togglePanel('host');
+              togglePanel('host', () => {
+                void refreshLocalBackends();
+              });
             }}
           >
             host
@@ -854,13 +906,122 @@ export function App() {
               save key
             </button>
           </div>
-          {lanUrls[0] && gatewayToken ? (
-            <PairQr gatewayUrl={lanUrls[0]} token={gatewayToken} />
+          {gatewayToken ? (
+            <>
+              <PairQr
+                gatewayUrl={
+                  lanUrls[0] ??
+                  (gatewayUrl.startsWith('http')
+                    ? gatewayUrl
+                    : 'http://127.0.0.1:7331')
+                }
+                token={gatewayToken}
+              />
+              {lanUrls.length === 0 ? (
+                <p className="meta warn">
+                  No LAN IP detected — phone needs the PC Wi‑Fi/Ethernet
+                  address (loopback QR will not reach from another device).
+                </p>
+              ) : null}
+            </>
           ) : lanUrls.length > 0 ? (
             <p className="meta">
               mobile: use LAN URL + Bearer token from safeStorage
             </p>
           ) : null}
+
+          <p className="host-title">local models</p>
+          <p className="meta">
+            Detect llama-server (:8080) and litert-lm (:9379). Start uses a
+            binary already on this PC — no in-app download.
+          </p>
+          <div className="host-row">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void refreshLocalBackends();
+              }}
+            >
+              detect
+            </button>
+          </div>
+          <ul className="knowledge-list">
+            {localBackends.map((b) => (
+              <li key={b.id}>
+                <code>{b.id}</code> :{b.port}{' '}
+                {b.running ? '● running' : '○ stopped'}
+                {b.binFound ? ` · ${b.binPath ?? 'on PATH'}` : ' · binary missing'}
+                {b.modelsPreview.length > 0
+                  ? ` · ${b.modelsPreview.slice(0, 3).join(', ')}`
+                  : ''}
+                <div className="host-row">
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={!b.binFound || b.running}
+                    onClick={() => {
+                      void (async () => {
+                        const row =
+                          await window.ctrlDesktop?.startLocalBackend(b.id);
+                        if (row) {
+                          await refreshLocalBackends();
+                          const active =
+                            b.id === 'llama' ? 'llama' : 'litert';
+                          await updateProviderConfig(gatewayUrl, {
+                            active,
+                            ...(b.id === 'llama'
+                              ? { llama: { baseUrl: row.baseUrl } }
+                              : { litert: { baseUrl: row.baseUrl } }),
+                          });
+                          await refreshProviders();
+                        }
+                      })();
+                    }}
+                  >
+                    start
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={!b.running}
+                    onClick={() => {
+                      void (async () => {
+                        await window.ctrlDesktop?.stopLocalBackend(b.id);
+                        await refreshLocalBackends();
+                      })();
+                    }}
+                  >
+                    stop
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={!b.running}
+                    onClick={() => {
+                      void (async () => {
+                        const active =
+                          b.id === 'llama' ? 'llama' : 'litert';
+                        await updateProviderConfig(gatewayUrl, {
+                          active,
+                          ...(b.id === 'llama'
+                            ? { llama: { baseUrl: b.baseUrl } }
+                            : { litert: { baseUrl: b.baseUrl } }),
+                        });
+                        await refreshProviders();
+                      })();
+                    }}
+                  >
+                    use
+                  </button>
+                </div>
+                {!b.binFound ? (
+                  <p className="meta warn">{b.installHint}</p>
+                ) : null}
+                {b.error ? <p className="meta warn">{b.error}</p> : null}
+              </li>
+            ))}
+          </ul>
         </aside>
       ) : null}
 
@@ -916,9 +1077,52 @@ export function App() {
               </li>
             ))}
           </ul>
+          <p className="host-title">model browser</p>
           <p className="meta">
-            zen → opencode.ai/zen · kilo → ai-gateway.kilo.ai · llama → local
-            sidecar · litert → mobile on-device · device → paired gateway
+            Models from the active OpenAI-compatible endpoint
+            {providerStatus?.active ? ` (${providerStatus.active})` : ''}.
+          </p>
+          <div className="host-row">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void refreshModels();
+              }}
+            >
+              refresh models
+            </button>
+          </div>
+          <ul className="knowledge-list">
+            {modelItems.length === 0 ? (
+              <li className="meta">no models listed — start a local backend</li>
+            ) : (
+              modelItems.map((m) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => {
+                      void (async () => {
+                        setProviderModelDraft(m.id);
+                        const provider = await updateProviderConfig(
+                          gatewayUrl,
+                          { model: m.id }
+                        );
+                        setProviderStatus(provider);
+                      })();
+                    }}
+                  >
+                    {providerStatus?.model === m.id ? '●' : '○'}{' '}
+                    {m.displayName ?? m.id}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+          <p className="meta">
+            zen → opencode.ai/zen · kilo → ai-gateway.kilo.ai · llama → :8080 ·
+            litert → litert-lm :9379 (PC) / on-device (phone)
           </p>
         </aside>
       ) : null}

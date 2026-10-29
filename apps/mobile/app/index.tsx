@@ -65,8 +65,8 @@ import {
 } from '../src/chat/attach-text';
 import { isCancelledError, runProviderCascade } from '../src/providers/cascade';
 import {
-  enabledProviders,
   loadProviderStack,
+  providersForGenerator,
   providerKindToGenerator,
   type ProviderStack,
 } from '../src/providers/stack';
@@ -385,14 +385,18 @@ export default function ChatHomeScreen() {
       await persist(next);
 
       try {
-        const providers = enabledProviders(
-          stack ?? (await loadProviderStack())
+        const preferred =
+          brainRef.current?.generator ?? (await loadGeneratorMode());
+        const providers = providersForGenerator(
+          stack ?? (await loadProviderStack()),
+          preferred
         );
         if (providers.length === 0) {
           throw new Error('No providers enabled — open Providers in the menu.');
         }
 
-        const saved = await refreshHost();
+        const saved =
+          preferred === 'litert' ? await loadSavedConnection() : await refreshHost();
         const agentCfg = agent ?? (await loadAgentConfig());
         const result = await runProviderCascade(providers, content, {
           onStatus: (line) => {
@@ -425,11 +429,17 @@ export default function ChatHomeScreen() {
           return;
         }
 
-        const gen = providerKindToGenerator(
-          providers.find((p) => p.id === result.providerId)?.kind ?? 'litert'
-        );
-        next = setBrainGenerator(brainRef.current ?? next, gen);
-        await saveGeneratorMode(gen);
+        // Keep explicit "On this phone" / host chip; only sync generator when
+        // cascade among host providers produced a sibling win.
+        if (preferred !== 'litert') {
+          const gen = providerKindToGenerator(
+            providers.find((p) => p.id === result.providerId)?.kind ?? preferred
+          );
+          if (gen !== 'litert' || result.origin === 'gateway') {
+            next = setBrainGenerator(brainRef.current ?? next, gen);
+            await saveGeneratorMode(gen);
+          }
+        }
         next = appendLocalMessage(next, {
           role: 'assistant',
           content: result.text,

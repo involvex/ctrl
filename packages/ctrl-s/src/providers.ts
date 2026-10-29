@@ -72,6 +72,9 @@ export const providerConfigSchema = z.object({
   litert: z
     .object({
       modelId: z.string().optional(),
+      /** PC litert-lm OpenAI-compatible base (e.g. http://127.0.0.1:9379/v1). */
+      baseUrl: z.string().url().optional(),
+      model: z.string().optional(),
     })
     .default({}),
   device: z
@@ -118,6 +121,8 @@ export const updateProviderConfigInputSchema = z.object({
   litert: z
     .object({
       modelId: z.string().optional(),
+      baseUrl: z.string().url().optional(),
+      model: z.string().optional(),
     })
     .optional(),
   device: z
@@ -129,6 +134,30 @@ export const updateProviderConfigInputSchema = z.object({
     .optional(),
 });
 
+export const localBackendInfoSchema = z.object({
+  id: z.enum(['llama', 'litert-lm']),
+  port: z.number().int().positive(),
+  running: z.boolean(),
+  baseUrl: z.string().url().optional(),
+  modelsPreview: z.array(z.string()).default([]),
+  binFound: z.boolean().optional(),
+  installHint: z.string().optional(),
+});
+
+export type LocalBackendInfo = z.infer<typeof localBackendInfoSchema>;
+
+export const modelsListResponseSchema = z.object({
+  provider: providerIdSchema,
+  items: z.array(
+    z.object({
+      id: z.string(),
+      displayName: z.string().optional(),
+    })
+  ),
+});
+
+export type ModelsListResponse = z.infer<typeof modelsListResponseSchema>;
+
 export type UpdateProviderConfigInput = z.infer<
   typeof updateProviderConfigInputSchema
 >;
@@ -138,6 +167,7 @@ export const providerStatusResponseSchema = z.object({
   model: z.string().optional(),
   config: providerConfigSchema,
   providers: z.array(providerDescriptorSchema),
+  localBackends: z.array(localBackendInfoSchema).optional(),
 });
 
 export type ProviderStatusResponse = z.infer<
