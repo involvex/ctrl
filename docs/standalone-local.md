@@ -4,10 +4,10 @@ Each device can chat without the other. Pairing is optional for sync / cloud.
 
 ## Matrix
 
-| Device | Without the other | With the other |
-|--------|-------------------|----------------|
-| Phone | LiteRT chat + local personas/conversations | Cascade / sync / knowledge ingest |
-| PC | Local llama / litert-lm / openai key | Mobile as optional device provider |
+| Device | Without the other                          | With the other                     |
+| ------ | ------------------------------------------ | ---------------------------------- |
+| Phone  | LiteRT chat + local personas/conversations | Cascade / sync / knowledge ingest  |
+| PC     | Local llama / litert-lm / openai key       | Mobile as optional device provider |
 
 ## Phone (Expo)
 
@@ -18,10 +18,10 @@ Each device can chat without the other. Pairing is optional for sync / cloud.
 
 ## PC (Desktop / gateway)
 
-| Backend | Default probe | Env |
-|---------|---------------|-----|
-| llama-server | `http://127.0.0.1:8080/v1` | `CTRL_LLAMA_BIN`, `CTRL_LLAMA_PORT` |
-| litert-lm | `http://127.0.0.1:9379/v1` | `CTRL_LITERT_LM_BIN`, `CTRL_LITERT_LM_PORT` |
+| Backend      | Default probe              | Env                                         |
+| ------------ | -------------------------- | ------------------------------------------- |
+| llama-server | `http://127.0.0.1:8080/v1` | `CTRL_LLAMA_BIN`, `CTRL_LLAMA_PORT`         |
+| litert-lm    | `http://127.0.0.1:9379/v1` | `CTRL_LITERT_LM_BIN`, `CTRL_LITERT_LM_PORT` |
 
 Desktop **Host → local models**: detect binaries / running `/models`, Start / Stop, then **use** to switch the gateway provider. Providers panel includes a **model browser** (`GET /api/v1/models`).
 

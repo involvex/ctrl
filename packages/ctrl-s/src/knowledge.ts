@@ -43,13 +43,23 @@ export const knowledgeChunkSchema = z.object({
 
 export type KnowledgeChunk = z.infer<typeof knowledgeChunkSchema>;
 
+/** How a knowledge hit was retrieved. */
+export const knowledgeSearchModeSchema = z.enum(['fts', 'vector', 'hybrid']);
+
+export type KnowledgeSearchMode = z.infer<typeof knowledgeSearchModeSchema>;
+
 export const knowledgeHitSchema = z.object({
   chunkId: z.string(),
   attachmentId: z.string(),
   workspaceId: z.string(),
   filename: z.string(),
   snippet: z.string(),
+  /** FTS bm25 rank or negative vector/fusion score (lower is better). */
   rank: z.number(),
+  /** Relevance score (higher is better) for vector / hybrid hits. */
+  score: z.number().optional(),
+  /** Retrieval path that produced this hit. */
+  source: knowledgeSearchModeSchema.optional(),
 });
 
 export type KnowledgeHit = z.infer<typeof knowledgeHitSchema>;
@@ -57,7 +67,33 @@ export type KnowledgeHit = z.infer<typeof knowledgeHitSchema>;
 export const knowledgeSearchInputSchema = z.object({
   query: z.string().min(1).max(500),
   limit: z.number().int().positive().max(50).optional(),
+  /** Defaults to hybrid when embeddings are enabled, otherwise fts. */
+  mode: knowledgeSearchModeSchema.optional(),
 });
+
+export type KnowledgeSearchInput = z.infer<typeof knowledgeSearchInputSchema>;
+
+export const knowledgeReindexInputSchema = z.object({
+  /** Re-embed chunks that already have vectors for the active model. */
+  force: z.boolean().optional(),
+  /** Max chunks to embed in this pass. */
+  limit: z.number().int().positive().max(5000).optional(),
+});
+
+export type KnowledgeReindexInput = z.infer<typeof knowledgeReindexInputSchema>;
+
+export const knowledgeReindexResultSchema = z.object({
+  workspaceId: z.string(),
+  model: z.string(),
+  indexed: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  totalChunks: z.number().int().nonnegative(),
+  indexedChunks: z.number().int().nonnegative(),
+});
+
+export type KnowledgeReindexResult = z.infer<
+  typeof knowledgeReindexResultSchema
+>;
 
 export const memoryKindSchema = z.enum(['note', 'fact', 'preference']);
 export type MemoryKind = z.infer<typeof memoryKindSchema>;

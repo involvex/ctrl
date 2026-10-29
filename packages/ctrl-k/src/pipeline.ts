@@ -1,17 +1,30 @@
 import type {
   Attachment,
   ContextInspect,
+  Embedder,
   KnowledgeHit,
 } from '@involvex/ctrl-s';
 import { readBlob } from '@involvex/ctrl-z';
 import type { KnowledgeStore } from '@involvex/ctrl-z';
 import { chunkText } from './chunk';
+import { embedChunks } from './embed';
 import { extractText } from './extract';
 
-export function ingestAttachment(
+export type IngestOptions = {
+  /** When set, chunks are embedded during ingest (failures leave them pending). */
+  embedder?: Embedder | null;
+};
+
+export type IngestResult = {
+  chunkCount: number;
+  embeddedCount: number;
+};
+
+export async function ingestAttachment(
   knowledge: KnowledgeStore,
-  attachment: Attachment
-): { chunkCount: number } {
+  attachment: Attachment,
+  opts: IngestOptions = {}
+): Promise<IngestResult> {
   try {
     const bytes = readBlob(knowledge.blobRoot, attachment.blobPath);
     const extracted = extractText(
@@ -26,20 +39,34 @@ export function ingestAttachment(
           ? `unsupported mime: ${attachment.mimeType}`
           : 'empty extraction'
       );
-      return { chunkCount: 0 };
+      return { chunkCount: 0, embeddedCount: 0 };
     }
     const chunks = chunkText(extracted.text);
     if (chunks.length === 0) {
       knowledge.markAttachmentFailed(attachment.id, 'no chunks produced');
-      return { chunkCount: 0 };
+      return { chunkCount: 0, embeddedCount: 0 };
     }
-    const count = knowledge.replaceChunks(
+    const stored = knowledge.replaceChunks(
       attachment.id,
       attachment.workspaceId,
       attachment.filename,
       chunks
     );
-    knowledge.markAttachmentReady(attachment.id, count);
+    knowledge.markAttachmentReady(attachment.id, stored.length);
+
+    let embeddedCount = 0;
+    if (opts.embedder) {
+      try {
+        embeddedCount = await embedChunks(knowledge, opts.embedder, stored);
+      } catch (err) {
+        // Indexing must not fail the upload; reindex can retry.
+        process.stderr.write(
+          `[ctrl-k] embed failed for ${attachment.filename}: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`
+        );
+      }
+    }
 
     // Seed a pending-review memory from the first chunk for the review UI.
     knowledge.createMemory(attachment.workspaceId, {
@@ -49,13 +76,13 @@ export function ingestAttachment(
       status: 'pending_review',
     });
 
-    return { chunkCount: count };
+    return { chunkCount: stored.length, embeddedCount };
   } catch (err) {
     knowledge.markAttachmentFailed(
       attachment.id,
       err instanceof Error ? err.message : String(err)
     );
-    return { chunkCount: 0 };
+    return { chunkCount: 0, embeddedCount: 0 };
   }
 }
 

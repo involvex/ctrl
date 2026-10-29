@@ -1,7 +1,13 @@
 import { ChannelManager } from '@involvex/ctrl-c';
-import { assembleContextPreview, ingestAttachment } from '@involvex/ctrl-k';
+import {
+  assembleContextPreview,
+  ingestAttachment,
+  reindexWorkspaceVectors,
+  searchKnowledgeHybrid,
+} from '@involvex/ctrl-k';
 import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
 import {
+  createEmbedderFromEnv,
   createLitertLmSidecarFromEnv,
   createLlamaSidecarFromEnv,
   createProviderRuntime,
@@ -23,6 +29,7 @@ import {
   createWorkspaceInputSchema,
   healthResponseSchema,
   inboundWebhookSchema,
+  knowledgeReindexInputSchema,
   knowledgeSearchInputSchema,
   pairingAckInputSchema,
   providerIdSchema,
@@ -280,6 +287,10 @@ export async function startServer(): Promise<StartedGateway> {
   const providerRuntime = createProviderRuntime(process.env, {
     dataDir: resolveDataDir(),
   });
+  const embedder = createEmbedderFromEnv(
+    process.env,
+    providerRuntime.getConfig()
+  );
   const sandboxRoot = resolveSandboxRoot();
   const registry = new ToolRegistry();
   registerBuiltinTools(registry, sandboxRoot);
@@ -352,6 +363,11 @@ export async function startServer(): Promise<StartedGateway> {
 
   process.stderr.write(
     `[ctrl-a] provider ${providerRuntime.getProvider().id}\n`
+  );
+  process.stderr.write(
+    `[ctrl-a] embeddings ${
+      embedder ? `${embedder.id} (${embedder.model}, ${embedder.dims}d)` : 'off'
+    }\n`
   );
   process.stderr.write(`[ctrl-a] tools ${registry.listNames().join(', ')}\n`);
   process.stderr.write(`[ctrl-a] sandbox ${sandboxRoot}\n`);
@@ -471,10 +487,72 @@ export async function startServer(): Promise<StartedGateway> {
               input,
               bytes
             );
-            ingestAttachment(knowledge, attachment);
+            const ingest = await ingestAttachment(knowledge, attachment, {
+              embedder,
+            });
             const ready = knowledge.getAttachment(attachment.id) ?? attachment;
-            return json(req, ready, 201);
+            return json(
+              req,
+              {
+                ...ready,
+                embeddedCount: ingest.embeddedCount,
+              },
+              201
+            );
           }
+        }
+
+        const workspaceKnowledgeReindex =
+          /^\/api\/v1\/workspaces\/([^/]+)\/knowledge\/reindex$/.exec(
+            url.pathname
+          );
+        if (workspaceKnowledgeReindex && req.method === 'POST') {
+          const workspaceId = workspaceKnowledgeReindex[1]!;
+          if (!store.getWorkspace(workspaceId)) {
+            return json(req, { error: 'workspace not found' }, 404);
+          }
+          if (!embedder) {
+            return json(req, { error: 'embeddings disabled' }, 409);
+          }
+          const body: unknown = await req.json().catch(() => ({}));
+          const input = knowledgeReindexInputSchema.parse(body ?? {});
+          try {
+            const result = await reindexWorkspaceVectors(
+              knowledge,
+              embedder,
+              workspaceId,
+              {
+                force: input.force ?? false,
+                ...(input.limit ? { limit: input.limit } : {}),
+              }
+            );
+            return json(req, result);
+          } catch (err) {
+            return json(
+              req,
+              { error: err instanceof Error ? err.message : String(err) },
+              502
+            );
+          }
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/v1/embeddings') {
+          const workspaceId = url.searchParams.get('workspaceId');
+          const model = embedder?.model;
+          return json(req, {
+            enabled: Boolean(embedder),
+            provider: embedder?.id ?? 'off',
+            model: embedder?.model ?? 'none',
+            dims: embedder?.dims ?? 0,
+            indexedChunks:
+              workspaceId && model
+                ? knowledge.countVectors(workspaceId, model)
+                : 0,
+            totalChunks: workspaceId ? knowledge.countChunks(workspaceId) : 0,
+            ...(embedder
+              ? {}
+              : { hint: 'Set CTRL_EMBEDDINGS=hash|openai|llama|litert' }),
+          });
         }
 
         const workspaceKnowledgeSearch =
@@ -488,13 +566,28 @@ export async function startServer(): Promise<StartedGateway> {
           }
           const body: unknown = await req.json();
           const input = knowledgeSearchInputSchema.parse(body);
-          return json(req, {
-            items: knowledge.searchKnowledge(
+          try {
+            const items = await searchKnowledgeHybrid(
+              knowledge,
+              embedder,
               workspaceId,
               input.query,
-              input.limit ?? 8
-            ),
-          });
+              {
+                ...(input.mode ? { mode: input.mode } : {}),
+                limit: input.limit ?? 8,
+              }
+            );
+            return json(req, {
+              items,
+              mode: input.mode ?? (embedder ? 'hybrid' : 'fts'),
+            });
+          } catch (err) {
+            return json(
+              req,
+              { error: err instanceof Error ? err.message : String(err) },
+              502
+            );
+          }
         }
 
         const workspaceMemory = /^\/api\/v1\/workspaces\/([^/]+)\/memory$/.exec(
@@ -559,7 +652,13 @@ export async function startServer(): Promise<StartedGateway> {
           const pinnedMemory = knowledge.listPinnedMemory(workspaceId);
           const knowledgeHits =
             query.trim().length > 0
-              ? knowledge.searchKnowledge(workspaceId, query, 6)
+              ? await searchKnowledgeHybrid(
+                  knowledge,
+                  embedder,
+                  workspaceId,
+                  query,
+                  { limit: 6 }
+                )
               : [];
           return json(
             req,

@@ -162,7 +162,9 @@ export class LocalBackendsManager {
       const binPath = await resolveBin(def, this.binOverrides);
       const baseUrl = `http://127.0.0.1:${def.port}/v1`;
       const child = this.children.get(def.id);
-      const spawned = Boolean(child && !child.killed && child.exitCode === null);
+      const spawned = Boolean(
+        child && !child.killed && child.exitCode === null
+      );
       const probe = await probeModels(baseUrl);
       out.push({
         id: def.id,

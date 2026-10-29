@@ -2,7 +2,7 @@
   "name": "@involvex/ctrl-k",
   "version": "0.0.1",
   "private": true,
-  "description": "Knowledge — extract, chunk, FTS index, context assembly",
+  "description": "Knowledge - extract, chunk, FTS + vector/hybrid search, context assembly",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

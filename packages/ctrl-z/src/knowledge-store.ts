@@ -6,6 +6,7 @@ import {
   type Attachment,
   type CreateAttachmentInput,
   type CreateMemoryInput,
+  type KnowledgeChunk,
   type KnowledgeHit,
   type MemoryItem,
   type MemoryStatus,
@@ -42,6 +43,46 @@ type MemoryRow = {
   created_at: number;
   updated_at: number;
 };
+
+type ChunkRow = {
+  id: string;
+  attachment_id: string;
+  workspace_id: string;
+  chunk_index: number;
+  content: string;
+  created_at: number;
+};
+
+type VectorRow = {
+  chunk_id: string;
+  attachment_id: string;
+  model: string;
+  dim: number;
+  vector: Uint8Array;
+  content: string;
+  chunk_index: number;
+  filename: string;
+};
+
+/** Vector row joined with chunk text — used by in-process similarity search. */
+export type StoredVector = {
+  chunkId: string;
+  attachmentId: string;
+  workspaceId: string;
+  model: string;
+  dim: number;
+  filename: string;
+  content: string;
+  chunkIndex: number;
+  vector: Float32Array;
+};
+
+function blobToFloat32(bytes: Uint8Array): Float32Array {
+  // Copy so the Float32Array starts at offset 0 and is 4-byte aligned.
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return new Float32Array(copy.buffer, 0, copy.byteLength / 4);
+}
 
 function mapAttachment(row: AttachmentRow): Attachment {
   return attachmentSchema.parse({
@@ -197,7 +238,7 @@ export class KnowledgeStore {
     workspaceId: string,
     filename: string,
     chunks: string[]
-  ): number {
+  ): KnowledgeChunk[] {
     this.db
       .query(
         `DELETE FROM knowledge_fts WHERE chunk_id IN (
@@ -210,25 +251,192 @@ export class KnowledgeStore {
       .run(attachmentId);
 
     const now = Date.now();
+    const stored: KnowledgeChunk[] = [];
     let index = 0;
     for (const content of chunks) {
-      const chunkId = id('chk');
+      const chunk: KnowledgeChunk = {
+        id: id('chk'),
+        attachmentId,
+        workspaceId,
+        chunkIndex: index,
+        content,
+        createdAt: now,
+      };
       this.db
         .query(
           `INSERT INTO knowledge_chunks(
             id, attachment_id, workspace_id, chunk_index, content, created_at
           ) VALUES (?, ?, ?, ?, ?, ?)`
         )
-        .run(chunkId, attachmentId, workspaceId, index, content, now);
+        .run(
+          chunk.id,
+          chunk.attachmentId,
+          chunk.workspaceId,
+          chunk.chunkIndex,
+          chunk.content,
+          chunk.createdAt
+        );
       this.db
         .query(
           `INSERT INTO knowledge_fts(content, chunk_id, workspace_id, filename)
            VALUES (?, ?, ?, ?)`
         )
-        .run(content, chunkId, workspaceId, filename);
+        .run(content, chunk.id, workspaceId, filename);
+      stored.push(chunk);
       index += 1;
     }
-    return chunks.length;
+    return stored;
+  }
+
+  /**
+   * Persist an embedding for a chunk.
+   * Vectors are stored as raw little-endian float32 blobs.
+   */
+  upsertChunkVector(input: {
+    chunkId: string;
+    workspaceId: string;
+    attachmentId: string;
+    model: string;
+    vector: Float32Array;
+  }): void {
+    const bytes = Buffer.from(
+      input.vector.buffer,
+      input.vector.byteOffset,
+      input.vector.byteLength
+    );
+    this.db
+      .query(
+        `INSERT INTO knowledge_vectors(
+           chunk_id, workspace_id, attachment_id, model, dim, vector, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chunk_id) DO UPDATE SET
+           workspace_id = excluded.workspace_id,
+           attachment_id = excluded.attachment_id,
+           model = excluded.model,
+           dim = excluded.dim,
+           vector = excluded.vector,
+           created_at = excluded.created_at`
+      )
+      .run(
+        input.chunkId,
+        input.workspaceId,
+        input.attachmentId,
+        input.model,
+        input.vector.length,
+        bytes,
+        Date.now()
+      );
+  }
+
+  deleteVectorsForAttachment(attachmentId: string): void {
+    this.db
+      .query('DELETE FROM knowledge_vectors WHERE attachment_id = ?')
+      .run(attachmentId);
+  }
+
+  /** Vectors joined with chunk text and source filename, for in-process search. */
+  listVectors(workspaceId: string, model?: string): StoredVector[] {
+    const rows = model
+      ? this.db
+          .query<VectorRow, [string, string]>(
+            `SELECT v.chunk_id, v.attachment_id, v.model, v.dim, v.vector,
+                    c.content, c.chunk_index, a.filename
+             FROM knowledge_vectors v
+             JOIN knowledge_chunks c ON c.id = v.chunk_id
+             JOIN attachments a ON a.id = v.attachment_id
+             WHERE v.workspace_id = ? AND v.model = ?`
+          )
+          .all(workspaceId, model)
+      : this.db
+          .query<VectorRow, [string]>(
+            `SELECT v.chunk_id, v.attachment_id, v.model, v.dim, v.vector,
+                    c.content, c.chunk_index, a.filename
+             FROM knowledge_vectors v
+             JOIN knowledge_chunks c ON c.id = v.chunk_id
+             JOIN attachments a ON a.id = v.attachment_id
+             WHERE v.workspace_id = ?`
+          )
+          .all(workspaceId);
+
+    return rows.map((row) => ({
+      chunkId: row.chunk_id,
+      attachmentId: row.attachment_id,
+      workspaceId,
+      model: row.model,
+      dim: row.dim,
+      filename: row.filename,
+      content: row.content,
+      chunkIndex: row.chunk_index,
+      vector: blobToFloat32(row.vector),
+    }));
+  }
+
+  countChunks(workspaceId: string): number {
+    const row = this.db
+      .query<{ count: number }, [string]>(
+        'SELECT COUNT(*) AS count FROM knowledge_chunks WHERE workspace_id = ?'
+      )
+      .get(workspaceId);
+    return row?.count ?? 0;
+  }
+
+  countVectors(workspaceId: string, model?: string): number {
+    const row = model
+      ? this.db
+          .query<{ count: number }, [string, string]>(
+            `SELECT COUNT(*) AS count FROM knowledge_vectors
+             WHERE workspace_id = ? AND model = ?`
+          )
+          .get(workspaceId, model)
+      : this.db
+          .query<{ count: number }, [string]>(
+            `SELECT COUNT(*) AS count FROM knowledge_vectors
+             WHERE workspace_id = ?`
+          )
+          .get(workspaceId);
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Chunks without a vector for `model` (or every chunk when `force`).
+   */
+  listChunksNeedingVectors(
+    workspaceId: string,
+    model: string,
+    opts: { force?: boolean; limit?: number } = {}
+  ): KnowledgeChunk[] {
+    const limit = opts.limit ?? 256;
+    const rows = opts.force
+      ? this.db
+          .query<ChunkRow, [string, number]>(
+            `SELECT id, attachment_id, workspace_id, chunk_index, content, created_at
+             FROM knowledge_chunks
+             WHERE workspace_id = ?
+             ORDER BY created_at, chunk_index
+             LIMIT ?`
+          )
+          .all(workspaceId, limit)
+      : this.db
+          .query<ChunkRow, [string, string, number]>(
+            `SELECT c.id, c.attachment_id, c.workspace_id, c.chunk_index,
+                    c.content, c.created_at
+             FROM knowledge_chunks c
+             LEFT JOIN knowledge_vectors v
+               ON v.chunk_id = c.id AND v.model = ?
+             WHERE c.workspace_id = ? AND v.chunk_id IS NULL
+             ORDER BY c.created_at, c.chunk_index
+             LIMIT ?`
+          )
+          .all(model, workspaceId, limit);
+
+    return rows.map((row) => ({
+      id: row.id,
+      attachmentId: row.attachment_id,
+      workspaceId: row.workspace_id,
+      chunkIndex: row.chunk_index,
+      content: row.content,
+      createdAt: row.created_at,
+    }));
   }
 
   searchKnowledge(
@@ -275,6 +483,7 @@ export class KnowledgeStore {
         filename: row.filename,
         snippet: row.snippet,
         rank: row.rank,
+        source: 'fts',
       })
     );
   }

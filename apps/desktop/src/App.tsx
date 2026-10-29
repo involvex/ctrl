@@ -5,6 +5,7 @@ import {
   createConversation,
   createWorkspace,
   exportWorkspace,
+  getEmbeddingStatus,
   getProviderStatus,
   importWorkspace,
   inspectContext,
@@ -17,6 +18,7 @@ import {
   listTools,
   listModels,
   listWorkspaces,
+  reindexKnowledge,
   restoreBackup,
   searchKnowledge,
   setClientAuth,
@@ -26,8 +28,10 @@ import {
   uploadAttachmentText,
   type ChannelPublic,
   type Conversation,
+  type EmbeddingStatus,
   type HostBackupManifest,
   type KnowledgeHit,
+  type KnowledgeSearchMode,
   type McpServerInfo,
   type MemoryItem,
   type Message,
@@ -50,6 +54,14 @@ type PendingApproval = {
   risk: 'low' | 'high';
   timeoutMs: number;
 };
+
+/** Narrow the `<select>` value without an unchecked cast. */
+function toKnowledgeSearchMode(value: string): KnowledgeSearchMode {
+  if (value === 'vector' || value === 'fts') {
+    return value;
+  }
+  return 'hybrid';
+}
 
 /** Exclusive side panels — opening one closes the others. */
 type DesktopPanel =
@@ -84,10 +96,7 @@ type DesktopApi = {
   listLocalBackends: () => Promise<LocalBackendRow[]>;
   startLocalBackend: (id: string) => Promise<LocalBackendRow>;
   stopLocalBackend: (id: string) => Promise<LocalBackendRow>;
-  setLocalBackendBin: (
-    id: string,
-    binPath: string
-  ) => Promise<{ ok: boolean }>;
+  setLocalBackendBin: (id: string, binPath: string) => Promise<{ ok: boolean }>;
 };
 
 type LocalBackendRow = {
@@ -136,6 +145,10 @@ export function App() {
   const [knowledgeDraft, setKnowledgeDraft] = useState('');
   const [knowledgeFilename, setKnowledgeFilename] = useState('notes.md');
   const [knowledgeQuery, setKnowledgeQuery] = useState('');
+  const [knowledgeMode, setKnowledgeMode] =
+    useState<KnowledgeSearchMode>('hybrid');
+  const [embeddingStatus, setEmbeddingStatus] =
+    useState<EmbeddingStatus | null>(null);
   const [knowledgeHits, setKnowledgeHits] = useState<KnowledgeHit[]>([]);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [contextPreview, setContextPreview] = useState<string | null>(null);
@@ -646,9 +659,18 @@ export function App() {
     }
     try {
       setMemoryItems(await listMemory(gatewayUrl, workspace.id));
+      setEmbeddingStatus(
+        await getEmbeddingStatus(gatewayUrl, workspace.id).catch(() => null)
+      );
       if (knowledgeQuery.trim()) {
         setKnowledgeHits(
-          await searchKnowledge(gatewayUrl, workspace.id, knowledgeQuery.trim())
+          await searchKnowledge(
+            gatewayUrl,
+            workspace.id,
+            knowledgeQuery.trim(),
+            undefined,
+            knowledgeMode
+          )
         );
       }
       const ctx = await inspectContext(gatewayUrl, workspace.id, {
@@ -659,7 +681,20 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [conversation, gatewayUrl, knowledgeQuery, workspace]);
+  }, [conversation, gatewayUrl, knowledgeMode, knowledgeQuery, workspace]);
+
+  const onReindexKnowledge = useCallback(async () => {
+    if (!workspace || !gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      await reindexKnowledge(gatewayUrl, workspace.id);
+      await refreshKnowledge();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [gatewayUrl, refreshKnowledge, workspace]);
 
   const onIngestNote = useCallback(async () => {
     if (
@@ -919,8 +954,8 @@ export function App() {
               />
               {lanUrls.length === 0 ? (
                 <p className="meta warn">
-                  No LAN IP detected — phone needs the PC Wi‑Fi/Ethernet
-                  address (loopback QR will not reach from another device).
+                  No LAN IP detected — phone needs the PC Wi‑Fi/Ethernet address
+                  (loopback QR will not reach from another device).
                 </p>
               ) : null}
             </>
@@ -951,7 +986,9 @@ export function App() {
               <li key={b.id}>
                 <code>{b.id}</code> :{b.port}{' '}
                 {b.running ? '● running' : '○ stopped'}
-                {b.binFound ? ` · ${b.binPath ?? 'on PATH'}` : ' · binary missing'}
+                {b.binFound
+                  ? ` · ${b.binPath ?? 'on PATH'}`
+                  : ' · binary missing'}
                 {b.modelsPreview.length > 0
                   ? ` · ${b.modelsPreview.slice(0, 3).join(', ')}`
                   : ''}
@@ -962,12 +999,12 @@ export function App() {
                     disabled={!b.binFound || b.running}
                     onClick={() => {
                       void (async () => {
-                        const row =
-                          await window.ctrlDesktop?.startLocalBackend(b.id);
+                        const row = await window.ctrlDesktop?.startLocalBackend(
+                          b.id
+                        );
                         if (row) {
                           await refreshLocalBackends();
-                          const active =
-                            b.id === 'llama' ? 'llama' : 'litert';
+                          const active = b.id === 'llama' ? 'llama' : 'litert';
                           await updateProviderConfig(gatewayUrl, {
                             active,
                             ...(b.id === 'llama'
@@ -1000,8 +1037,7 @@ export function App() {
                     disabled={!b.running}
                     onClick={() => {
                       void (async () => {
-                        const active =
-                          b.id === 'llama' ? 'llama' : 'litert';
+                        const active = b.id === 'llama' ? 'llama' : 'litert';
                         await updateProviderConfig(gatewayUrl, {
                           active,
                           ...(b.id === 'llama'
@@ -1308,8 +1344,19 @@ export function App() {
               className="host-input"
               value={knowledgeQuery}
               onChange={(e) => setKnowledgeQuery(e.target.value)}
-              placeholder="FTS query…"
+              placeholder="search query…"
             />
+            <select
+              className="host-input"
+              value={knowledgeMode}
+              onChange={(e) =>
+                setKnowledgeMode(toKnowledgeSearchMode(e.target.value))
+              }
+            >
+              <option value="hybrid">hybrid</option>
+              <option value="vector">vector</option>
+              <option value="fts">fts</option>
+            </select>
             <button
               type="button"
               className="ghost-btn"
@@ -1320,11 +1367,36 @@ export function App() {
               search / inspect
             </button>
           </div>
+          <div className="host-row">
+            <span className="meta">
+              {embeddingStatus
+                ? embeddingStatus.enabled
+                  ? `${embeddingStatus.provider}/${embeddingStatus.model} · ${embeddingStatus.indexedChunks}/${embeddingStatus.totalChunks} indexed`
+                  : 'embeddings off (fts only)'
+                : 'embeddings unknown'}
+            </span>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void onReindexKnowledge();
+              }}
+              disabled={!workspace || !embeddingStatus?.enabled}
+            >
+              reindex vectors
+            </button>
+          </div>
           {knowledgeHits.length > 0 ? (
             <ul className="knowledge-list">
               {knowledgeHits.map((hit) => (
                 <li key={hit.chunkId}>
-                  <code>{hit.filename}</code> — {hit.snippet}
+                  <code>{hit.filename}</code>{' '}
+                  {hit.score !== undefined ? (
+                    <span className="meta">
+                      [{hit.source ?? 'hit'} {hit.score.toFixed(3)}]
+                    </span>
+                  ) : null}{' '}
+                  — {hit.snippet}
                 </li>
               ))}
             </ul>

@@ -396,7 +396,9 @@ export default function ChatHomeScreen() {
         }
 
         const saved =
-          preferred === 'litert' ? await loadSavedConnection() : await refreshHost();
+          preferred === 'litert'
+            ? await loadSavedConnection()
+            : await refreshHost();
         const agentCfg = agent ?? (await loadAgentConfig());
         const result = await runProviderCascade(providers, content, {
           onStatus: (line) => {

@@ -9,10 +9,12 @@ import {
   conversationSchema,
   createAgentProfileInputSchema,
   createBackupInputSchema,
+  embeddingStatusSchema,
   healthResponseSchema,
   hostBackupManifestSchema,
   hostBackupSnapshotSchema,
   knowledgeHitSchema,
+  knowledgeReindexResultSchema,
   memoryItemSchema,
   messageSchema,
   outboxJobSchema,
@@ -33,10 +35,13 @@ import {
   type ContextInspect,
   type Conversation,
   type CreateBackupInput,
+  type EmbeddingStatus,
   type HealthResponse,
   type HostBackupManifest,
   type HostBackupSnapshot,
   type KnowledgeHit,
+  type KnowledgeReindexResult,
+  type KnowledgeSearchMode,
   type MemoryItem,
   type MemoryStatus,
   type Message,
@@ -608,14 +613,15 @@ export async function searchKnowledge(
   baseUrl: string,
   workspaceId: string,
   query: string,
-  limit?: number
+  limit?: number,
+  mode?: KnowledgeSearchMode
 ): Promise<KnowledgeHit[]> {
   const res = await fetch(
     `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/knowledge/search`,
     {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ query, limit }),
+      body: JSON.stringify({ query, limit, mode }),
     }
   );
   if (!res.ok) {
@@ -624,6 +630,48 @@ export async function searchKnowledge(
   return z
     .object({ items: z.array(knowledgeHitSchema) })
     .parse(await readJson(res)).items;
+}
+
+export async function reindexKnowledge(
+  baseUrl: string,
+  workspaceId: string,
+  opts: { force?: boolean; limit?: number } = {}
+): Promise<KnowledgeReindexResult> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/knowledge/reindex`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        ...(opts.force !== undefined ? { force: opts.force } : {}),
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+      }),
+    }
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(
+      `reindexKnowledge failed: ${res.status}${detail ? ` ${detail}` : ''}`
+    );
+  }
+  return knowledgeReindexResultSchema.parse(await readJson(res));
+}
+
+export async function getEmbeddingStatus(
+  baseUrl: string,
+  workspaceId?: string
+): Promise<EmbeddingStatus> {
+  const qs = workspaceId
+    ? `?workspaceId=${encodeURIComponent(workspaceId)}`
+    : '';
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/embeddings${qs}`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`getEmbeddingStatus failed: ${res.status}`);
+  }
+  return embeddingStatusSchema.parse(await readJson(res));
 }
 
 export async function listMemory(
@@ -820,8 +868,11 @@ export type {
   ChannelPublic,
   ContextInspect,
   Conversation,
+  EmbeddingStatus,
   HealthResponse,
   KnowledgeHit,
+  KnowledgeReindexResult,
+  KnowledgeSearchMode,
   MemoryItem,
   MemoryStatus,
   Message,

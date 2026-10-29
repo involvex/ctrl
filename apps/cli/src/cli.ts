@@ -171,9 +171,7 @@ async function pair(args: string[]): Promise<void> {
   }
 
   const startedAt = Date.now();
-  process.stdout.write(
-    `\nWaiting for phone pairing ack — Ctrl+C to cancel.\n`
-  );
+  process.stdout.write(`\nWaiting for phone pairing ack — Ctrl+C to cancel.\n`);
 
   await new Promise<void>((resolve) => {
     let settled = false;

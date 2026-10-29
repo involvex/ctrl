@@ -3,10 +3,7 @@ import { z } from 'zod';
 import type { AutostartSettings } from './autostart';
 import type { GatewayManager, GatewayStatus } from './gateway-manager';
 import { listLanAddresses } from './lan';
-import type {
-  LocalBackendId,
-  LocalBackendsManager,
-} from './local-backends';
+import type { LocalBackendId, LocalBackendsManager } from './local-backends';
 import type { SecretVault } from './secrets';
 import type { UpdateManager, UpdateStatus } from './updater';
 

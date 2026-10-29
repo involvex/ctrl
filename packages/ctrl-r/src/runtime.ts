@@ -57,8 +57,7 @@ function initialConfig(env: NodeJS.ProcessEnv): ProviderConfig {
     explicit === 'device' ||
     explicit === 'mock'
   ) {
-    active =
-      explicit === 'openai-compatible' ? 'openai' : (explicit);
+    active = explicit === 'openai-compatible' ? 'openai' : explicit;
   } else if (env['CTRL_OPENAI_API_KEY'] ?? env['OPENAI_API_KEY']) {
     active = 'openai';
   }
@@ -88,8 +87,7 @@ function initialConfig(env: NodeJS.ProcessEnv): ProviderConfig {
     },
     litert: {
       modelId: env['CTRL_LITERT_MODEL'] ?? 'GEMMA_4_E2B_IT',
-      baseUrl:
-        env['CTRL_LITERT_LM_BASE_URL'] ?? 'http://127.0.0.1:9379/v1',
+      baseUrl: env['CTRL_LITERT_LM_BASE_URL'] ?? 'http://127.0.0.1:9379/v1',
       model: env['CTRL_LITERT_LM_MODEL'],
     },
     device: {

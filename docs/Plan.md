@@ -193,7 +193,7 @@ Kompatibilitätsschicht: `/v1/models`, `/v1/chat/completions`, `/v1/responses`, 
 
 **Phase 3 – Desktop Host:** Electron-Lifecycle, Tray, Autostart, Updater, `safeStorage`, `llama-server`-Sidecar, lokaler OpenAI-Endpoint, LAN-Pairing, Packaging.
 
-**Phase 4 – Personal Knowledge:** Attachments, Extraktion, Chunking, FTS vor Vector Search, Memory-Review-UI, Context Inspector (`ctrl-k` / `ctrl-z`).
+**Phase 4 – Personal Knowledge:** Attachments, Extraktion, Chunking, FTS, Memory-Review-UI, Context Inspector (`ctrl-k` / `ctrl-z`). Vector/hybrid search follows in Phase 11 ([ADR-0004](adr/ADR-0004-vector-search.md)).
 
 **Phase 5 – Channels:** Telegram, Discord, Slack, Identity Mapping, Queue/Retry, Rate Limits (`ctrl-c`).
 
@@ -279,3 +279,9 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Empty Android ABI counts as arm64 for LiteRT policy; policy disables LiteRT only, not chat.
     - Standalone `android:release` = Gradle `assembleRelease` (embedded JS; no Metro `:8081`/`:8082`).
     - Out of this pass: Rust `agentd`, Discord/Slack real SDKs, vector search.
+16. Phase 11 — Personal Knowledge vector & hybrid search (done this slice):
+    - Schema v5 `knowledge_vectors` (raw `float32` BLOBs, cascade with chunks); cosine scoring in-process inside `ctrl-k` (see [ADR-0004](adr/ADR-0004-vector-search.md)).
+    - `Embedder` contract in `ctrl-s`; `ctrl-r` embedders `hash` (deterministic default, offline), `openai`/`llama`/`litert` via OpenAI-compatible `/embeddings`, `off`.
+    - `searchKnowledge` gains `mode: fts | vector | hybrid`; hybrid fuses `bm25` + cosine with reciprocal rank fusion (k = 60); hits gain `score` + `source`.
+    - Embed on ingest (failure tolerated), `POST /api/v1/workspaces/:id/knowledge/reindex`, `GET /api/v1/embeddings` status; desktop knowledge panel gets mode picker, status line, reindex button; unit + contract tests.
+    - Out of this pass: ANN index (sqlite-vec/HNSW), cross-workspace search, re-embedding on model switch (use `reindex --force`), semantic reranking.

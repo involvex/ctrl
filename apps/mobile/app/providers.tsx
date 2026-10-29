@@ -116,8 +116,8 @@ export default function ProvidersScreen() {
             <Text style={styles.meta}>{remoteModels}</Text>
           ) : (
             <Text style={styles.meta}>
-              When paired, refresh lists models from the PC gateway
-              (llama / litert-lm).
+              When paired, refresh lists models from the PC gateway (llama /
+              litert-lm).
             </Text>
           )}
         </Section>

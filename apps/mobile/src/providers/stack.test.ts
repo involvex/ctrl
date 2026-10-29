@@ -33,11 +33,7 @@ describe('reorderProviders', () => {
 
 describe('providersForGenerator', () => {
   test('default order is litert-first', () => {
-    expect(DEFAULT_PROVIDER_STACK.order).toEqual([
-      'litert',
-      'gateway',
-      'zen',
-    ]);
+    expect(DEFAULT_PROVIDER_STACK.order).toEqual(['litert', 'gateway', 'zen']);
   });
 
   test('litert generator scopes to on-device only', () => {
@@ -53,10 +49,6 @@ describe('providersForGenerator', () => {
       structuredClone(DEFAULT_PROVIDER_STACK),
       'gateway'
     );
-    expect(scoped.map((p) => p.kind)).toEqual([
-      'gateway',
-      'zen',
-      'litert',
-    ]);
+    expect(scoped.map((p) => p.kind)).toEqual(['gateway', 'zen', 'litert']);
   });
 });

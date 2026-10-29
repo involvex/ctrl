@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export type CtrlDb = Database;
 
@@ -206,6 +206,26 @@ function migrate(db: Database): void {
 
       CREATE INDEX IF NOT EXISTS idx_channel_outbox_due
         ON channel_outbox(status, next_attempt_at);
+    `);
+  }
+
+  if (current < 5) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_vectors (
+        chunk_id TEXT PRIMARY KEY NOT NULL
+          REFERENCES knowledge_chunks(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL
+          REFERENCES workspaces(id) ON DELETE CASCADE,
+        attachment_id TEXT NOT NULL
+          REFERENCES attachments(id) ON DELETE CASCADE,
+        model TEXT NOT NULL,
+        dim INTEGER NOT NULL,
+        vector BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_knowledge_vectors_workspace
+        ON knowledge_vectors(workspace_id, model);
     `);
   }
 

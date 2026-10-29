@@ -9,12 +9,14 @@ This file provides guidelines and context for AI coding agents working on the `@
 ## Useful Commands
 
 ### Installation
+
 ```bash
 # Install dependencies (requires Bun >= 1.3.4)
 bun install
 ```
 
 ### Development
+
 ```bash
 # Run gateway daemon
 bun run dev:gateway
@@ -30,6 +32,7 @@ bun run dev:cli
 ```
 
 ### Validation & Quality (Bun-native only)
+
 ```bash
 # Run all checks (type check, lint, format check) - use this for validation
 bun run validate
@@ -57,6 +60,7 @@ bun fmt --check           # Check formatting
 ```
 
 ### Building
+
 ```bash
 # Build all packages and apps
 bun run build
@@ -85,6 +89,7 @@ bun run build:web
 ```
 
 ### Testing
+
 ```bash
 # Run all tests
 bun test
@@ -94,6 +99,7 @@ bun run test:contracts
 ```
 
 ### Documentation
+
 ```bash
 # Run docs site locally
 bun run docs:dev
@@ -106,6 +112,7 @@ bun run docs:preview
 ```
 
 ### Utilities
+
 ```bash
 # Free gateway port if stuck
 bun run gateway:free
@@ -114,22 +121,26 @@ bun run gateway:free
 ## Technologies
 
 ### Core Stack
+
 - **Runtime/Package Manager**: [Bun](https://bun.sh) >= 1.3.4 (required). Use Bun exclusively for Node.js tasks.
 - **Language**: TypeScript with strict mode
 - **Monorepo**: Bun workspaces (`apps/*`, `packages/*`)
 
 ### Backend/Gateway
+
 - **Gateway**: `@involvex/ctrl-a` - Bun HTTP/WebSocket daemon
 - **Database**: SQLite via `bun:sqlite` in `@involvex/ctrl-z`
 - **Validation**: Zod schemas in `@involvex/ctrl-s` for all boundaries
 
 ### Frontend
+
 - **Desktop**: Electron (Vite + React) in `apps/desktop`
 - **Mobile**: Expo (React Native) in `apps/mobile` - Android focused
 - **Web**: Expo Router Web/PWA in `apps/web`
 - **CLI**: Bun-based CLI in `apps/cli` (`@involvex/ctrl-f5`, publishable)
 
 ### Additional Technologies
+
 - **Protocol**: Custom WebSocket event streaming with typed events
 - **UI Theme**: Matrix dark theme - background `#000000`, accent `#00ff66`, monospace fonts (JetBrains Mono/Fira Code)
 - **On-device ML**: LiteRT-LM for Android (native module in `native/android-litert/`)
@@ -138,34 +149,37 @@ bun run gateway:free
 ## Workspace Structure
 
 ### Packages (all private except ctrl-f5 in apps)
-| Package | Path | Purpose |
-| --- | --- | --- |
-| `@involvex/ctrl-a` | `packages/ctrl-a` | Gateway daemon (Agent & All) - HTTP/WS server, lifecycle management |
-| `@involvex/ctrl-s` | `packages/ctrl-s` | Protocol - Zod schemas, events, JSON Schema/OpenAPI (source of truth for types) |
-| `@involvex/ctrl-r` | `packages/ctrl-r` | Runtimes & provider adapters (OpenAI-compatible, LlamaCpp, Mock, CLI) |
-| `@involvex/ctrl-z` | `packages/ctrl-z` | Memory, SQLite, storage layer with migrations |
-| `@involvex/ctrl-x` | `packages/ctrl-x` | Agent core (loop, tools, context building) |
-| `@involvex/ctrl-m` | `packages/ctrl-m` | MCP client (stdio JSON-RPC) |
-| `@involvex/ctrl-k` | `packages/ctrl-k` | Knowledge - extraction, chunking, FTS |
-| `@involvex/ctrl-c` | `packages/ctrl-c` | Channels - webhook, Telegram, Discord, Slack adapters |
-| `@involvex/ctrl-i` | `packages/ctrl-i` | Typed agent client for gateway communication |
-| `@involvex/ctrl-t` | `packages/ctrl-t` | Contract tests |
-| `@involvex/ctrl-space` | `packages/ctrl-space` | Shared Matrix UI tokens and components |
-| `@involvex/ctrl-l` | `packages/ctrl-l` | Logger |
-| `@involvex/ctrl-comma` | `packages/ctrl-comma` | Config |
-| `@involvex/ctrl-slash` | `packages/ctrl-slash` | Skills |
+
+| Package                | Path                  | Purpose                                                                         |
+| ---------------------- | --------------------- | ------------------------------------------------------------------------------- |
+| `@involvex/ctrl-a`     | `packages/ctrl-a`     | Gateway daemon (Agent & All) - HTTP/WS server, lifecycle management             |
+| `@involvex/ctrl-s`     | `packages/ctrl-s`     | Protocol - Zod schemas, events, JSON Schema/OpenAPI (source of truth for types) |
+| `@involvex/ctrl-r`     | `packages/ctrl-r`     | Runtimes & provider adapters (OpenAI-compatible, LlamaCpp, Mock, CLI)           |
+| `@involvex/ctrl-z`     | `packages/ctrl-z`     | Memory, SQLite, storage layer with migrations                                   |
+| `@involvex/ctrl-x`     | `packages/ctrl-x`     | Agent core (loop, tools, context building)                                      |
+| `@involvex/ctrl-m`     | `packages/ctrl-m`     | MCP client (stdio JSON-RPC)                                                     |
+| `@involvex/ctrl-k`     | `packages/ctrl-k`     | Knowledge - extraction, chunking, FTS + vector/hybrid search, embeddings        |
+| `@involvex/ctrl-c`     | `packages/ctrl-c`     | Channels - webhook, Telegram, Discord, Slack adapters                           |
+| `@involvex/ctrl-i`     | `packages/ctrl-i`     | Typed agent client for gateway communication                                    |
+| `@involvex/ctrl-t`     | `packages/ctrl-t`     | Contract tests                                                                  |
+| `@involvex/ctrl-space` | `packages/ctrl-space` | Shared Matrix UI tokens and components                                          |
+| `@involvex/ctrl-l`     | `packages/ctrl-l`     | Logger                                                                          |
+| `@involvex/ctrl-comma` | `packages/ctrl-comma` | Config                                                                          |
+| `@involvex/ctrl-slash` | `packages/ctrl-slash` | Skills                                                                          |
 
 ### Apps
-| App | Path | Purpose |
-| --- | --- | --- |
+
+| App                      | Path           | Purpose                                                |
+| ------------------------ | -------------- | ------------------------------------------------------ |
 | `@involvex/ctrl-desktop` | `apps/desktop` | Electron shell - tray, autostart, updates, safeStorage |
-| `@involvex/ctrl-mobile` | `apps/mobile` | Expo Android app |
-| `@involvex/ctrl-web` | `apps/web` | Expo PWA web app |
-| `@involvex/ctrl-f5` | `apps/cli` | CLI tool (publishable) |
+| `@involvex/ctrl-mobile`  | `apps/mobile`  | Expo Android app                                       |
+| `@involvex/ctrl-web`     | `apps/web`     | Expo PWA web app                                       |
+| `@involvex/ctrl-f5`      | `apps/cli`     | CLI tool (publishable)                                 |
 
 ## Best Practices and Guidelines
 
 ### Code Quality
+
 - **Bun-native only**: Never use ESLint or Prettier packages. Use `bun check`, `bun lint`, `bun fmt` exclusively.
 - **Validate before committing**: Always run `bun run validate` which runs check, lint, and format check.
 - **Type safety**: Use strict TypeScript. All process boundaries and IPC must be validated with Zod schemas from `@involvex/ctrl-s`.
@@ -173,6 +187,7 @@ bun run gateway:free
 - **Use `node:` protocol**: `unicorn/prefer-node-protocol` is enforced - use `node:fs`, `node:path`, etc.
 
 ### Architecture Principles
+
 - **Local-first**: Identity and transcripts live on clients. Gateway is optional for basic chat functionality.
 - **Gateway as home node**: Tools, MCP, channels, backups live on the gateway. Sync is append-only when reachable.
 - **Process boundaries**: Gateway runs as independent Bun process. Desktop starts/manages it. Clients communicate via HTTP/WebSocket.
@@ -182,6 +197,7 @@ bun run gateway:free
 - **Secrets management**: Never store secrets in `app.db`. Use Electron's `safeStorage`, Android Keystore, etc.
 
 ### Security
+
 - **Electron security**: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. Validate all IPC with Zod. Set CSP, block navigation and `window.open`.
 - **Standard binding**: Bind to `127.0.0.1` by default. LAN mode (`0.0.0.0`) requires explicit activation with pairing.
 - **Auth**: Gateway bearer tokens for authenticated access. Pairing codes for LAN connections.
@@ -189,12 +205,14 @@ bun run gateway:free
 - **Input validation**: Validate all external inputs at boundaries using schemas from `ctrl-s`.
 
 ### UI/UX Guidelines
+
 - **Theme**: Matrix dark theme only. Background `#000000`, accent `#00ff66`, containers `#111613`. Monospace fonts throughout.
 - **Typography**: Use JetBrains Mono or Fira Code for chat, code, and terminal.
 - **Style**: Thin precise borders, sharp technical edges, high-contrast feedback. No rounded iOS-style UI.
 - **Desktop UI**: Panels are exclusive (only one open at a time, Escape closes). Nav is keyboard-friendly.
 
 ### Development Guidelines
+
 - **Package manager**: Always use `bun`. Never use npm/yarn/pnpm.
 - **Imports**: Use workspace dependencies with `workspace:*`. Follow existing import patterns.
 - **File operations on Windows**: Use PowerShell-compatible commands. Prefer the `write` tool for files with special characters.
@@ -204,6 +222,7 @@ bun run gateway:free
 - **Build outputs**: Desktop packages go to `apps/desktop/release/`. Gateway sidecar is embedded in the packaged app.
 
 ### TypeScript Configuration
+
 - **Target**: ES2022, module ESNext with bundler resolution
 - **Strict mode enabled**: strict, noUncheckedIndexedAccess, noUnusedLocals, noUnusedParameters, noImplicitReturns, noFallthroughCasesInSwitch
 - **Module style**: verbatimModuleSyntax, isolatedModules, esModuleInterop
@@ -211,10 +230,14 @@ bun run gateway:free
 - **No emit**: Type checking only via `bun check`
 
 ### Environment Variables
+
 Key environment variables (see full list in codebase):
+
 - `CTRL_HOST`, `CTRL_PORT` - Gateway binding
 - `CTRL_TOKEN` - Gateway auth token
 - `CTRL_LLAMA_BIN` - Path to llama-server sidecar
+- `CTRL_EMBEDDINGS` - Knowledge embedder: `hash` (default), `openai`, `llama`, `litert`, `off`
+- `CTRL_EMBEDDINGS_MODEL`, `CTRL_EMBEDDINGS_DIM`, `CTRL_EMBEDDINGS_BASE_URL`, `CTRL_EMBEDDINGS_API_KEY` - Embedder overrides
 - `BASE_URL` - For contract tests
 
 ## Quick Reference

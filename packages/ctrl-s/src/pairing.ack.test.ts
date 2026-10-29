@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  pairingAckInputSchema,
-  pairingStatusSchema,
-} from './pairing';
+import { pairingAckInputSchema, pairingStatusSchema } from './pairing';
 
 describe('pairing ack contract', () => {
   test('accepts optional label', () => {

@@ -56,6 +56,9 @@ export {
   knowledgeChunkSchema,
   knowledgeHitSchema,
   knowledgeSearchInputSchema,
+  knowledgeSearchModeSchema,
+  knowledgeReindexInputSchema,
+  knowledgeReindexResultSchema,
   memoryKindSchema,
   memoryStatusSchema,
   memoryItemSchema,
@@ -67,6 +70,10 @@ export {
   type CreateAttachmentInput,
   type KnowledgeChunk,
   type KnowledgeHit,
+  type KnowledgeSearchInput,
+  type KnowledgeSearchMode,
+  type KnowledgeReindexInput,
+  type KnowledgeReindexResult,
   type MemoryKind,
   type MemoryStatus,
   type MemoryItem,
@@ -74,6 +81,17 @@ export {
   type UpdateMemoryInput,
   type ContextInspect,
 } from './knowledge';
+
+export {
+  embeddingProviderIdSchema,
+  embeddingConfigSchema,
+  embeddingStatusSchema,
+  type EmbeddingProviderId,
+  type EmbeddingConfig,
+  type EmbeddingStatus,
+  type EmbeddingContext,
+  type Embedder,
+} from './embeddings';
 
 export {
   channelKindSchema,

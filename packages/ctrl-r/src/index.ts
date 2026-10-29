@@ -49,3 +49,13 @@ export {
   type LocalOpenAiSidecarStatus,
 } from './local-openai-sidecar';
 export { evaluateOnDevicePolicy } from './on-device-policy';
+export {
+  createEmbedderFromEnv,
+  createHashEmbedder,
+  embedHashText,
+  hashModelName,
+  OpenAiCompatibleEmbedder,
+  type HashEmbedder,
+  type HashEmbedderConfig,
+  type OpenAiCompatibleEmbedderConfig,
+} from './embedders';

@@ -43,7 +43,6 @@ export function createLitertLmSidecarFromEnv(
     bin,
     args,
     host: env['CTRL_LITERT_LM_HOST'] ?? '127.0.0.1',
-    port:
-      Number.isFinite(port) && port > 0 ? port : LITERT_LM_DEFAULT_PORT,
+    port: Number.isFinite(port) && port > 0 ? port : LITERT_LM_DEFAULT_PORT,
   });
 }
