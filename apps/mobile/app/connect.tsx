@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text } from 'react-native';
 import { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
