@@ -11,5 +11,7 @@ export {
   cosineSimilarity,
   buildSnippet,
   searchKnowledgeHybrid,
+  clearKnowledgeIndexCache,
   type KnowledgeSearchOptions,
 } from './search';
+export { HnswIndex } from './ann';

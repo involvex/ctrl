@@ -4,6 +4,7 @@ import type {
   KnowledgeReindexResult,
 } from '@involvex/ctrl-s';
 import type { KnowledgeStore } from '@involvex/ctrl-z';
+import { clearKnowledgeIndexCache } from './search';
 
 const DEFAULT_BATCH = 32;
 
@@ -38,7 +39,13 @@ export async function embedChunks(
         vector: Float32Array.from(vector),
       });
       stored += 1;
+      if (stored % 100 === 0) {
+        clearKnowledgeIndexCache(chunk.workspaceId);
+      }
     }
+  }
+  if (chunks.length > 0) {
+    clearKnowledgeIndexCache(chunks[0]!.workspaceId);
   }
   return stored;
 }
@@ -64,6 +71,7 @@ export async function reindexWorkspaceVectors(
     }
   );
   const indexed = await embedChunks(knowledge, embedder, chunks);
+  clearKnowledgeIndexCache(workspaceId);
   return {
     workspaceId,
     model: embedder.model,
