@@ -41,7 +41,7 @@ const DEFS: BackendDef[] = [
     envBin: 'CTRL_LLAMA_BIN',
     envArgs: 'CTRL_LLAMA_ARGS',
     installHint:
-      'Install llama.cpp llama-server and put it on PATH, or set CTRL_LLAMA_BIN.',
+      'Install llama.cpp (llama-server). Windows: build or download a release, then `setx CTRL_LLAMA_BIN C:\\path\\to\\llama-server.exe` (or add to PATH). Docs: docs/standalone-local.md',
     knownDirs: [
       path.join(os.homedir(), 'llama.cpp'),
       path.join(os.homedir(), '.local', 'bin'),
@@ -58,7 +58,7 @@ const DEFS: BackendDef[] = [
     envBin: 'CTRL_LITERT_LM_BIN',
     envArgs: 'CTRL_LITERT_LM_ARGS',
     installHint:
-      'Install litert-lm and put it on PATH, or set CTRL_LITERT_LM_BIN.',
+      'Install litert-lm CLI. Then `setx CTRL_LITERT_LM_BIN C:\\path\\to\\litert-lm.exe` (or PATH). Default API http://127.0.0.1:9379/v1 — docs/standalone-local.md',
     knownDirs: [
       path.join(os.homedir(), 'litert-lm'),
       path.join(os.homedir(), '.local', 'bin'),

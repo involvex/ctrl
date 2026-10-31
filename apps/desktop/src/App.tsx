@@ -952,10 +952,34 @@ export function App() {
                 }
                 token={gatewayToken}
               />
+              <div className="host-row">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={
+                    lanUrls.length === 0 && !gatewayUrl.startsWith('http')
+                  }
+                  onClick={() => {
+                    const url =
+                      lanUrls[0] ??
+                      (gatewayUrl.startsWith('http') ? gatewayUrl : '');
+                    if (url) {
+                      void navigator.clipboard.writeText(url);
+                    }
+                  }}
+                >
+                  copy LAN URL
+                </button>
+                <span className="meta">
+                  {lanUrls[0] ??
+                    '(no Wi‑Fi/Ethernet IP — phone cannot use 127.0.0.1)'}
+                </span>
+              </div>
               {lanUrls.length === 0 ? (
                 <p className="meta warn">
-                  No LAN IP detected — phone needs the PC Wi‑Fi/Ethernet address
-                  (loopback QR will not reach from another device).
+                  No LAN IP detected — phone needs the PC Wi‑Fi/Ethernet
+                  address. Windows firewall: allow inbound TCP on the gateway
+                  port (usually 7331).
                 </p>
               ) : null}
             </>
@@ -968,7 +992,8 @@ export function App() {
           <p className="host-title">local models</p>
           <p className="meta">
             Detect llama-server (:8080) and litert-lm (:9379). Start uses a
-            binary already on this PC — no in-app download.
+            binary already on this PC — no in-app download. See
+            docs/standalone-local.md.
           </p>
           <div className="host-row">
             <button
@@ -981,6 +1006,13 @@ export function App() {
               detect
             </button>
           </div>
+          {localBackends.length === 0 ? (
+            <p className="meta warn">
+              Tap detect. If binaries are missing, install llama-server and/or
+              litert-lm, set CTRL_LLAMA_BIN / CTRL_LITERT_LM_BIN, then detect
+              again.
+            </p>
+          ) : null}
           <ul className="knowledge-list">
             {localBackends.map((b) => (
               <li key={b.id}>
@@ -1470,7 +1502,20 @@ export function App() {
       </section>
 
       {toolStatus ? <p className="meta tool-status">{toolStatus}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? (
+        <div className="error-banner">
+          <p className="error">{error}</p>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              void navigator.clipboard.writeText(error);
+            }}
+          >
+            copy error
+          </button>
+        </div>
+      ) : null}
 
       {pendingApproval ? (
         <aside className="approval">

@@ -31,7 +31,10 @@ export class MinHeap<T> {
           smallest = right;
         }
         if (smallest === i) break;
-        [this.heap[i], this.heap[smallest]] = [this.heap[smallest]!, this.heap[i]!];
+        [this.heap[i], this.heap[smallest]] = [
+          this.heap[smallest]!,
+          this.heap[i]!,
+        ];
         i = smallest;
       }
     }
@@ -88,7 +91,10 @@ export class MaxHeap<T> {
           largest = right;
         }
         if (largest === i) break;
-        [this.heap[i], this.heap[largest]] = [this.heap[largest]!, this.heap[i]!];
+        [this.heap[i], this.heap[largest]] = [
+          this.heap[largest]!,
+          this.heap[i]!,
+        ];
         i = largest;
       }
     }

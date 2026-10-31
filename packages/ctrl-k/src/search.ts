@@ -3,21 +3,21 @@ import {
   type Embedder,
   type KnowledgeHit,
   type KnowledgeSearchMode,
-} from "@involvex/ctrl-s";
-import type { KnowledgeStore, StoredVector } from "@involvex/ctrl-z";
-import { HnswIndex } from "./ann";
+} from '@involvex/ctrl-s';
+import type { KnowledgeStore, StoredVector } from '@involvex/ctrl-z';
+import { HnswIndex } from './ann';
 
 const RRF_K = 60;
 
 function getAnnConfig() {
   return {
-    threshold: Number(process.env["CTRL_KNOWLEDGE_ANN_THRESHOLD"]) || 500,
-    efSearch: Number(process.env["CTRL_KNOWLEDGE_ANN_EF_SEARCH"]) || 50,
-    m: Number(process.env["CTRL_KNOWLEDGE_ANN_M"]) || 16,
+    threshold: Number(process.env['CTRL_KNOWLEDGE_ANN_THRESHOLD']) || 500,
+    efSearch: Number(process.env['CTRL_KNOWLEDGE_ANN_EF_SEARCH']) || 50,
+    m: Number(process.env['CTRL_KNOWLEDGE_ANN_M']) || 16,
     efConstruction:
-      Number(process.env["CTRL_KNOWLEDGE_ANN_EF_CONSTRUCTION"]) || 200,
-    ttlMs: Number(process.env["CTRL_KNOWLEDGE_ANN_CACHE_TTL_MS"]) || 60000,
-    maxCacheEntries: Number(process.env["CTRL_KNOWLEDGE_ANN_CACHE_MAX"]) || 32,
+      Number(process.env['CTRL_KNOWLEDGE_ANN_EF_CONSTRUCTION']) || 200,
+    ttlMs: Number(process.env['CTRL_KNOWLEDGE_ANN_CACHE_TTL_MS']) || 60000,
+    maxCacheEntries: Number(process.env['CTRL_KNOWLEDGE_ANN_CACHE_MAX']) || 32,
   };
 }
 
@@ -96,9 +96,9 @@ function tokenizeQuery(query: string): string[] {
 export function buildSnippet(
   content: string,
   query: string,
-  radius = 110,
+  radius = 110
 ): string {
-  const flat = content.replace(/\s+/g, " ").trim();
+  const flat = content.replace(/\s+/g, ' ').trim();
   if (flat.length <= radius * 2) {
     return flat;
   }
@@ -116,8 +116,8 @@ export function buildSnippet(
   }
   const start = Math.max(0, position - radius);
   const end = Math.min(flat.length, position + radius);
-  return `${start > 0 ? "…" : ""}${flat.slice(start, end)}${
-    end < flat.length ? "…" : ""
+  return `${start > 0 ? '…' : ''}${flat.slice(start, end)}${
+    end < flat.length ? '…' : ''
   }`;
 }
 
@@ -126,7 +126,7 @@ async function vectorHits(
   embedder: Embedder,
   workspaceId: string,
   query: string,
-  limit: number,
+  limit: number
 ): Promise<KnowledgeHit[]> {
   const [queryVector] = await embedder.embed([query]);
   if (!queryVector || queryVector.length === 0) {
@@ -135,7 +135,7 @@ async function vectorHits(
   const queryFloat = Float32Array.from(queryVector);
   const stored = knowledge.listVectors(workspaceId, embedder.model);
   const filtered = stored.filter(
-    (row: StoredVector) => row.vector.length === queryFloat.length,
+    (row: StoredVector) => row.vector.length === queryFloat.length
   );
 
   if (filtered.length === 0) {
@@ -208,8 +208,8 @@ async function vectorHits(
       snippet: buildSnippet(row.content, query),
       rank: -score,
       score,
-      source: "vector",
-    }),
+      source: 'vector',
+    })
   );
 }
 
@@ -224,7 +224,7 @@ export async function searchKnowledgeHybrid(
   embedder: Embedder | null,
   workspaceId: string,
   query: string,
-  opts: KnowledgeSearchOptions = {},
+  opts: KnowledgeSearchOptions = {}
 ): Promise<KnowledgeHit[]> {
   const limit = opts.limit ?? 8;
   const candidateLimit = opts.candidateLimit ?? Math.max(limit * 4, 24);
@@ -232,19 +232,19 @@ export async function searchKnowledgeHybrid(
   if (trimmed.length === 0) {
     return [];
   }
-  const requested = opts.mode ?? (embedder ? "hybrid" : "fts");
+  const requested = opts.mode ?? (embedder ? 'hybrid' : 'fts');
 
-  if (requested === "fts" || !embedder) {
+  if (requested === 'fts' || !embedder) {
     return knowledge.searchKnowledge(workspaceId, trimmed, limit);
   }
 
-  if (requested === "vector") {
+  if (requested === 'vector') {
     return vectorHits(
       knowledge,
       embedder,
       workspaceId,
       trimmed,
-      candidateLimit,
+      candidateLimit
     ).then((hits) => hits.slice(0, limit));
   }
 
@@ -256,14 +256,14 @@ export async function searchKnowledgeHybrid(
       embedder,
       workspaceId,
       trimmed,
-      candidateLimit,
+      candidateLimit
     );
   } catch (err) {
     // Vector failures must not break retrieval; degrade to FTS.
     process.stderr.write(
       `[ctrl-k] vector search failed: ${
         err instanceof Error ? err.message : String(err)
-      }\n`,
+      }\n`
     );
   }
 
@@ -286,8 +286,8 @@ export async function searchKnowledgeHybrid(
         ...hit,
         rank: -score,
         score,
-        source: "hybrid",
-      }),
+        source: 'hybrid',
+      })
   );
 }
 

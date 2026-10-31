@@ -264,6 +264,19 @@ body,
   font-size: 0.8rem;
 }
 
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0 1.25rem 0.5rem;
+}
+
+.error-banner .error {
+  padding: 0;
+  flex: 1;
+}
+
 .tool-status {
   padding: 0.35rem 1.25rem;
   opacity: 0.7;

@@ -1,17 +1,17 @@
-import { ChannelManager } from "@involvex/ctrl-c";
+import { ChannelManager } from '@involvex/ctrl-c';
 import {
   assembleContextPreview,
   ingestAttachment,
   reindexWorkspaceVectors,
   searchKnowledgeHybrid,
-} from "@involvex/ctrl-k";
+} from '@involvex/ctrl-k';
 
 // Simple rate limiter for expensive operations
 const reindexRateLimit = new Map<string, number[]>();
 function checkRateLimit(
   key: string,
   maxRequests = 5,
-  windowMs = 60000,
+  windowMs = 60000
 ): boolean {
   const now = Date.now();
   const timestamps = reindexRateLimit.get(key) || [];
@@ -24,7 +24,7 @@ function checkRateLimit(
   reindexRateLimit.set(key, recent);
   return true;
 }
-import { resolveMcpClientFromEnv } from "@involvex/ctrl-m";
+import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
 import {
   createEmbedderFromEnv,
   createLitertLmSidecarFromEnv,
@@ -33,7 +33,7 @@ import {
   probeOpenAiModels,
   type LitertLmSidecar,
   type LlamaSidecar,
-} from "@involvex/ctrl-r";
+} from '@involvex/ctrl-r';
 import {
   clientControlMessageSchema,
   createAgentProfileInputSchema,
@@ -63,29 +63,29 @@ import {
   type HealthResponse,
   type LocalBackendInfo,
   type PairingAck,
-} from "@involvex/ctrl-s";
+} from '@involvex/ctrl-s';
 import {
   createApprovalGate,
   registerBuiltinTools,
   runAgentLoop,
   ToolRegistry,
-} from "@involvex/ctrl-x";
+} from '@involvex/ctrl-x';
 import {
   BackupStore,
   ChannelStore,
   KnowledgeStore,
   openDatabase,
   Store,
-} from "@involvex/ctrl-z";
-import path from "node:path";
-import { gatewayTokenFromEnv, isAuthorized, isPublicPath } from "./auth";
-import { listLanGatewayUrls } from "./lan";
-import { demoAgentEvents } from "./mock-stream";
+} from '@involvex/ctrl-z';
+import path from 'node:path';
+import { gatewayTokenFromEnv, isAuthorized, isPublicPath } from './auth';
+import { listLanGatewayUrls } from './lan';
+import { demoAgentEvents } from './mock-stream';
 
 /** Bind all interfaces so Expo / LAN clients can reach the gateway. */
-const DEFAULT_HOST = "0.0.0.0";
+const DEFAULT_HOST = '0.0.0.0';
 const DEFAULT_PORT = 7331;
-const VERSION = "0.0.1";
+const VERSION = '0.0.1';
 const CHUNK_DELAY_MS = 40;
 
 /**
@@ -93,15 +93,15 @@ const CHUNK_DELAY_MS = 40;
  * Windows/dev shells often set HOST to the machine name or 127.0.0.1.
  */
 function resolveListenHost(): string {
-  if (process.env["CTRL_A_HOST"]) {
-    return process.env["CTRL_A_HOST"];
+  if (process.env['CTRL_A_HOST']) {
+    return process.env['CTRL_A_HOST'];
   }
-  const host = process.env["HOST"];
+  const host = process.env['HOST'];
   if (
-    host === "0.0.0.0" ||
-    host === "127.0.0.1" ||
-    host === "::" ||
-    host === "::1"
+    host === '0.0.0.0' ||
+    host === '127.0.0.1' ||
+    host === '::' ||
+    host === '::1'
   ) {
     return host;
   }
@@ -109,9 +109,9 @@ function resolveListenHost(): string {
 }
 
 type SocketData =
-  | { kind: "demo" }
+  | { kind: 'demo' }
   | {
-      kind: "chat";
+      kind: 'chat';
       conversationId: string;
       content: string;
       runId: string;
@@ -123,17 +123,17 @@ function healthPayload(): HealthResponse {
   return healthResponseSchema.parse({
     ok: true,
     version: VERSION,
-    service: "ctrl-a",
+    service: 'ctrl-a',
   });
 }
 
 function corsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("Origin") ?? "*";
+  const origin = req.headers.get('Origin') ?? '*';
   return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    Vary: "Origin",
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    Vary: 'Origin',
   };
 }
 
@@ -141,18 +141,18 @@ function withCors(req: Request, res: Response): Response {
   const headers = new Headers(res.headers);
   const cors = corsHeaders(req);
   headers.set(
-    "Access-Control-Allow-Origin",
-    cors["Access-Control-Allow-Origin"]!,
+    'Access-Control-Allow-Origin',
+    cors['Access-Control-Allow-Origin']!
   );
   headers.set(
-    "Access-Control-Allow-Methods",
-    cors["Access-Control-Allow-Methods"]!,
+    'Access-Control-Allow-Methods',
+    cors['Access-Control-Allow-Methods']!
   );
   headers.set(
-    "Access-Control-Allow-Headers",
-    cors["Access-Control-Allow-Headers"]!,
+    'Access-Control-Allow-Headers',
+    cors['Access-Control-Allow-Headers']!
   );
-  headers.set("Vary", cors["Vary"]!);
+  headers.set('Vary', cors['Vary']!);
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,
@@ -165,52 +165,52 @@ function json(req: Request, data: unknown, status = 200): Response {
 }
 
 function resolveDataDir(): string {
-  if (process.env["CTRL_DATA_DIR"]) {
-    return process.env["CTRL_DATA_DIR"];
+  if (process.env['CTRL_DATA_DIR']) {
+    return process.env['CTRL_DATA_DIR'];
   }
   // `bun run --filter @involvex/ctrl-a` uses packages/ctrl-a as cwd — keep DB at repo root.
   const cwd = process.cwd();
-  const normalized = cwd.replaceAll("\\", "/");
-  if (normalized.endsWith("/packages/ctrl-a")) {
-    return path.join(cwd, "..", "..", "data");
+  const normalized = cwd.replaceAll('\\', '/');
+  if (normalized.endsWith('/packages/ctrl-a')) {
+    return path.join(cwd, '..', '..', 'data');
   }
-  return path.join(cwd, "data");
+  return path.join(cwd, 'data');
 }
 
 function isAddrInUse(err: unknown): boolean {
-  if (!err || typeof err !== "object") {
+  if (!err || typeof err !== 'object') {
     return false;
   }
-  const code = "code" in err ? String(err.code) : "";
+  const code = 'code' in err ? String(err.code) : '';
   // Bun may omit code; only treat explicit EADDRINUSE (not every "Is port in use?" listen failure).
-  return code === "EADDRINUSE";
+  return code === 'EADDRINUSE';
 }
 
 function resolveDbPath(): string {
-  if (process.env["CTRL_DB_PATH"]) {
-    return process.env["CTRL_DB_PATH"];
+  if (process.env['CTRL_DB_PATH']) {
+    return process.env['CTRL_DB_PATH'];
   }
-  return path.join(resolveDataDir(), "app.db");
+  return path.join(resolveDataDir(), 'app.db');
 }
 
 function resolveSandboxRoot(): string {
-  if (process.env["CTRL_SANDBOX_ROOT"]) {
-    return process.env["CTRL_SANDBOX_ROOT"];
+  if (process.env['CTRL_SANDBOX_ROOT']) {
+    return process.env['CTRL_SANDBOX_ROOT'];
   }
-  return path.join(resolveDataDir(), "sandbox");
+  return path.join(resolveDataDir(), 'sandbox');
 }
 
 function decodeAttachmentBytes(
-  input: CreateAttachmentInput,
+  input: CreateAttachmentInput
 ): Uint8Array | null {
-  if (typeof input.text === "string") {
+  if (typeof input.text === 'string') {
     return new TextEncoder().encode(input.text);
   }
   if (
-    typeof input.contentBase64 === "string" &&
+    typeof input.contentBase64 === 'string' &&
     input.contentBase64.length > 0
   ) {
-    return Uint8Array.from(Buffer.from(input.contentBase64, "base64"));
+    return Uint8Array.from(Buffer.from(input.contentBase64, 'base64'));
   }
   return null;
 }
@@ -221,15 +221,15 @@ async function streamIterable(
     send: (data: string) => void;
   },
   events: AsyncIterable<AgentEvent> | Iterable<AgentEvent>,
-  pace = false,
+  pace = false
 ): Promise<string> {
-  let assembled = "";
+  let assembled = '';
   for await (const event of events) {
     if (ws.readyState !== 1) {
       return assembled;
     }
     ws.send(JSON.stringify(event));
-    if (event.type === "message.delta") {
+    if (event.type === 'message.delta') {
       assembled += event.text;
     }
     if (pace) {
@@ -247,7 +247,7 @@ export type StartedGateway = {
 export async function startServer(): Promise<StartedGateway> {
   const host = resolveListenHost();
   const port = Number(
-    process.env["PORT"] ?? process.env["CTRL_A_PORT"] ?? DEFAULT_PORT,
+    process.env['PORT'] ?? process.env['CTRL_A_PORT'] ?? DEFAULT_PORT
   );
   const expectedToken = gatewayTokenFromEnv();
   const db = openDatabase(resolveDbPath());
@@ -263,21 +263,21 @@ export async function startServer(): Promise<StartedGateway> {
     llama = createLlamaSidecarFromEnv();
     if (llama) {
       const { baseUrl } = await llama.start();
-      process.env["CTRL_LLAMA_BASE_URL"] = baseUrl;
-      process.env["CTRL_OPENAI_BASE_URL"] =
-        process.env["CTRL_OPENAI_BASE_URL"] ?? baseUrl;
-      process.env["CTRL_OPENAI_API_KEY"] =
-        process.env["CTRL_OPENAI_API_KEY"] ??
-        process.env["OPENAI_API_KEY"] ??
-        "local";
-      if (!process.env["CTRL_PROVIDER"]) {
-        process.env["CTRL_PROVIDER"] = "llama";
+      process.env['CTRL_LLAMA_BASE_URL'] = baseUrl;
+      process.env['CTRL_OPENAI_BASE_URL'] =
+        process.env['CTRL_OPENAI_BASE_URL'] ?? baseUrl;
+      process.env['CTRL_OPENAI_API_KEY'] =
+        process.env['CTRL_OPENAI_API_KEY'] ??
+        process.env['OPENAI_API_KEY'] ??
+        'local';
+      if (!process.env['CTRL_PROVIDER']) {
+        process.env['CTRL_PROVIDER'] = 'llama';
       }
       process.stderr.write(`[ctrl-a] llama-server ${baseUrl}\n`);
     }
   } catch (err) {
     process.stderr.write(
-      `[ctrl-a] llama-server failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      `[ctrl-a] llama-server failed: ${err instanceof Error ? err.message : String(err)}\n`
     );
     llama = null;
   }
@@ -286,19 +286,19 @@ export async function startServer(): Promise<StartedGateway> {
     litertLm = createLitertLmSidecarFromEnv();
     if (litertLm) {
       const { baseUrl } = await litertLm.start();
-      process.env["CTRL_LITERT_LM_BASE_URL"] = baseUrl;
-      process.env["CTRL_OPENAI_API_KEY"] =
-        process.env["CTRL_OPENAI_API_KEY"] ??
-        process.env["OPENAI_API_KEY"] ??
-        "local";
-      if (!process.env["CTRL_PROVIDER"]) {
-        process.env["CTRL_PROVIDER"] = "litert";
+      process.env['CTRL_LITERT_LM_BASE_URL'] = baseUrl;
+      process.env['CTRL_OPENAI_API_KEY'] =
+        process.env['CTRL_OPENAI_API_KEY'] ??
+        process.env['OPENAI_API_KEY'] ??
+        'local';
+      if (!process.env['CTRL_PROVIDER']) {
+        process.env['CTRL_PROVIDER'] = 'litert';
       }
       process.stderr.write(`[ctrl-a] litert-lm ${baseUrl}\n`);
     }
   } catch (err) {
     process.stderr.write(
-      `[ctrl-a] litert-lm failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      `[ctrl-a] litert-lm failed: ${err instanceof Error ? err.message : String(err)}\n`
     );
     litertLm = null;
   }
@@ -308,7 +308,7 @@ export async function startServer(): Promise<StartedGateway> {
   });
   const embedder = createEmbedderFromEnv(
     process.env,
-    providerRuntime.getConfig(),
+    providerRuntime.getConfig()
   );
   const sandboxRoot = resolveSandboxRoot();
   const registry = new ToolRegistry();
@@ -321,28 +321,28 @@ export async function startServer(): Promise<StartedGateway> {
 
   async function collectLocalBackends(): Promise<LocalBackendInfo[]> {
     const candidates: Array<{
-      id: "llama" | "litert-lm";
+      id: 'llama' | 'litert-lm';
       port: number;
       baseUrl: string;
       sidecar: LlamaSidecar | LitertLmSidecar | null;
     }> = [
       {
-        id: "llama",
+        id: 'llama',
         port: llama?.getPort() ?? 8080,
-        baseUrl: llama?.getBaseUrl() ?? "http://127.0.0.1:8080/v1",
+        baseUrl: llama?.getBaseUrl() ?? 'http://127.0.0.1:8080/v1',
         sidecar: llama,
       },
       {
-        id: "litert-lm",
+        id: 'litert-lm',
         port: litertLm?.getPort() ?? 9379,
-        baseUrl: litertLm?.getBaseUrl() ?? "http://127.0.0.1:9379/v1",
+        baseUrl: litertLm?.getBaseUrl() ?? 'http://127.0.0.1:9379/v1',
         sidecar: litertLm,
       },
     ];
     const out: LocalBackendInfo[] = [];
     for (const c of candidates) {
       const sidecarState = c.sidecar?.getStatus().state;
-      let running = sidecarState === "running";
+      let running = sidecarState === 'running';
       let modelsPreview: string[] = [];
       if (!running) {
         const probe = await probeOpenAiModels(c.baseUrl);
@@ -363,16 +363,16 @@ export async function startServer(): Promise<StartedGateway> {
         baseUrl: c.baseUrl,
         modelsPreview,
         binFound: Boolean(c.sidecar),
-        ...(c.id === "llama" && !c.sidecar
+        ...(c.id === 'llama' && !c.sidecar
           ? {
               installHint:
-                "Install llama-server and set CTRL_LLAMA_BIN (or Start from desktop Host).",
+                'Install llama-server and set CTRL_LLAMA_BIN (or Start from desktop Host).',
             }
           : {}),
-        ...(c.id === "litert-lm" && !c.sidecar
+        ...(c.id === 'litert-lm' && !c.sidecar
           ? {
               installHint:
-                "Install litert-lm and set CTRL_LITERT_LM_BIN (or Start from desktop Host).",
+                'Install litert-lm and set CTRL_LITERT_LM_BIN (or Start from desktop Host).',
             }
           : {}),
       });
@@ -381,25 +381,25 @@ export async function startServer(): Promise<StartedGateway> {
   }
 
   process.stderr.write(
-    `[ctrl-a] provider ${providerRuntime.getProvider().id}\n`,
+    `[ctrl-a] provider ${providerRuntime.getProvider().id}\n`
   );
   process.stderr.write(
     `[ctrl-a] embeddings ${
-      embedder ? `${embedder.id} (${embedder.model}, ${embedder.dims}d)` : "off"
-    }\n`,
+      embedder ? `${embedder.id} (${embedder.model}, ${embedder.dims}d)` : 'off'
+    }\n`
   );
-  process.stderr.write(`[ctrl-a] tools ${registry.listNames().join(", ")}\n`);
+  process.stderr.write(`[ctrl-a] tools ${registry.listNames().join(', ')}\n`);
   process.stderr.write(`[ctrl-a] sandbox ${sandboxRoot}\n`);
   process.stderr.write(
     `[ctrl-a] mcp ${
       mcp
         .listServers()
         .map((s) => s.id)
-        .join(", ") || "(none)"
-    }\n`,
+        .join(', ') || '(none)'
+    }\n`
   );
   process.stderr.write(
-    `[ctrl-a] auth ${expectedToken ? "token-required" : "open"}\n`,
+    `[ctrl-a] auth ${expectedToken ? 'token-required' : 'open'}\n`
   );
   process.stderr.write(`[ctrl-a] db ${resolveDbPath()}\n`);
 
@@ -411,65 +411,65 @@ export async function startServer(): Promise<StartedGateway> {
       async fetch(req, srv) {
         const url = new URL(req.url);
 
-        if (req.method === "OPTIONS") {
+        if (req.method === 'OPTIONS') {
           return withCors(req, new Response(null, { status: 204 }));
         }
 
-        if (req.method === "GET" && url.pathname === "/healthz") {
+        if (req.method === 'GET' && url.pathname === '/healthz') {
           return json(req, healthPayload());
         }
 
         if (!isPublicPath(url.pathname) && !isAuthorized(req, expectedToken)) {
-          return json(req, { error: "unauthorized" }, 401);
+          return json(req, { error: 'unauthorized' }, 401);
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/pairing") {
+        if (req.method === 'GET' && url.pathname === '/api/v1/pairing') {
           const localBackends = await collectLocalBackends();
           return json(req, {
             required: Boolean(expectedToken),
             port,
             urls: listLanGatewayUrls(port),
-            llama: llama?.getStatus() ?? { state: "stopped" },
+            llama: llama?.getStatus() ?? { state: 'stopped' },
             localBackends,
             lastAck: lastPairingAck,
           });
         }
 
-        if (req.method === "POST" && url.pathname === "/api/v1/pairing/ack") {
+        if (req.method === 'POST' && url.pathname === '/api/v1/pairing/ack') {
           const body = pairingAckInputSchema.parse(
-            await req.json().catch(() => ({})),
+            await req.json().catch(() => ({}))
           );
           lastPairingAck = {
             at: new Date().toISOString(),
             ...(body.label ? { label: body.label } : {}),
           };
           process.stderr.write(
-            `[ctrl-a] pairing ack${body.label ? ` · ${body.label}` : ""}\n`,
+            `[ctrl-a] pairing ack${body.label ? ` · ${body.label}` : ''}\n`
           );
           return json(req, { ok: true, lastAck: lastPairingAck });
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/tools") {
+        if (req.method === 'GET' && url.pathname === '/api/v1/tools') {
           return json(req, { items: registry.list() });
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/provider") {
+        if (req.method === 'GET' && url.pathname === '/api/v1/provider') {
           const localBackends = await collectLocalBackends();
           return json(req, providerRuntime.status(localBackends));
         }
 
-        if (req.method === "PATCH" && url.pathname === "/api/v1/provider") {
+        if (req.method === 'PATCH' && url.pathname === '/api/v1/provider') {
           const body = updateProviderConfigInputSchema.parse(await req.json());
           const status = providerRuntime.update(body);
           process.stderr.write(
-            `[ctrl-a] provider → ${providerRuntime.getProvider().id}\n`,
+            `[ctrl-a] provider → ${providerRuntime.getProvider().id}\n`
           );
           const localBackends = await collectLocalBackends();
           return json(req, { ...status, localBackends });
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/models") {
-          const rawProvider = url.searchParams.get("provider");
+        if (req.method === 'GET' && url.pathname === '/api/v1/models') {
+          const rawProvider = url.searchParams.get('provider');
           const provider = rawProvider
             ? providerIdSchema.parse(rawProvider)
             : undefined;
@@ -485,26 +485,26 @@ export async function startServer(): Promise<StartedGateway> {
         if (workspaceAttachments) {
           const workspaceId = workspaceAttachments[1]!;
           if (!store.getWorkspace(workspaceId)) {
-            return json(req, { error: "workspace not found" }, 404);
+            return json(req, { error: 'workspace not found' }, 404);
           }
-          if (req.method === "GET") {
+          if (req.method === 'GET') {
             return json(req, { items: knowledge.listAttachments(workspaceId) });
           }
-          if (req.method === "POST") {
+          if (req.method === 'POST') {
             const body: unknown = await req.json();
             const input = createAttachmentInputSchema.parse(body);
             const bytes = decodeAttachmentBytes(input);
             if (!bytes) {
               return json(
                 req,
-                { error: "text or contentBase64 required" },
-                400,
+                { error: 'text or contentBase64 required' },
+                400
               );
             }
             const attachment = knowledge.createAttachment(
               workspaceId,
               input,
-              bytes,
+              bytes
             );
             const ingest = await ingestAttachment(knowledge, attachment, {
               embedder,
@@ -516,25 +516,25 @@ export async function startServer(): Promise<StartedGateway> {
                 ...ready,
                 embeddedCount: ingest.embeddedCount,
               },
-              201,
+              201
             );
           }
         }
 
         const workspaceKnowledgeReindex =
           /^\/api\/v1\/workspaces\/([^/]+)\/knowledge\/reindex$/.exec(
-            url.pathname,
+            url.pathname
           );
-        if (workspaceKnowledgeReindex && req.method === "POST") {
+        if (workspaceKnowledgeReindex && req.method === 'POST') {
           const workspaceId = workspaceKnowledgeReindex[1]!;
           if (!store.getWorkspace(workspaceId)) {
-            return json(req, { error: "workspace not found" }, 404);
+            return json(req, { error: 'workspace not found' }, 404);
           }
           if (!embedder) {
-            return json(req, { error: "embeddings disabled" }, 409);
+            return json(req, { error: 'embeddings disabled' }, 409);
           }
           if (!checkRateLimit(`reindex:${workspaceId}`)) {
-            return json(req, { error: "rate limit exceeded" }, 429);
+            return json(req, { error: 'rate limit exceeded' }, 429);
           }
           const body: unknown = await req.json().catch(() => ({}));
           const input = knowledgeReindexInputSchema.parse(body ?? {});
@@ -546,25 +546,25 @@ export async function startServer(): Promise<StartedGateway> {
               {
                 force: input.force ?? false,
                 ...(input.limit ? { limit: input.limit } : {}),
-              },
+              }
             );
             return json(req, result);
           } catch (err) {
             return json(
               req,
               { error: err instanceof Error ? err.message : String(err) },
-              502,
+              502
             );
           }
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/embeddings") {
-          const workspaceId = url.searchParams.get("workspaceId");
+        if (req.method === 'GET' && url.pathname === '/api/v1/embeddings') {
+          const workspaceId = url.searchParams.get('workspaceId');
           const model = embedder?.model;
           return json(req, {
             enabled: Boolean(embedder),
-            provider: embedder?.id ?? "off",
-            model: embedder?.model ?? "none",
+            provider: embedder?.id ?? 'off',
+            model: embedder?.model ?? 'none',
             dims: embedder?.dims ?? 0,
             indexedChunks:
               workspaceId && model
@@ -573,18 +573,18 @@ export async function startServer(): Promise<StartedGateway> {
             totalChunks: workspaceId ? knowledge.countChunks(workspaceId) : 0,
             ...(embedder
               ? {}
-              : { hint: "Set CTRL_EMBEDDINGS=hash|openai|llama|litert" }),
+              : { hint: 'Set CTRL_EMBEDDINGS=hash|openai|llama|litert' }),
           });
         }
 
         const workspaceKnowledgeSearch =
           /^\/api\/v1\/workspaces\/([^/]+)\/knowledge\/search$/.exec(
-            url.pathname,
+            url.pathname
           );
-        if (workspaceKnowledgeSearch && req.method === "POST") {
+        if (workspaceKnowledgeSearch && req.method === 'POST') {
           const workspaceId = workspaceKnowledgeSearch[1]!;
           if (!store.getWorkspace(workspaceId)) {
-            return json(req, { error: "workspace not found" }, 404);
+            return json(req, { error: 'workspace not found' }, 404);
           }
           const body: unknown = await req.json();
           const input = knowledgeSearchInputSchema.parse(body);
@@ -597,43 +597,43 @@ export async function startServer(): Promise<StartedGateway> {
               {
                 ...(input.mode ? { mode: input.mode } : {}),
                 limit: input.limit ?? 8,
-              },
+              }
             );
             return json(req, {
               items,
-              mode: input.mode ?? (embedder ? "hybrid" : "fts"),
+              mode: input.mode ?? (embedder ? 'hybrid' : 'fts'),
             });
           } catch (err) {
             return json(
               req,
               { error: err instanceof Error ? err.message : String(err) },
-              502,
+              502
             );
           }
         }
 
         const workspaceMemory = /^\/api\/v1\/workspaces\/([^/]+)\/memory$/.exec(
-          url.pathname,
+          url.pathname
         );
         if (workspaceMemory) {
           const workspaceId = workspaceMemory[1]!;
           if (!store.getWorkspace(workspaceId)) {
-            return json(req, { error: "workspace not found" }, 404);
+            return json(req, { error: 'workspace not found' }, 404);
           }
-          if (req.method === "GET") {
-            const status = url.searchParams.get("status");
+          if (req.method === 'GET') {
+            const status = url.searchParams.get('status');
             return json(req, {
               items: knowledge.listMemory(
                 workspaceId,
-                status === "active" ||
-                  status === "archived" ||
-                  status === "pending_review"
+                status === 'active' ||
+                  status === 'archived' ||
+                  status === 'pending_review'
                   ? { status }
-                  : undefined,
+                  : undefined
               ),
             });
           }
-          if (req.method === "POST") {
+          if (req.method === 'POST') {
             const body: unknown = await req.json();
             const input = createMemoryInputSchema.parse(body);
             return json(req, knowledge.createMemory(workspaceId, input), 201);
@@ -641,26 +641,26 @@ export async function startServer(): Promise<StartedGateway> {
         }
 
         const memoryItem = /^\/api\/v1\/memory\/([^/]+)$/.exec(url.pathname);
-        if (memoryItem && req.method === "PATCH") {
+        if (memoryItem && req.method === 'PATCH') {
           const memoryId = memoryItem[1]!;
           const body: unknown = await req.json();
           const input = updateMemoryInputSchema.parse(body);
           const updated = knowledge.updateMemory(memoryId, input);
           if (!updated) {
-            return json(req, { error: "memory not found" }, 404);
+            return json(req, { error: 'memory not found' }, 404);
           }
           return json(req, updated);
         }
 
         const workspaceContext =
           /^\/api\/v1\/workspaces\/([^/]+)\/context$/.exec(url.pathname);
-        if (workspaceContext && req.method === "GET") {
+        if (workspaceContext && req.method === 'GET') {
           const workspaceId = workspaceContext[1]!;
           if (!store.getWorkspace(workspaceId)) {
-            return json(req, { error: "workspace not found" }, 404);
+            return json(req, { error: 'workspace not found' }, 404);
           }
-          const conversationId = url.searchParams.get("conversationId");
-          const query = url.searchParams.get("q") ?? "";
+          const conversationId = url.searchParams.get('conversationId');
+          const query = url.searchParams.get('q') ?? '';
           const recentMessages = conversationId
             ? store
                 .listMessages(conversationId)
@@ -679,7 +679,7 @@ export async function startServer(): Promise<StartedGateway> {
                   embedder,
                   workspaceId,
                   query,
-                  { limit: 6 },
+                  { limit: 6 }
                 )
               : [];
           return json(
@@ -690,24 +690,24 @@ export async function startServer(): Promise<StartedGateway> {
               recentMessages,
               pinnedMemory,
               knowledgeHits,
-            }),
+            })
           );
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/profiles") {
+        if (req.method === 'GET' && url.pathname === '/api/v1/profiles') {
           return json(req, { items: store.listAgentProfiles() });
         }
 
-        if (req.method === "POST" && url.pathname === "/api/v1/profiles") {
+        if (req.method === 'POST' && url.pathname === '/api/v1/profiles') {
           const body: unknown = await req.json();
           const input = createAgentProfileInputSchema.parse(body);
           return json(req, store.createAgentProfile(input), 201);
         }
 
         const profileMatch = /^\/api\/v1\/profiles\/([^/]+)$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (profileMatch && req.method === "PATCH") {
+        if (profileMatch && req.method === 'PATCH') {
           const profileId = profileMatch[1]!;
           const body: unknown = await req.json();
           const input = updateAgentProfileInputSchema.parse(body);
@@ -715,41 +715,41 @@ export async function startServer(): Promise<StartedGateway> {
             return json(req, store.updateAgentProfile(profileId, input));
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            const status = message.includes("not found") ? 404 : 400;
+            const status = message.includes('not found') ? 404 : 400;
             return json(req, { error: message }, status);
           }
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/audit") {
-          const limit = Number(url.searchParams.get("limit") ?? 100);
+        if (req.method === 'GET' && url.pathname === '/api/v1/audit') {
+          const limit = Number(url.searchParams.get('limit') ?? 100);
           return json(req, { items: store.listAudit(limit) });
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/mcp/servers") {
+        if (req.method === 'GET' && url.pathname === '/api/v1/mcp/servers') {
           return json(req, { items: mcp.listServers() });
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/workspaces") {
+        if (req.method === 'GET' && url.pathname === '/api/v1/workspaces') {
           return json(req, { items: store.listWorkspaces() });
         }
 
-        if (req.method === "POST" && url.pathname === "/api/v1/workspaces") {
+        if (req.method === 'POST' && url.pathname === '/api/v1/workspaces') {
           const body: unknown = await req.json();
           const input = createWorkspaceInputSchema.parse(body);
           return json(req, store.createWorkspace(input.name), 201);
         }
 
-        if (req.method === "POST" && url.pathname === "/api/v1/import") {
+        if (req.method === 'POST' && url.pathname === '/api/v1/import') {
           const body: unknown = await req.json();
           const dump = workspaceExportSchema.parse(body);
           return json(req, store.importWorkspace(dump), 201);
         }
 
-        if (req.method === "GET" && url.pathname === "/api/v1/backups") {
+        if (req.method === 'GET' && url.pathname === '/api/v1/backups') {
           return json(req, { items: backups.list() });
         }
 
-        if (req.method === "POST" && url.pathname === "/api/v1/backups") {
+        if (req.method === 'POST' && url.pathname === '/api/v1/backups') {
           const body: unknown = await req.json().catch(() => ({}));
           try {
             const input = createBackupInputSchema.parse(body ?? {});
@@ -760,14 +760,14 @@ export async function startServer(): Promise<StartedGateway> {
               {
                 error: err instanceof Error ? err.message : String(err),
               },
-              400,
+              400
             );
           }
         }
 
         const backupRestoreMatch =
           /^\/api\/v1\/backups\/([^/]+)\/restore$/.exec(url.pathname);
-        if (backupRestoreMatch && req.method === "POST") {
+        if (backupRestoreMatch && req.method === 'POST') {
           const backupId = backupRestoreMatch[1]!;
           try {
             const body: unknown = await req.json().catch(() => ({}));
@@ -780,31 +780,31 @@ export async function startServer(): Promise<StartedGateway> {
             });
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            const status = message.includes("not found") ? 404 : 400;
+            const status = message.includes('not found') ? 404 : 400;
             return json(req, { error: message }, status);
           }
         }
 
         const backupGetMatch = /^\/api\/v1\/backups\/([^/]+)$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (backupGetMatch && req.method === "GET") {
+        if (backupGetMatch && req.method === 'GET') {
           const snap = backups.get(backupGetMatch[1]!);
           if (!snap) {
-            return json(req, { error: "backup not found" }, 404);
+            return json(req, { error: 'backup not found' }, 404);
           }
           return json(req, snap);
         }
 
         const exportMatch = /^\/api\/v1\/workspaces\/([^/]+)\/export$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (exportMatch && req.method === "GET") {
+        if (exportMatch && req.method === 'GET') {
           const workspaceId = exportMatch[1]!;
           try {
             return json(req, store.exportWorkspace(workspaceId));
           } catch {
-            return json(req, { error: "workspace not found" }, 404);
+            return json(req, { error: 'workspace not found' }, 404);
           }
         }
 
@@ -812,28 +812,28 @@ export async function startServer(): Promise<StartedGateway> {
           /^\/api\/v1\/workspaces\/([^/]+)\/conversations$/.exec(url.pathname);
         if (workspaceConversations) {
           const workspaceId = workspaceConversations[1]!;
-          if (req.method === "GET") {
+          if (req.method === 'GET') {
             if (!store.getWorkspace(workspaceId)) {
-              return json(req, { error: "workspace not found" }, 404);
+              return json(req, { error: 'workspace not found' }, 404);
             }
             return json(req, {
               items: store.listConversations(workspaceId),
             });
           }
-          if (req.method === "POST") {
+          if (req.method === 'POST') {
             const body: unknown = await req.json();
             const input = createConversationInputSchema.parse({
-              ...(typeof body === "object" && body !== null ? body : {}),
+              ...(typeof body === 'object' && body !== null ? body : {}),
               workspaceId,
             });
             try {
               const conversation = store.createConversation(
                 input.workspaceId,
-                input.title ?? "New chat",
+                input.title ?? 'New chat'
               );
               return json(req, conversation, 201);
             } catch {
-              return json(req, { error: "workspace not found" }, 404);
+              return json(req, { error: 'workspace not found' }, 404);
             }
           }
         }
@@ -843,12 +843,12 @@ export async function startServer(): Promise<StartedGateway> {
         if (conversationMessages) {
           const conversationId = conversationMessages[1]!;
           if (!store.getConversation(conversationId)) {
-            return json(req, { error: "conversation not found" }, 404);
+            return json(req, { error: 'conversation not found' }, 404);
           }
-          if (req.method === "GET") {
+          if (req.method === 'GET') {
             return json(req, { items: store.listMessages(conversationId) });
           }
-          if (req.method === "POST") {
+          if (req.method === 'POST') {
             const body: unknown = await req.json();
             const input = upsertMessagesInputSchema.parse(body);
             const items = input.items.map((item) =>
@@ -858,39 +858,39 @@ export async function startServer(): Promise<StartedGateway> {
                 role: item.role,
                 content: item.content,
                 createdAt: item.createdAt,
-              }),
+              })
             );
             return json(req, { items }, 201);
           }
         }
 
-        if (url.pathname === "/ws/v1/demo") {
-          const upgraded = srv.upgrade(req, { data: { kind: "demo" } });
+        if (url.pathname === '/ws/v1/demo') {
+          const upgraded = srv.upgrade(req, { data: { kind: 'demo' } });
           if (upgraded) {
             return undefined;
           }
           return withCors(
             req,
-            new Response("WebSocket upgrade failed", { status: 400 }),
+            new Response('WebSocket upgrade failed', { status: 400 })
           );
         }
 
         const chatWs = /^\/ws\/v1\/conversations\/([^/]+)\/runs$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (chatWs && req.method === "GET") {
+        if (chatWs && req.method === 'GET') {
           const conversationId = chatWs[1]!;
-          const content = url.searchParams.get("content") ?? "";
+          const content = url.searchParams.get('content') ?? '';
           if (!content) {
-            return json(req, { error: "content query required" }, 400);
+            return json(req, { error: 'content query required' }, 400);
           }
           if (!store.getConversation(conversationId)) {
-            return json(req, { error: "conversation not found" }, 404);
+            return json(req, { error: 'conversation not found' }, 404);
           }
-          const runId = `run_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+          const runId = `run_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
           const upgraded = srv.upgrade(req, {
             data: {
-              kind: "chat",
+              kind: 'chat',
               conversationId,
               content,
               runId,
@@ -903,29 +903,29 @@ export async function startServer(): Promise<StartedGateway> {
           }
           return withCors(
             req,
-            new Response("WebSocket upgrade failed", { status: 400 }),
+            new Response('WebSocket upgrade failed', { status: 400 })
           );
         }
 
         const chatPost = /^\/api\/v1\/conversations\/([^/]+)\/runs$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (chatPost && req.method === "POST") {
+        if (chatPost && req.method === 'POST') {
           const conversationId = chatPost[1]!;
           const body: unknown = await req.json();
           const input = createMessageInputSchema.parse(body);
-          if (input.role !== "user") {
-            return json(req, { error: "role must be user" }, 400);
+          if (input.role !== 'user') {
+            return json(req, { error: 'role must be user' }, 400);
           }
           if (!store.getConversation(conversationId)) {
-            return json(req, { error: "conversation not found" }, 404);
+            return json(req, { error: 'conversation not found' }, 404);
           }
           return json(
             req,
             {
               wsPath: `/ws/v1/conversations/${conversationId}/runs?content=${encodeURIComponent(input.content)}`,
             },
-            201,
+            201
           );
         }
 
@@ -934,12 +934,12 @@ export async function startServer(): Promise<StartedGateway> {
         if (workspaceChannels) {
           const workspaceId = workspaceChannels[1]!;
           if (!store.getWorkspace(workspaceId)) {
-            return json(req, { error: "workspace not found" }, 404);
+            return json(req, { error: 'workspace not found' }, 404);
           }
-          if (req.method === "GET") {
+          if (req.method === 'GET') {
             return json(req, { items: channels.list(workspaceId) });
           }
-          if (req.method === "POST") {
+          if (req.method === 'POST') {
             const body: unknown = await req.json();
             const input = createChannelInputSchema.parse(body);
             const created = await channels.create(workspaceId, input);
@@ -948,49 +948,49 @@ export async function startServer(): Promise<StartedGateway> {
         }
 
         const channelItem = /^\/api\/v1\/channels\/([^/]+)$/.exec(url.pathname);
-        if (channelItem && req.method === "GET") {
+        if (channelItem && req.method === 'GET') {
           const channelId = channelItem[1]!;
           const item = channels.get(channelId);
           if (!item) {
-            return json(req, { error: "channel not found" }, 404);
+            return json(req, { error: 'channel not found' }, 404);
           }
           return json(req, item);
         }
 
         const channelStart = /^\/api\/v1\/channels\/([^/]+)\/start$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (channelStart && req.method === "POST") {
+        if (channelStart && req.method === 'POST') {
           try {
             return json(req, await channels.startChannel(channelStart[1]!));
           } catch (err) {
             return json(
               req,
               { error: err instanceof Error ? err.message : String(err) },
-              400,
+              400
             );
           }
         }
 
         const channelStop = /^\/api\/v1\/channels\/([^/]+)\/stop$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (channelStop && req.method === "POST") {
+        if (channelStop && req.method === 'POST') {
           try {
             return json(req, await channels.stopChannel(channelStop[1]!));
           } catch (err) {
             return json(
               req,
               { error: err instanceof Error ? err.message : String(err) },
-              400,
+              400
             );
           }
         }
 
         const channelSend = /^\/api\/v1\/channels\/([^/]+)\/send$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (channelSend && req.method === "POST") {
+        if (channelSend && req.method === 'POST') {
           const channelId = channelSend[1]!;
           const body: unknown = await req.json();
           const input = sendChannelMessageInputSchema.parse(body);
@@ -1001,35 +1001,35 @@ export async function startServer(): Promise<StartedGateway> {
               req,
               channels.listOutbox(channelId).find((j) => j.id === job.id) ??
                 job,
-              201,
+              201
             );
           } catch (err) {
             return json(
               req,
               { error: err instanceof Error ? err.message : String(err) },
-              404,
+              404
             );
           }
         }
 
         const channelMessages = /^\/api\/v1\/channels\/([^/]+)\/messages$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (channelMessages && req.method === "GET") {
+        if (channelMessages && req.method === 'GET') {
           const channelId = channelMessages[1]!;
           if (!channels.get(channelId)) {
-            return json(req, { error: "channel not found" }, 404);
+            return json(req, { error: 'channel not found' }, 404);
           }
           return json(req, { items: channels.listMessages(channelId) });
         }
 
         const channelOutbox = /^\/api\/v1\/channels\/([^/]+)\/outbox$/.exec(
-          url.pathname,
+          url.pathname
         );
-        if (channelOutbox && req.method === "GET") {
+        if (channelOutbox && req.method === 'GET') {
           const channelId = channelOutbox[1]!;
           if (!channels.get(channelId)) {
-            return json(req, { error: "channel not found" }, 404);
+            return json(req, { error: 'channel not found' }, 404);
           }
           return json(req, { items: channels.listOutbox(channelId) });
         }
@@ -1039,12 +1039,12 @@ export async function startServer(): Promise<StartedGateway> {
         if (channelIdentities) {
           const channelId = channelIdentities[1]!;
           if (!channels.get(channelId)) {
-            return json(req, { error: "channel not found" }, 404);
+            return json(req, { error: 'channel not found' }, 404);
           }
-          if (req.method === "GET") {
+          if (req.method === 'GET') {
             return json(req, { items: channels.listIdentities(channelId) });
           }
-          if (req.method === "POST") {
+          if (req.method === 'POST') {
             const body: unknown = await req.json();
             const input = upsertIdentityInputSchema.parse(body);
             return json(req, channels.upsertIdentity(channelId, input), 201);
@@ -1052,22 +1052,22 @@ export async function startServer(): Promise<StartedGateway> {
         }
 
         const hookMatch = /^\/hooks\/v1\/([^/]+)$/.exec(url.pathname);
-        if (hookMatch && req.method === "POST") {
+        if (hookMatch && req.method === 'POST') {
           const channelId = hookMatch[1]!;
           const full = channels.getConfig(channelId);
           if (!full) {
-            return json(req, { error: "channel not found" }, 404);
+            return json(req, { error: 'channel not found' }, 404);
           }
           const secret =
-            typeof full.config["webhookSecret"] === "string"
-              ? full.config["webhookSecret"]
+            typeof full.config['webhookSecret'] === 'string'
+              ? full.config['webhookSecret']
               : null;
           if (secret) {
             const provided =
-              req.headers.get("x-ctrl-webhook-secret") ??
-              url.searchParams.get("secret");
+              req.headers.get('x-ctrl-webhook-secret') ??
+              url.searchParams.get('secret');
             if (provided !== secret) {
-              return json(req, { error: "unauthorized" }, 401);
+              return json(req, { error: 'unauthorized' }, 401);
             }
           }
           const body: unknown = await req.json();
@@ -1079,34 +1079,34 @@ export async function startServer(): Promise<StartedGateway> {
             return json(
               req,
               { error: err instanceof Error ? err.message : String(err) },
-              400,
+              400
             );
           }
         }
 
-        return json(req, { error: "Not Found" }, 404);
+        return json(req, { error: 'Not Found' }, 404);
       },
       websocket: {
         open(ws) {
-          if (ws.data.kind === "demo") {
+          if (ws.data.kind === 'demo') {
             void (async () => {
               await streamIterable(ws, demoAgentEvents(), true);
-              ws.close(1000, "demo complete");
+              ws.close(1000, 'demo complete');
             })();
             return;
           }
 
-          if (ws.data.kind === "chat") {
+          if (ws.data.kind === 'chat') {
             const { conversationId, content, runId, abort, approvals } =
               ws.data;
             void (async () => {
-              store.addMessage(conversationId, "user", content);
+              store.addMessage(conversationId, 'user', content);
               const conversation = store.getConversation(conversationId);
               store.appendAudit({
                 workspaceId: conversation?.workspaceId,
                 conversationId,
                 runId,
-                action: "run.started",
+                action: 'run.started',
               });
 
               const history = store.listMessages(conversationId).map((m) => ({
@@ -1114,7 +1114,7 @@ export async function startServer(): Promise<StartedGateway> {
                 content: m.content,
               }));
 
-              let assembled = "";
+              let assembled = '';
               try {
                 for await (const event of runAgentLoop(
                   {
@@ -1128,13 +1128,13 @@ export async function startServer(): Promise<StartedGateway> {
                     registry,
                     approvals,
                     sandboxRoot,
-                  },
+                  }
                 )) {
                   if (ws.readyState !== 1) {
                     break;
                   }
                   ws.send(JSON.stringify(event));
-                  if (event.type === "message.delta") {
+                  if (event.type === 'message.delta') {
                     assembled += event.text;
                   }
                   auditFromEvent(store, event, {
@@ -1145,7 +1145,7 @@ export async function startServer(): Promise<StartedGateway> {
                 }
               } catch (err) {
                 const failed: AgentEvent = {
-                  type: "run.failed",
+                  type: 'run.failed',
                   error: {
                     message: err instanceof Error ? err.message : String(err),
                   },
@@ -1157,26 +1157,26 @@ export async function startServer(): Promise<StartedGateway> {
                   workspaceId: conversation?.workspaceId,
                   conversationId,
                   runId,
-                  action: "run.failed",
+                  action: 'run.failed',
                   detail: failed.error,
                 });
               }
 
               if (assembled.length > 0) {
-                store.addMessage(conversationId, "assistant", assembled);
+                store.addMessage(conversationId, 'assistant', assembled);
               }
-              ws.close(1000, "run complete");
+              ws.close(1000, 'run complete');
             })();
           }
         },
         message(ws, raw) {
-          if (ws.data.kind !== "chat") {
+          if (ws.data.kind !== 'chat') {
             return;
           }
           let parsed: unknown;
           try {
             parsed =
-              typeof raw === "string"
+              typeof raw === 'string'
                 ? JSON.parse(raw)
                 : JSON.parse(new TextDecoder().decode(raw));
           } catch {
@@ -1186,11 +1186,11 @@ export async function startServer(): Promise<StartedGateway> {
           if (!msg.success) {
             return;
           }
-          if (msg.data.type === "run.cancel") {
-            ws.data.abort.abort(msg.data.reason ?? "client cancel");
+          if (msg.data.type === 'run.cancel') {
+            ws.data.abort.abort(msg.data.reason ?? 'client cancel');
             return;
           }
-          if (msg.data.type === "approval.resolve") {
+          if (msg.data.type === 'approval.resolve') {
             ws.data.approvals.resolve(msg.data.approvalId, msg.data.decision);
           }
         },
@@ -1201,7 +1201,7 @@ export async function startServer(): Promise<StartedGateway> {
       process.stderr.write(
         `[ctrl-a] port ${port} already in use on ${host}\n` +
           `[ctrl-a] stop the other gateway (desktop app, leftover bun, or prior br dev:gateway) or set PORT=…\n` +
-          `[ctrl-a] Windows: Get-NetTCPConnection -LocalPort ${port} | % OwningProcess | Stop-Process -Force\n`,
+          `[ctrl-a] Windows: Get-NetTCPConnection -LocalPort ${port} | % OwningProcess | Stop-Process -Force\n`
       );
       process.exit(1);
     }
@@ -1211,18 +1211,18 @@ export async function startServer(): Promise<StartedGateway> {
   const boundPort = Number(server.port);
   const lanUrls = listLanGatewayUrls(boundPort);
   process.stderr.write(`[ctrl-a] listening on http://${host}:${boundPort}\n`);
-  if (host === "127.0.0.1" || host === "::1") {
+  if (host === '127.0.0.1' || host === '::1') {
     process.stderr.write(
-      `[ctrl-a] warn: loopback only — use CTRL_A_HOST=0.0.0.0 for LAN/Expo\n`,
+      `[ctrl-a] warn: loopback only — use CTRL_A_HOST=0.0.0.0 for LAN/Expo\n`
     );
   }
-  if (lanUrls.length > 0 && host !== "127.0.0.1" && host !== "::1") {
-    process.stderr.write(`[ctrl-a] lan ${lanUrls.join(" ")}\n`);
+  if (lanUrls.length > 0 && host !== '127.0.0.1' && host !== '::1') {
+    process.stderr.write(`[ctrl-a] lan ${lanUrls.join(' ')}\n`);
   }
   process.stderr.write(`[ctrl-a] press Ctrl+C to stop\n`);
 
   let shuttingDown = false;
-  const shutdown = async (reason = "signal"): Promise<void> => {
+  const shutdown = async (reason = 'signal'): Promise<void> => {
     if (shuttingDown) {
       process.stderr.write(`[ctrl-a] force exit (second ${reason})\n`);
       process.exit(1);
@@ -1242,7 +1242,7 @@ export async function startServer(): Promise<StartedGateway> {
       db.close();
     } catch (err) {
       process.stderr.write(
-        `[ctrl-a] shutdown error: ${err instanceof Error ? err.message : String(err)}\n`,
+        `[ctrl-a] shutdown error: ${err instanceof Error ? err.message : String(err)}\n`
       );
     } finally {
       clearTimeout(forceTimer);
@@ -1260,34 +1260,34 @@ function auditFromEvent(
     workspaceId?: string;
     conversationId: string;
     runId: string;
-  },
+  }
 ): void {
   switch (event.type) {
-    case "tool.requested":
+    case 'tool.requested':
       store.appendAudit({
         ...ctx,
-        action: "tool.requested",
+        action: 'tool.requested',
         detail: event.call,
       });
       break;
-    case "tool.started":
+    case 'tool.started':
       store.appendAudit({
         ...ctx,
-        action: "tool.started",
+        action: 'tool.started',
         detail: { callId: event.callId },
       });
       break;
-    case "tool.completed":
+    case 'tool.completed':
       store.appendAudit({
         ...ctx,
-        action: "tool.completed",
+        action: 'tool.completed',
         detail: { callId: event.callId, result: event.result },
       });
       break;
-    case "approval.requested":
+    case 'approval.requested':
       store.appendAudit({
         ...ctx,
-        action: "approval.requested",
+        action: 'approval.requested',
         detail: {
           approvalId: event.approvalId,
           call: event.call,
@@ -1295,19 +1295,19 @@ function auditFromEvent(
         },
       });
       break;
-    case "approval.resolved":
+    case 'approval.resolved':
       store.appendAudit({
         ...ctx,
-        action: "approval.resolved",
+        action: 'approval.resolved',
         detail: {
           approvalId: event.approvalId,
           decision: event.decision,
         },
       });
-      if (event.decision !== "approved") {
+      if (event.decision !== 'approved') {
         store.appendAudit({
           ...ctx,
-          action: "tool.denied",
+          action: 'tool.denied',
           detail: {
             approvalId: event.approvalId,
             decision: event.decision,
@@ -1315,24 +1315,24 @@ function auditFromEvent(
         });
       }
       break;
-    case "run.completed":
+    case 'run.completed':
       store.appendAudit({
         ...ctx,
-        action: "run.completed",
+        action: 'run.completed',
         detail: { finishReason: event.finishReason },
       });
       break;
-    case "run.failed":
+    case 'run.failed':
       store.appendAudit({
         ...ctx,
-        action: "run.failed",
+        action: 'run.failed',
         detail: event.error,
       });
       break;
-    case "run.cancelled":
+    case 'run.cancelled':
       store.appendAudit({
         ...ctx,
-        action: "run.cancelled",
+        action: 'run.cancelled',
         detail: { reason: event.reason },
       });
       break;
@@ -1346,9 +1346,9 @@ if (import.meta.main) {
   const onSignal = (signal: string) => {
     void shutdown(signal);
   };
-  process.on("SIGINT", () => onSignal("SIGINT"));
-  process.on("SIGTERM", () => onSignal("SIGTERM"));
+  process.on('SIGINT', () => onSignal('SIGINT'));
+  process.on('SIGTERM', () => onSignal('SIGTERM'));
   // Windows Ctrl+Break / console close
-  process.on("SIGBREAK", () => onSignal("SIGBREAK"));
-  process.on("SIGHUP", () => onSignal("SIGHUP"));
+  process.on('SIGBREAK', () => onSignal('SIGBREAK'));
+  process.on('SIGHUP', () => onSignal('SIGHUP'));
 }

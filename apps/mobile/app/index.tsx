@@ -583,6 +583,20 @@ export default function ChatHomeScreen() {
 
       <Text style={styles.meta}>{status}</Text>
       <Text style={styles.meta}>{syncLine}</Text>
+      {mode === 'litert' && litertStatus?.unavailableReason ? (
+        <View style={styles.setupBanner}>
+          <Text style={styles.setupBannerText}>
+            On this phone unavailable · {litertStatus.unavailableReason}
+          </Text>
+          <PrimaryButton
+            label="Model setup →"
+            onPress={() => {
+              router.push('/on-device' as Href);
+            }}
+            style={styles.setupBtn}
+          />
+        </View>
+      ) : null}
 
       <FlatList
         style={styles.list}
@@ -609,10 +623,21 @@ export default function ChatHomeScreen() {
           ) : undefined
         }
         ListEmptyComponent={
-          <Text style={styles.meta}>
-            Local-first chat. Menu → Providers sets cascade order. Agents sets
-            Ask / Plan / Auto.
-          </Text>
+          <View style={styles.emptyBlock}>
+            <Text style={styles.meta}>
+              Local-first chat. Menu → Providers sets cascade order. Agents sets
+              Ask / Plan / Auto.
+            </Text>
+            {mode === 'litert' ? (
+              <PrimaryButton
+                label="Set up on-device model →"
+                onPress={() => {
+                  router.push('/on-device' as Href);
+                }}
+                style={styles.setupBtn}
+              />
+            ) : null}
+          </View>
         }
       />
 
@@ -700,6 +725,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  setupBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    gap: 8,
+  },
+  setupBannerText: {
+    color: colors.danger,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  setupBtn: { alignSelf: 'flex-start' },
+  emptyBlock: { gap: 12, paddingHorizontal: 4 },
   meta: {
     color: colors.muted,
     fontFamily: fonts.mono,

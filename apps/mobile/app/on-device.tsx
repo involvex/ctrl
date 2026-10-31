@@ -428,9 +428,15 @@ export default function OnDeviceScreen() {
         <Text style={styles.title}>model setup</Text>
         <ModeChip mode="litert" />
         <Text style={styles.meta}>
-          Download / import LiteRT models and review policy. Conversation lives
-          in Chat — this screen is not a second chat.
+          First step for standalone phone chat: download or import a .litertlm
+          file, then tap Load model. Conversation lives in Chat — this screen is
+          not a second chat.
         </Text>
+        {canSetup && !engineArmed ? (
+          <Text style={styles.ctaHint}>
+            ↓ Use Download (~2.6 GB) or Import .litertlm, then Load model.
+          </Text>
+        ) : null}
 
         {busy || !caps || !decision ? (
           <ActivityIndicator color={colors.accent} />
@@ -565,6 +571,13 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 12,
     lineHeight: 18,
+  },
+  ctaHint: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   error: { color: '#ff6666', fontFamily: 'monospace', fontSize: 12 },
   block: { gap: 10 },

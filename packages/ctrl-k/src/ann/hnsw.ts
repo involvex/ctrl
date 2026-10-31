@@ -1,5 +1,5 @@
-import { cosineSimilarity } from "../search";
-import { MaxHeap, MinHeap } from "./heap";
+import { cosineSimilarity } from '../search';
+import { MaxHeap, MinHeap } from './heap';
 
 export type HnswNode = {
   id: string;
@@ -71,7 +71,7 @@ export class HnswIndex {
         node,
         curr,
         this.config.efConstruction,
-        l,
+        l
       );
       const mL = l === 0 ? this.config.m * 2 : this.config.m;
       const selected = this.selectNeighbors(neighbors, mL);
@@ -93,7 +93,7 @@ export class HnswIndex {
           allNeighbors.sort(
             (a, b) =>
               cosineSimilarity(neighborNode.vector, b.node.vector) -
-              cosineSimilarity(neighborNode.vector, a.node.vector),
+              cosineSimilarity(neighborNode.vector, a.node.vector)
           );
           neighborNeighbors.clear();
           for (let i = 0; i < mL && i < allNeighbors.length; i++) {
@@ -111,7 +111,7 @@ export class HnswIndex {
   private findClosest(
     curr: HnswNode,
     query: HnswNode,
-    level: number,
+    level: number
   ): HnswNode {
     let changed = true;
     while (changed) {
@@ -137,7 +137,7 @@ export class HnswIndex {
     query: HnswNode,
     entryPoint: HnswNode,
     ef: number,
-    level: number,
+    level: number
   ): Array<{ id: string; node: HnswNode; dist: number }> {
     const visited = new Set<string>([entryPoint.id]);
     const candidates = new MinHeap<string>();
@@ -198,7 +198,7 @@ export class HnswIndex {
 
   private selectNeighbors(
     neighbors: Array<{ id: string; node: HnswNode; dist: number }>,
-    m: number,
+    m: number
   ): Array<{ id: string; node: HnswNode; dist: number }> {
     return neighbors.slice(0, m);
   }

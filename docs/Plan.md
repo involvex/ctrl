@@ -285,3 +285,5 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - `searchKnowledge` gains `mode: fts | vector | hybrid`; hybrid fuses `bm25` + cosine with reciprocal rank fusion (k = 60); hits gain `score` + `source`.
     - Embed on ingest (failure tolerated), `POST /api/v1/workspaces/:id/knowledge/reindex`, `GET /api/v1/embeddings` status; desktop knowledge panel gets mode picker, status line, reindex button; unit + contract tests.
     - Out of this pass: ANN index (sqlite-vec/HNSW), cross-workspace search, re-embedding on model switch (use `reindex --force`), semantic reranking.
+17. Ship v0 (standalone daily-driver) — see [standalone-local.md](standalone-local.md), [soak-v0.md](soak-v0.md), [RELEASE-v0.md](RELEASE-v0.md).
+    - Parked until soak is boring: in-app binary downloaders, HF catalog, Discord/Slack real SDKs, incremental device sync, Rust `agentd`, monetization.
