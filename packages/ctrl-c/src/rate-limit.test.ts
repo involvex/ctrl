@@ -15,6 +15,7 @@ describe('retry', () => {
   test('retries under max attempts', () => {
     expect(shouldRetry(1)).toBe(true);
     expect(shouldRetry(5)).toBe(false);
-    expect(nextRetryDelayMs(1)).toBeGreaterThan(0);
+    const delay = nextRetryDelayMs(1);
+    expect(delay).toBeGreaterThan(0);
   });
 });

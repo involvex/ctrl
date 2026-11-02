@@ -1,6 +1,9 @@
 import { cosineSimilarity } from '../search';
 import { MaxHeap, MinHeap } from './heap';
 
+const vectorDistance = (a: Float32Array, b: Float32Array): number =>
+  1 - cosineSimilarity(a, b);
+
 export type HnswNode = {
   id: string;
   vector: Float32Array;
@@ -143,10 +146,7 @@ export class HnswIndex {
     const candidates = new MinHeap<string>();
     const resultHeap = new MaxHeap<string>();
 
-    const dist = (a: Float32Array, b: Float32Array) =>
-      1 - cosineSimilarity(a, b);
-
-    const entryDist = dist(query.vector, entryPoint.vector);
+    const entryDist = vectorDistance(query.vector, entryPoint.vector);
     candidates.push(entryDist, entryPoint.id);
     resultHeap.push(entryDist, entryPoint.id);
 
@@ -170,7 +170,7 @@ export class HnswIndex {
         if (visited.has(nid)) continue;
         visited.add(nid);
         const neighbor = this.nodes.get(nid)!;
-        const d = dist(query.vector, neighbor.vector);
+        const d = vectorDistance(query.vector, neighbor.vector);
         const furthestResult = resultHeap.peek();
 
         if (resultMap.size < ef || (furthestResult && d < furthestResult.val)) {

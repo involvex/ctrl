@@ -88,8 +88,11 @@ export class McpSession {
           properties:
             'properties' in schema &&
             schema.properties &&
-            typeof schema.properties === 'object'
-              ? Object.fromEntries(Object.entries(schema.properties))
+            typeof schema.properties === 'object' &&
+            !Array.isArray(schema.properties)
+              ? Object.fromEntries(
+                  Object.entries(schema.properties as Record<string, unknown>)
+                )
               : undefined,
           required:
             'required' in schema && Array.isArray(schema.required)

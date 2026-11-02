@@ -156,10 +156,62 @@ export async function listModels(
   if (!res.ok) {
     throw new Error(`listModels failed: ${res.status}`);
   }
-  return (await readJson(res)) as {
-    provider: string;
-    items: Array<{ id: string; displayName?: string }>;
-  };
+  const json: unknown = await readJson(res);
+  if (!json || typeof json !== 'object') {
+    throw new Error('listModels returned invalid JSON');
+  }
+  const obj = json as Record<string, unknown>;
+  const providerId =
+    typeof obj.provider === 'string' ? obj.provider : (provider ?? '');
+  const itemsRaw = Array.isArray(obj.items) ? obj.items : [];
+  const items = itemsRaw
+    .filter((item): item is { id: string; displayName?: string } => {
+      if (!item || typeof item !== 'object') return false;
+      const i = item as Record<string, unknown>;
+      if (typeof i.id !== 'string') return false;
+      if (i.displayName !== undefined && typeof i.displayName !== 'string') {
+        return false;
+      }
+      return true;
+    })
+    .map((item) => ({
+      id: item.id,
+      displayName: item.displayName,
+    }));
+  return { provider: providerId, items };
+}
+
+export type HfModelCatalogEntry = {
+  id: string;
+  name: string;
+  description: string;
+  sizeGb?: number;
+  tags: string[];
+  downloadUrl?: string;
+  quantizations?: string[];
+};
+
+export async function listHfModelCatalog(
+  baseUrl: string
+): Promise<{ items: HfModelCatalogEntry[] }> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/models/catalog/hf`,
+    {
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`listHfModelCatalog failed: ${res.status}`);
+  }
+  const json: unknown = await res.json();
+  if (
+    !json ||
+    typeof json !== 'object' ||
+    !Array.isArray((json as any).items)
+  ) {
+    throw new Error('listHfModelCatalog returned invalid JSON');
+  }
+  return { items: (json as any).items as HfModelCatalogEntry[] };
 }
 
 export async function updateProviderConfig(

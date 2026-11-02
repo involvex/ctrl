@@ -22,8 +22,9 @@ describe('pairPayload', () => {
 
   test('accepts bare URL', () => {
     const parsed = parsePairPayload('http://192.168.1.10:7331');
-    expect(parsed?.gatewayUrl).toBe('http://192.168.1.10:7331');
-    expect(parsed?.token).toBe('');
+    expect(parsed).not.toBeNull();
+    expect(parsed!.gatewayUrl).toBe('http://192.168.1.10:7331');
+    expect(parsed!.token).toBe('');
   });
 
   test('rejects garbage', () => {

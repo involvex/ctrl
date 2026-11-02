@@ -12,6 +12,7 @@ import {
   listBackups,
   listChannels,
   listConversations,
+  listHfModelCatalog,
   listMcpServers,
   listMemory,
   listMessages,
@@ -29,6 +30,7 @@ import {
   type ChannelPublic,
   type Conversation,
   type EmbeddingStatus,
+  type HfModelCatalogEntry,
   type HostBackupManifest,
   type KnowledgeHit,
   type KnowledgeSearchMode,
@@ -101,6 +103,15 @@ type DesktopApi = {
     id: string,
     url: string
   ) => Promise<{ ok: boolean; path: string }>;
+  onDownloadProgress?: (
+    callback: (info: {
+      id: string;
+      downloaded: number;
+      total?: number;
+      percent?: number;
+      done?: boolean;
+    }) => void
+  ) => () => void;
 };
 
 type LocalBackendRow = {
@@ -178,12 +189,17 @@ export function App() {
     'llama'
   );
   const [binDownloadUrl, setBinDownloadUrl] = useState('');
-  const [hfQuery, setHfQuery] = useState('gemma');
-  const [hfModels, setHfModels] = useState<string[]>([]);
-  const [hfLoading, setHfLoading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    id: string;
+    downloaded: number;
+    total?: number;
+    percent?: number;
+    done?: boolean;
+  } | null>(null);
   const [modelItems, setModelItems] = useState<
     Array<{ id: string; displayName?: string }>
   >([]);
+  const [hfModels, setHfModels] = useState<HfModelCatalogEntry[]>([]);
   const [providerKeyDraft, setProviderKeyDraft] = useState('');
   const [providerModelDraft, setProviderModelDraft] = useState('');
   const [toolItems, setToolItems] = useState<ToolDefinition[]>([]);
@@ -248,6 +264,21 @@ export function App() {
       cancelled = true;
       window.clearInterval(id);
     };
+  }, []);
+
+  useEffect(() => {
+    const api = window.ctrlDesktop;
+    if (!api?.onDownloadProgress) {
+      return;
+    }
+    const unsub = api.onDownloadProgress((info) => {
+      setDownloadProgress(info);
+      if (info.done) {
+        void refreshLocalBackends();
+        setTimeout(() => setDownloadProgress(null), 3000);
+      }
+    });
+    return unsub;
   }, []);
 
   useEffect(() => {
@@ -359,6 +390,18 @@ export function App() {
     }
   }, [gatewayUrl]);
 
+  const refreshHfModels = useCallback(async () => {
+    if (!gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      const listed = await listHfModelCatalog(gatewayUrl);
+      setHfModels(listed.items);
+    } catch {
+      setHfModels([]);
+    }
+  }, [gatewayUrl]);
+
   const refreshProviders = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {
       return;
@@ -369,10 +412,11 @@ export function App() {
       setProviderModelDraft(provider.model ?? '');
       await refreshLocalBackends();
       await refreshModels();
+      await refreshHfModels();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [gatewayUrl, refreshLocalBackends, refreshModels]);
+  }, [gatewayUrl, refreshLocalBackends, refreshModels, refreshHfModels]);
 
   const refreshTools = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {
@@ -893,6 +937,7 @@ export function App() {
               onClick={() => {
                 void (async () => {
                   try {
+                    setDownloadProgress({ id: binDownloadId, downloaded: 0 });
                     await window.ctrlDesktop?.downloadLocalBackendBin(
                       binDownloadId,
                       binDownloadUrl.trim()
@@ -900,6 +945,7 @@ export function App() {
                     await refreshLocalBackends();
                   } catch (err) {
                     setError(err instanceof Error ? err.message : String(err));
+                    setDownloadProgress(null);
                   }
                 })();
               }}
@@ -907,6 +953,17 @@ export function App() {
               download bin
             </button>
           </div>
+          {downloadProgress && downloadProgress.id === binDownloadId && (
+            <div className="host-row">
+              <span className="meta">
+                {downloadProgress.done
+                  ? 'done'
+                  : downloadProgress.percent !== undefined
+                    ? `${downloadProgress.percent}% (${Math.round(downloadProgress.downloaded / 1024 / 1024)} MB)`
+                    : `${Math.round(downloadProgress.downloaded / 1024 / 1024)} MB downloaded`}
+              </span>
+            </div>
+          )}
           <div className="host-row">
             <button
               type="button"
@@ -1251,6 +1308,45 @@ export function App() {
             zen → opencode.ai/zen · kilo → ai-gateway.kilo.ai · llama → :8080 ·
             litert → litert-lm :9379 (PC) / on-device (phone)
           </p>
+
+          <p className="host-title">HF model catalog</p>
+          <p className="meta">
+            Browse curated HuggingFace GGUF models for local use.
+          </p>
+          <div className="host-row">
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void refreshHfModels();
+              }}
+            >
+              refresh catalog
+            </button>
+          </div>
+          <ul className="knowledge-list">
+            {hfModels.length === 0 ? (
+              <li className="meta">no catalog entries</li>
+            ) : (
+              hfModels.map((m: HfModelCatalogEntry) => (
+                <li key={m.id}>
+                  <div>
+                    <strong>{m.name}</strong>
+                    <br />
+                    <span className="meta">
+                      {m.id}
+                      {m.sizeGb ? ` · ${m.sizeGb} GB` : ''}
+                      {(m.tags?.length ?? 0) > 0
+                        ? ` · ${(m.tags ?? []).join(', ')}`
+                        : ''}
+                    </span>
+                    <br />
+                    <span className="meta">{m.description}</span>
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>
         </aside>
       ) : null}
 
@@ -1597,53 +1693,6 @@ export function App() {
           </button>
         </section>
       ) : null}
-
-      <section className="catalog">
-        <p className="host-title">HF model catalog</p>
-        <div className="host-row">
-          <input
-            value={hfQuery}
-            onChange={(e) => setHfQuery(e.target.value)}
-            placeholder="HF model search"
-          />
-          <button
-            type="button"
-            className="ghost-btn"
-            disabled={hfLoading}
-            onClick={() => {
-              setHfLoading(true);
-              void (async () => {
-                try {
-                  const res = await fetch(
-                    `https://huggingface.co/api/models?search=${encodeURIComponent(
-                      hfQuery
-                    )}&limit=20`
-                  );
-                  const data = (await res.json()) as Array<{ id?: string }>;
-                  setHfModels(
-                    Array.isArray(data)
-                      ? data.map((m) => m.id ?? '').filter(Boolean)
-                      : []
-                  );
-                } catch {
-                  setHfModels([]);
-                } finally {
-                  setHfLoading(false);
-                }
-              })();
-            }}
-          >
-            {hfLoading ? 'loading...' : 'browse HF'}
-          </button>
-        </div>
-        {hfModels.length > 0 ? (
-          <ul className="model-list">
-            {hfModels.map((m) => (
-              <li key={m}>{m}</li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
 
       <section className="chat">
         {messages.map((m) => (

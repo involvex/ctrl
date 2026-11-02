@@ -25,7 +25,13 @@ export {
   persistedProviderSchema,
   type PersistedProvider,
 } from './persist';
-export { listProviderCatalog, getProviderCatalogEntry } from './catalog';
+export {
+  listProviderCatalog,
+  getProviderCatalogEntry,
+  listHfModelCatalog,
+  getHfModelCatalogEntry,
+  type HfModelEntry,
+} from './catalog';
 export { LiteRTProvider } from './litert-provider';
 export { DevicePairProvider, type DevicePairConfig } from './device-provider';
 export {

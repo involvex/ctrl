@@ -30,6 +30,7 @@ import {
   createLitertLmSidecarFromEnv,
   createLlamaSidecarFromEnv,
   createProviderRuntime,
+  listHfModelCatalog,
   probeOpenAiModels,
   type LitertLmSidecar,
   type LlamaSidecar,
@@ -479,6 +480,13 @@ export async function startServer(): Promise<StartedGateway> {
             provider: provider ?? providerRuntime.getConfig().active,
             items,
           });
+        }
+
+        if (
+          req.method === 'GET' &&
+          url.pathname === '/api/v1/models/catalog/hf'
+        ) {
+          return json(req, { items: listHfModelCatalog() });
         }
 
         const workspaceAttachments =

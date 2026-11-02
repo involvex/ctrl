@@ -1,5 +1,5 @@
 import { app, ipcMain } from 'electron';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import type { AutostartSettings } from './autostart';
@@ -132,7 +132,7 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
     return { ok: true };
   });
 
-  ipcMain.handle('localBackends:downloadBin', async (_e, raw: unknown) => {
+  ipcMain.handle('localBackends:downloadBin', async (event, raw: unknown) => {
     const input = z
       .object({
         id: backendIdSchema,
@@ -143,16 +143,79 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
     mkdirSync(dir, { recursive: true });
     const ext = process.platform === 'win32' ? '.exe' : '';
     const target = path.join(dir, `${input.id}${ext}`);
-    const res = await fetch(input.url);
-    if (!res.ok) {
+
+    const { createWriteStream, existsSync, statSync } = await import('node:fs');
+    let start = 0;
+    if (existsSync(target)) {
+      try {
+        start = statSync(target).size;
+      } catch {
+        start = 0;
+      }
+    }
+
+    const headers: Record<string, string> = {};
+    if (start > 0) {
+      headers['Range'] = `bytes=${start}-`;
+    }
+
+    const res = await fetch(input.url, { headers });
+    if (!res.ok && res.status !== 206) {
       throw new Error(`download failed: ${res.status}`);
     }
-    const buf = Buffer.from(await res.arrayBuffer());
-    writeFileSync(target, buf);
+
+    const contentLength = res.headers.get('content-length');
+    const total = contentLength ? Number(contentLength) + start : undefined;
+
+    const fileStream = createWriteStream(target, {
+      flags: start > 0 ? 'a' : 'w',
+    });
+    const webContents = event.sender;
+
+    if (!res.body) {
+      throw new Error('download failed: no response body');
+    }
+
+    let downloaded = start;
+    const reader = res.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          fileStream.write(Buffer.from(value));
+          downloaded += value.byteLength;
+          if (total) {
+            webContents.send('localBackends:downloadProgress', {
+              id: input.id,
+              downloaded,
+              total,
+              percent: Math.round((downloaded / total) * 100),
+            });
+          } else {
+            webContents.send('localBackends:downloadProgress', {
+              id: input.id,
+              downloaded,
+            });
+          }
+        }
+      }
+    } finally {
+      fileStream.end();
+      await new Promise<void>((resolve) => fileStream.on('finish', resolve));
+    }
+
     deps.localBackends.setBinPath(input.id, target);
     if (deps.vault?.isAvailable()) {
       deps.vault.set(`localBin:${input.id}`, target);
     }
+    webContents.send('localBackends:downloadProgress', {
+      id: input.id,
+      downloaded,
+      total,
+      percent: total ? 100 : undefined,
+      done: true,
+    });
     return { ok: true, path: target };
   });
 }

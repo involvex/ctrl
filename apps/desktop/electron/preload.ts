@@ -39,4 +39,27 @@ contextBridge.exposeInMainWorld('ctrlDesktop', {
     url: string
   ): Promise<{ ok: boolean; path: string }> =>
     ipcRenderer.invoke('localBackends:downloadBin', { id, url }),
+  onDownloadProgress: (
+    callback: (info: {
+      id: string;
+      downloaded: number;
+      total?: number;
+      percent?: number;
+      done?: boolean;
+    }) => void
+  ) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      info: {
+        id: string;
+        downloaded: number;
+        total?: number;
+        percent?: number;
+        done?: boolean;
+      }
+    ) => callback(info);
+    ipcRenderer.on('localBackends:downloadProgress', listener);
+    return () =>
+      ipcRenderer.removeListener('localBackends:downloadProgress', listener);
+  },
 });

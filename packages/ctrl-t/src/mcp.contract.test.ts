@@ -18,9 +18,12 @@ describe('contract: MCP stdio', () => {
       expect(Array.isArray(items)).toBe(true);
       if (Array.isArray(items)) {
         expect(
-          items.some(
-            (s) => s && typeof s === 'object' && 'id' in s && s.id === 'demo'
-          )
+          items.some((s) => {
+            if (!s || typeof s !== 'object') return false;
+            if (!('id' in s)) return false;
+            const id = (s as { id: unknown }).id;
+            return typeof id === 'string' && id === 'demo';
+          })
         ).toBe(true);
       }
     }
