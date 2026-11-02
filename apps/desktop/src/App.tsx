@@ -229,6 +229,18 @@ export function App() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
+  const refreshLocalBackends = useCallback(async () => {
+    const api = window.ctrlDesktop;
+    if (!api?.listLocalBackends) {
+      return;
+    }
+    try {
+      setLocalBackends(await api.listLocalBackends());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -278,8 +290,8 @@ export function App() {
         setTimeout(() => setDownloadProgress(null), 3000);
       }
     });
-    return unsub;
-  }, []);
+    return () => unsub();
+  }, [refreshLocalBackends]);
 
   useEffect(() => {
     const api = window.ctrlDesktop;
@@ -365,18 +377,6 @@ export function App() {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [openPanel]);
-
-  const refreshLocalBackends = useCallback(async () => {
-    const api = window.ctrlDesktop;
-    if (!api?.listLocalBackends) {
-      return;
-    }
-    try {
-      setLocalBackends(await api.listLocalBackends());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, []);
 
   const refreshModels = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {

@@ -19,24 +19,24 @@ const DEFAULT_LINKS: DrawerLink[] = [
   {
     label: 'Conversations',
     subtitle: 'New · history · rename',
-    href: '/conversations' as Href,
+    href: '/conversations',
   },
   {
     label: 'Providers',
     subtitle: 'Order · cascade',
-    href: '/providers' as Href,
+    href: '/providers',
   },
   {
     label: 'Agents',
     subtitle: 'Ask / Plan / Auto · personas',
-    href: '/agents' as Href,
+    href: '/agents',
   },
   {
     label: 'Model setup',
     subtitle: 'LiteRT download · import',
     href: '/on-device',
   },
-  { label: 'Connect', subtitle: 'Pair with PC', href: '/connect' as Href },
+  { label: 'Connect', subtitle: 'Pair with PC', href: '/connect' },
   {
     label: 'Host settings',
     subtitle: 'API keys · This PC / Cloud',

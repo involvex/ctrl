@@ -150,7 +150,7 @@ export async function gatewayStatus(opts: LifecycleOpts = {}): Promise<{
     meta?.url ??
     `http://${opts.host ?? meta?.host ?? '127.0.0.1'}:${meta?.port ?? port}`;
 
-  let health = false;
+  let health;
   try {
     await checkHealth(url);
     health = true;

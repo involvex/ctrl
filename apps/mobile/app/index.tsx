@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   useCallback,
   useEffect,
@@ -542,7 +542,7 @@ export default function ChatHomeScreen() {
         <Pressable
           style={styles.chip}
           onPress={() => {
-            router.push('/providers' as Href);
+            router.push('/providers');
           }}
           accessibilityRole="button"
         >
@@ -553,7 +553,7 @@ export default function ChatHomeScreen() {
         <Pressable
           style={styles.chip}
           onPress={() => {
-            router.push('/agents' as Href);
+            router.push('/agents');
           }}
           accessibilityRole="button"
         >
@@ -591,7 +591,7 @@ export default function ChatHomeScreen() {
           <PrimaryButton
             label="Model setup →"
             onPress={() => {
-              router.push('/on-device' as Href);
+              router.push('/on-device');
             }}
             style={styles.setupBtn}
           />
@@ -632,7 +632,7 @@ export default function ChatHomeScreen() {
               <PrimaryButton
                 label="Set up on-device model →"
                 onPress={() => {
-                  router.push('/on-device' as Href);
+                  router.push('/on-device');
                 }}
                 style={styles.setupBtn}
               />

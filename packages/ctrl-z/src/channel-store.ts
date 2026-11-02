@@ -72,7 +72,7 @@ function parseConfig(raw: string): Record<string, unknown> {
     const value: unknown = JSON.parse(raw);
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       const obj = value as Record<PropertyKey, unknown>;
-      return Object.fromEntries(Object.entries(obj)) as Record<string, unknown>;
+      return Object.fromEntries(Object.entries(obj));
     }
   } catch {
     // fall through
