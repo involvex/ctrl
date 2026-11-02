@@ -97,6 +97,10 @@ type DesktopApi = {
   startLocalBackend: (id: string) => Promise<LocalBackendRow>;
   stopLocalBackend: (id: string) => Promise<LocalBackendRow>;
   setLocalBackendBin: (id: string, binPath: string) => Promise<{ ok: boolean }>;
+  downloadLocalBackendBin: (
+    id: string,
+    url: string
+  ) => Promise<{ ok: boolean; path: string }>;
 };
 
 type LocalBackendRow = {
@@ -170,6 +174,13 @@ export function App() {
   const [providerStatus, setProviderStatus] =
     useState<ProviderStatusResponse | null>(null);
   const [localBackends, setLocalBackends] = useState<LocalBackendRow[]>([]);
+  const [binDownloadId, setBinDownloadId] = useState<'llama' | 'litert-lm'>(
+    'llama'
+  );
+  const [binDownloadUrl, setBinDownloadUrl] = useState('');
+  const [hfQuery, setHfQuery] = useState('gemma');
+  const [hfModels, setHfModels] = useState<string[]>([]);
+  const [hfLoading, setHfLoading] = useState(false);
   const [modelItems, setModelItems] = useState<
     Array<{ id: string; displayName?: string }>
   >([]);
@@ -689,6 +700,7 @@ export function App() {
       });
       setContextPreview(ctx.assembledPreview);
       setContextTokenEstimate(ctx.tokenEstimate ?? null);
+      setContextTokenEstimate(ctx.tokenEstimate ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -859,6 +871,42 @@ export function App() {
             safeStorage: {secretsOk ? 'available' : 'unavailable'} · updates:{' '}
             {updateLabel}
           </p>
+          <div className="host-row">
+            <select
+              value={binDownloadId}
+              onChange={(e) =>
+                setBinDownloadId(e.target.value as 'llama' | 'litert-lm')
+              }
+            >
+              <option value="llama">llama</option>
+              <option value="litert-lm">litert-lm</option>
+            </select>
+            <input
+              value={binDownloadUrl}
+              onChange={(e) => setBinDownloadUrl(e.target.value)}
+              placeholder="binary download URL"
+            />
+            <button
+              type="button"
+              className="ghost-btn"
+              disabled={!binDownloadUrl.trim()}
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await window.ctrlDesktop?.downloadLocalBackendBin(
+                      binDownloadId,
+                      binDownloadUrl.trim()
+                    );
+                    await refreshLocalBackends();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                  }
+                })();
+              }}
+            >
+              download bin
+            </button>
+          </div>
           <div className="host-row">
             <button
               type="button"
@@ -1491,6 +1539,11 @@ export function App() {
                   ~{contextTokenEstimate} tokens (estimate)
                 </p>
               ) : null}
+              {contextTokenEstimate !== null ? (
+                <p className="meta">
+                  ~{contextTokenEstimate} tokens (estimate)
+                </p>
+              ) : null}
               <pre className="context-preview">{contextPreview}</pre>
             </>
           ) : null}
@@ -1520,6 +1573,77 @@ export function App() {
           </button>
         </section>
       ) : null}
+
+      {!firstRunDismissed ? (
+        <section className="first-run">
+          <p className="host-title">first run setup</p>
+          <p className="meta">
+            Windows firewall: allow TCP 7331 for gateway pairing. Local models:
+            set CTRL_LLAMA_BIN / CTRL_LITERT_LM_BIN or put binaries on PATH.
+          </p>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              try {
+                localStorage.setItem('ctrl.firstRunDismissed', '1');
+              } catch {
+                // ignore
+              }
+              setFirstRunDismissed(true);
+            }}
+          >
+            dismiss
+          </button>
+        </section>
+      ) : null}
+
+      <section className="catalog">
+        <p className="host-title">HF model catalog</p>
+        <div className="host-row">
+          <input
+            value={hfQuery}
+            onChange={(e) => setHfQuery(e.target.value)}
+            placeholder="HF model search"
+          />
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={hfLoading}
+            onClick={() => {
+              setHfLoading(true);
+              void (async () => {
+                try {
+                  const res = await fetch(
+                    `https://huggingface.co/api/models?search=${encodeURIComponent(
+                      hfQuery
+                    )}&limit=20`
+                  );
+                  const data = (await res.json()) as Array<{ id?: string }>;
+                  setHfModels(
+                    Array.isArray(data)
+                      ? data.map((m) => m.id ?? '').filter(Boolean)
+                      : []
+                  );
+                } catch {
+                  setHfModels([]);
+                } finally {
+                  setHfLoading(false);
+                }
+              })();
+            }}
+          >
+            {hfLoading ? 'loading...' : 'browse HF'}
+          </button>
+        </div>
+        {hfModels.length > 0 ? (
+          <ul className="model-list">
+            {hfModels.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
 
       <section className="chat">
         {messages.map((m) => (

@@ -9,8 +9,8 @@ import type {
   UpsertIdentityInput,
 } from '@involvex/ctrl-s';
 import type { ChannelStore } from '@involvex/ctrl-z';
-import { discordAdapter } from './adapters/mock-bot';
-import { slackAdapter } from './adapters/mock-bot';
+import { discordAdapter } from './adapters/discord';
+import { slackAdapter } from './adapters/slack';
 import { telegramAdapter } from './adapters/telegram';
 import { webhookAdapter } from './adapters/webhook';
 import {

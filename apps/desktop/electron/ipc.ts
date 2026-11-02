@@ -1,4 +1,6 @@
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
 import type { AutostartSettings } from './autostart';
 import type { GatewayManager, GatewayStatus } from './gateway-manager';
@@ -128,5 +130,29 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
       deps.vault.set(`localBin:${input.id}`, input.binPath);
     }
     return { ok: true };
+  });
+
+  ipcMain.handle('localBackends:downloadBin', async (_e, raw: unknown) => {
+    const input = z
+      .object({
+        id: backendIdSchema,
+        url: z.string().url(),
+      })
+      .parse(raw);
+    const dir = path.join(app.getPath('userData'), 'bin');
+    mkdirSync(dir, { recursive: true });
+    const ext = process.platform === 'win32' ? '.exe' : '';
+    const target = path.join(dir, `${input.id}${ext}`);
+    const res = await fetch(input.url);
+    if (!res.ok) {
+      throw new Error(`download failed: ${res.status}`);
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    writeFileSync(target, buf);
+    deps.localBackends.setBinPath(input.id, target);
+    if (deps.vault?.isAvailable()) {
+      deps.vault.set(`localBin:${input.id}`, target);
+    }
+    return { ok: true, path: target };
   });
 }

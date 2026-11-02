@@ -34,4 +34,9 @@ contextBridge.exposeInMainWorld('ctrlDesktop', {
     ipcRenderer.invoke('localBackends:stop', id),
   setLocalBackendBin: (id: string, binPath: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke('localBackends:setBin', { id, binPath }),
+  downloadLocalBackendBin: (
+    id: string,
+    url: string
+  ): Promise<{ ok: boolean; path: string }> =>
+    ipcRenderer.invoke('localBackends:downloadBin', { id, url }),
 });
