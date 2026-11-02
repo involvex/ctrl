@@ -74,7 +74,9 @@ jobs:
           path: |
             apps/desktop/release/ctrl-*-win-x64-portable.exe
             apps/desktop/release/ctrl-*-win-x64-setup.exe
+            apps/desktop/release/ctrl-*-win-x64-setup.exe.blockmap
             apps/desktop/release/ctrl-*-win-x64-unpacked.zip
+            apps/desktop/release/latest.yml
           if-no-files-found: error
 
   github-release:
