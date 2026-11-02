@@ -22,6 +22,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { decryptUtf8, encryptUtf8 } from './backup-crypto';
+import { createHash } from 'node:crypto';
 import type { Store } from './store';
 
 function newId(): string {
@@ -150,6 +151,11 @@ export class BackupStore {
     const createdAt = Date.now();
     const label = input.label ?? null;
 
+    // Checksum over the plaintext workspace dump (works for encrypted too).
+    const checksum = createHash('sha256')
+      .update(JSON.stringify(dumps))
+      .digest('hex');
+
     let snapshot: HostBackupSnapshot;
     if (input.passphrase) {
       const blob = encryptUtf8(JSON.stringify(dumps), input.passphrase);
@@ -160,6 +166,7 @@ export class BackupStore {
         label,
         encrypted: true,
         workspaceCount: dumps.length,
+        checksum,
         ...blob,
       });
     } else {
@@ -170,6 +177,7 @@ export class BackupStore {
         label,
         encrypted: false,
         workspaces: dumps,
+        checksum,
       });
     }
 
@@ -184,6 +192,7 @@ export class BackupStore {
       encrypted: Boolean(input.passphrase),
       workspaceCount: dumps.length,
       bytes: Buffer.byteLength(body, 'utf8'),
+      checksum,
     });
   }
 
@@ -196,6 +205,15 @@ export class BackupStore {
     const plain = this.getPlain(id, input.passphrase);
     if (!plain) {
       throw new Error('backup not found');
+    }
+    // Verify checksum when present (integrity check).
+    if (plain.checksum) {
+      const computed = createHash('sha256')
+        .update(JSON.stringify(plain.workspaces))
+        .digest('hex');
+      if (computed !== plain.checksum) {
+        throw new Error('backup checksum mismatch - file may be corrupt');
+      }
     }
     const workspaces: Workspace[] = [];
     for (const dump of plain.workspaces) {

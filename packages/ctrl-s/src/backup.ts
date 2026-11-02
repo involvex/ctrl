@@ -9,6 +9,8 @@ export const hostBackupManifestSchema = z.object({
   encrypted: z.boolean(),
   workspaceCount: z.number().int().nonnegative(),
   bytes: z.number().int().nonnegative().optional(),
+  /** sha256 hex of the snapshot body (when present). */
+  checksum: z.string().min(1).optional(),
 });
 
 export type HostBackupManifest = z.infer<typeof hostBackupManifestSchema>;
@@ -18,6 +20,7 @@ const backupMeta = {
   id: z.string().min(1),
   createdAt: z.number().int().nonnegative(),
   label: z.string().min(1).nullable(),
+  checksum: z.string().min(1).optional(),
 };
 
 export const hostBackupPlainSnapshotSchema = z.object({

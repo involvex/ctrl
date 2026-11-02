@@ -24,9 +24,12 @@ import { saveGeneratorMode } from '../src/device/inference-mode';
 import {
   DEFAULT_MODEL_URL,
   describeDownloadError,
+  clearDownloadProgress,
   downloadModelWithRetry,
   isRemoteModelUrl,
+  loadDownloadProgress,
   loadSavedModelSource,
+  saveDownloadProgress,
   saveModelSource,
 } from '../src/device/model-source';
 import {
@@ -174,9 +177,17 @@ function ModelSourcePanel({
 }) {
   const [localError, setLocalError] = useState<string | null>(null);
   const [manualProgress, setManualProgress] = useState(0);
+  const [savedProgress, setSavedProgress] = useState(0);
   const [busyAction, setBusyAction] = useState<'idle' | 'download' | 'import'>(
     'idle'
   );
+
+  useEffect(() => {
+    void (async () => {
+      const p = await loadDownloadProgress();
+      setSavedProgress(p);
+    })();
+  }, []);
 
   const downloading = busyAction === 'download';
   const downloadPct = Math.round(manualProgress * 100);
@@ -197,9 +208,13 @@ function ModelSourcePanel({
         }
         const localPath = await downloadModelWithRetry(pathOrUrl, {
           attempts: 3,
-          onProgress: setManualProgress,
+          onProgress: (p) => {
+            setManualProgress(p);
+            void saveDownloadProgress(p);
+          },
         });
         await saveModelSource(localPath);
+        await clearDownloadProgress();
         onSourceChange(localPath);
       } catch (err: unknown) {
         setLocalError(describeDownloadError(err));
@@ -301,7 +316,9 @@ function ModelSourcePanel({
             <Text style={styles.buttonText}>
               {downloading
                 ? `downloading ${downloadPct}%`
-                : 'download (~2.6 GB, 3 retries)'}
+                : savedProgress > 0 && savedProgress < 1
+                  ? `resume download (${Math.round(savedProgress * 100)}%)`
+                  : 'download (~2.6 GB, 3 retries)'}
             </Text>
           )}
         </Pressable>

@@ -8,6 +8,7 @@ import {
 import { toString as qrToString } from 'qrcode';
 import { backupCommand } from './backup';
 import { chatCommand } from './chat';
+import { doctorCommand } from './doctor';
 import { completionScript, parseCompletionShell } from './completion';
 import {
   DEFAULT_GATEWAY_PORT,
@@ -22,8 +23,9 @@ function usage(): never {
   ctrl-f5 start  [--port <port>] [--host <bindHost>]
   ctrl-f5 stop   [--port <port>]
   ctrl-f5 status [--port <port>] [--url <baseUrl>]
-  ctrl-f5 health [--url <baseUrl>]
-  ctrl-f5 demo   [--url <baseUrl>]
+  ctrl-f5 health  [--url <baseUrl>]
+  ctrl-f5 doctor  [--url <baseUrl>]
+  ctrl-f5 demo    [--url <baseUrl>]
   ctrl-f5 chat   [--url <baseUrl>] [--token <token>] [message...]
   ctrl-f5 backup list|create|restore […] [--url <baseUrl>] [--token <token>]
   ctrl-f5 pair   [--host <lanIp>] [--port <port>] [--token <token>] [--url <baseUrl>]
@@ -316,6 +318,10 @@ async function main(): Promise<void> {
   const baseUrl = parseUrl(rest);
   if (cmd === 'health') {
     await health(baseUrl);
+    return;
+  }
+  if (cmd === 'doctor') {
+    await doctorCommand(rest);
     return;
   }
   if (cmd === 'demo') {

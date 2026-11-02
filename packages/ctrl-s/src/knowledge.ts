@@ -69,6 +69,8 @@ export const knowledgeSearchInputSchema = z.object({
   limit: z.number().int().positive().max(50).optional(),
   /** Defaults to hybrid when embeddings are enabled, otherwise fts. */
   mode: knowledgeSearchModeSchema.optional(),
+  /** Optional workspace filter for cross-workspace search. */
+  workspaceIds: z.array(z.string().min(1)).optional(),
 });
 
 export type KnowledgeSearchInput = z.infer<typeof knowledgeSearchInputSchema>;
@@ -151,6 +153,8 @@ export const contextInspectSchema = z.object({
   pinnedMemory: z.array(memoryItemSchema),
   knowledgeHits: z.array(knowledgeHitSchema),
   assembledPreview: z.string(),
+  /** Rough token estimate (chars/4) of the assembled preview. */
+  tokenEstimate: z.number().int().nonnegative().optional(),
 });
 
 export type ContextInspect = z.infer<typeof contextInspectSchema>;

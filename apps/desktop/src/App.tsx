@@ -152,6 +152,16 @@ export function App() {
   const [knowledgeHits, setKnowledgeHits] = useState<KnowledgeHit[]>([]);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [contextPreview, setContextPreview] = useState<string | null>(null);
+  const [contextTokenEstimate, setContextTokenEstimate] = useState<
+    number | null
+  >(null);
+  const [firstRunDismissed, setFirstRunDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('ctrl.firstRunDismissed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [channelItems, setChannelItems] = useState<ChannelPublic[]>([]);
   const [channelName, setChannelName] = useState('webhook');
   const [backupItems, setBackupItems] = useState<HostBackupManifest[]>([]);
@@ -678,6 +688,7 @@ export function App() {
         q: knowledgeQuery.trim() || undefined,
       });
       setContextPreview(ctx.assembledPreview);
+      setContextTokenEstimate(ctx.tokenEstimate ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1475,10 +1486,39 @@ export function App() {
           {contextPreview ? (
             <>
               <p className="host-title">context inspector</p>
+              {contextTokenEstimate !== null ? (
+                <p className="meta">
+                  ~{contextTokenEstimate} tokens (estimate)
+                </p>
+              ) : null}
               <pre className="context-preview">{contextPreview}</pre>
             </>
           ) : null}
         </aside>
+      ) : null}
+
+      {!firstRunDismissed ? (
+        <section className="first-run">
+          <p className="host-title">first run setup</p>
+          <p className="meta">
+            Windows firewall: allow TCP 7331 for gateway pairing. Local models:
+            set CTRL_LLAMA_BIN / CTRL_LITERT_LM_BIN or put binaries on PATH.
+          </p>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              try {
+                localStorage.setItem('ctrl.firstRunDismissed', '1');
+              } catch {
+                // ignore
+              }
+              setFirstRunDismissed(true);
+            }}
+          >
+            dismiss
+          </button>
+        </section>
       ) : null}
 
       <section className="chat">

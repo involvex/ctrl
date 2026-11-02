@@ -632,6 +632,36 @@ export async function searchKnowledge(
     .parse(await readJson(res)).items;
 }
 
+export async function searchKnowledgeAcross(
+  baseUrl: string,
+  query: string,
+  opts: {
+    workspaceIds?: string[];
+    limit?: number;
+    mode?: KnowledgeSearchMode;
+  } = {}
+): Promise<KnowledgeHit[]> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/knowledge/search`,
+    {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        query,
+        limit: opts.limit,
+        mode: opts.mode,
+        workspaceIds: opts.workspaceIds,
+      }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`searchKnowledgeAcross failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(knowledgeHitSchema) })
+    .parse(await readJson(res)).items;
+}
+
 export async function reindexKnowledge(
   baseUrl: string,
   workspaceId: string,

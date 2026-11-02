@@ -112,12 +112,14 @@ export function assembleContextPreview(input: {
       parts.push(`${msg.role}: ${msg.content.slice(0, 500)}`);
     }
   }
+  const assembledPreview = parts.join('\n');
   return {
     workspaceId: input.workspaceId,
     conversationId: input.conversationId,
     recentMessages: input.recentMessages,
     pinnedMemory: input.pinnedMemory,
     knowledgeHits: input.knowledgeHits,
-    assembledPreview: parts.join('\n'),
+    assembledPreview,
+    tokenEstimate: Math.ceil(assembledPreview.length / 4),
   };
 }

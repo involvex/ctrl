@@ -10,6 +10,7 @@ export {
 
 export const DEFAULT_MODEL_URL = GEMMA_4_E2B_IT;
 export const MODEL_SOURCE_KEY = 'ctrl.mobile.litert.modelSource';
+export const DOWNLOAD_PROGRESS_KEY = 'ctrl.mobile.litert.downloadProgress';
 
 export async function loadSavedModelSource(): Promise<string> {
   try {
@@ -33,6 +34,32 @@ export async function loadSavedModelSource(): Promise<string> {
 export async function saveModelSource(pathOrUrl: string): Promise<void> {
   try {
     await AsyncStorage.setItem(MODEL_SOURCE_KEY, pathOrUrl);
+  } catch {
+    // best-effort
+  }
+}
+
+export async function saveDownloadProgress(progress: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DOWNLOAD_PROGRESS_KEY, String(progress));
+  } catch {
+    // best-effort
+  }
+}
+
+export async function loadDownloadProgress(): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(DOWNLOAD_PROGRESS_KEY);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function clearDownloadProgress(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(DOWNLOAD_PROGRESS_KEY);
   } catch {
     // best-effort
   }

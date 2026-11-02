@@ -61,6 +61,7 @@ import {
   type AgentEvent,
   type CreateAttachmentInput,
   type HealthResponse,
+  type KnowledgeHit,
   type LocalBackendInfo,
   type PairingAck,
 } from '@involvex/ctrl-s';
@@ -575,6 +576,57 @@ export async function startServer(): Promise<StartedGateway> {
               ? {}
               : { hint: 'Set CTRL_EMBEDDINGS=hash|openai|llama|litert' }),
           });
+        }
+
+        // Cross-workspace knowledge search (optional workspaceIds filter).
+        if (
+          req.method === 'POST' &&
+          url.pathname === '/api/v1/knowledge/search'
+        ) {
+          const body: unknown = await req.json();
+          const input = knowledgeSearchInputSchema.parse(body);
+          const allWorkspaces = store.listWorkspaces();
+          const targetIds =
+            input.workspaceIds && input.workspaceIds.length > 0
+              ? input.workspaceIds
+              : allWorkspaces.map((w) => w.id);
+          const validIds = targetIds.filter((id) =>
+            allWorkspaces.some((w) => w.id === id)
+          );
+          if (validIds.length === 0) {
+            return json(req, { error: 'no valid workspaces' }, 400);
+          }
+          try {
+            const merged: KnowledgeHit[] = [];
+            for (const wsId of validIds) {
+              const items = await searchKnowledgeHybrid(
+                knowledge,
+                embedder,
+                wsId,
+                input.query,
+                {
+                  ...(input.mode ? { mode: input.mode } : {}),
+                  limit: input.limit ?? 8,
+                }
+              );
+              merged.push(...items);
+            }
+            // Sort by rank (lower is better) then truncate.
+            merged.sort((a, b) => a.rank - b.rank);
+            const limit = input.limit ?? 8;
+            const items = merged.slice(0, limit);
+            return json(req, {
+              items,
+              mode: input.mode ?? (embedder ? 'hybrid' : 'fts'),
+              workspaces: validIds,
+            });
+          } catch (err) {
+            return json(
+              req,
+              { error: err instanceof Error ? err.message : String(err) },
+              502
+            );
+          }
         }
 
         const workspaceKnowledgeSearch =
