@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import {
   createChannel,
   createWorkspace,
+  deleteChannel,
   listChannelIdentities,
+  listChannels,
   postChannelWebhook,
   sendChannelMessage,
 } from '@involvex/ctrl-i';
@@ -58,5 +60,16 @@ describe('contract: channels', () => {
       text: 'hello telegram',
     });
     expect(job.status).toBe('sent');
+  });
+
+  test('channel delete removes channel from list', async () => {
+    const ws = await createWorkspace(baseUrl(), 'channels-delete');
+    const channel = await createChannel(baseUrl(), ws.id, {
+      kind: 'webhook',
+      name: 'to-delete',
+    });
+    await deleteChannel(baseUrl(), channel.id);
+    const remaining = await listChannels(baseUrl(), ws.id);
+    expect(remaining.some((c) => c.id === channel.id)).toBe(false);
   });
 });

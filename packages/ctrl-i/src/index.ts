@@ -914,6 +914,22 @@ export async function stopChannel(
   return channelPublicSchema.parse(await readJson(res));
 }
 
+export async function deleteChannel(
+  baseUrl: string,
+  channelId: string
+): Promise<void> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/channels/${channelId}`,
+    {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`deleteChannel failed: ${res.status}`);
+  }
+}
+
 export async function sendChannelMessage(
   baseUrl: string,
   channelId: string,

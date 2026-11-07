@@ -149,6 +149,24 @@ export class ChannelManager {
     return this.store.getChannelPublic(channelId)!;
   }
 
+  async deleteChannel(channelId: string): Promise<void> {
+    const channel = this.store.getChannel(channelId);
+    if (!channel) {
+      throw new Error('channel not found');
+    }
+    const adapter = adapters[channel.kind];
+    if (adapter) {
+      try {
+        await adapter.stop(channelId);
+      } catch {
+        // still delete even if stop fails
+      }
+    }
+    if (!this.store.deleteChannel(channelId)) {
+      throw new Error('channel not found');
+    }
+  }
+
   enqueue(channelId: string, input: SendChannelMessageInput): OutboxJob {
     if (!this.store.getChannel(channelId)) {
       throw new Error('channel not found');

@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, dialog, ipcMain } from 'electron';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -130,6 +130,30 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
       deps.vault.set(`localBin:${input.id}`, input.binPath);
     }
     return { ok: true };
+  });
+
+  ipcMain.handle('localBackends:pickBin', async (_e, raw: unknown) => {
+    const input = z.object({ id: backendIdSchema }).parse(raw);
+    const result = await dialog.showOpenDialog({
+      title: `Select ${input.id} binary`,
+      properties: ['openFile'],
+      filters:
+        process.platform === 'win32'
+          ? [
+              { name: 'Executables', extensions: ['exe'] },
+              { name: 'All files', extensions: ['*'] },
+            ]
+          : [{ name: 'All files', extensions: ['*'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false as const, path: null };
+    }
+    const binPath = result.filePaths[0]!;
+    deps.localBackends.setBinPath(input.id, binPath);
+    if (deps.vault?.isAvailable()) {
+      deps.vault.set(`localBin:${input.id}`, binPath);
+    }
+    return { ok: true as const, path: binPath };
   });
 
   ipcMain.handle('localBackends:downloadBin', async (event, raw: unknown) => {

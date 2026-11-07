@@ -207,6 +207,14 @@ export class ChannelStore {
       .run(status, lastError, Date.now(), channelId);
   }
 
+  /** Deletes channel row; identities/messages/outbox cascade via FK. */
+  deleteChannel(channelId: string): boolean {
+    const result = this.db
+      .query('DELETE FROM channels WHERE id = ?')
+      .run(channelId);
+    return result.changes > 0;
+  }
+
   upsertIdentity(
     channelId: string,
     workspaceId: string,

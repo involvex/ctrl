@@ -199,13 +199,12 @@ export class LocalBackendsManager {
     }
 
     const extra = process.env[def.envArgs]?.trim();
-    const args = [
-      ...(extra ? extra.split(/\s+/).filter(Boolean) : []),
-      '--host',
-      '127.0.0.1',
-      '--port',
-      String(def.port),
-    ];
+    const baseArgs = extra ? extra.split(/\s+/).filter(Boolean) : [];
+    // litert-lm rejects `--host`; llama.cpp expects host+port.
+    const args =
+      def.id === 'litert-lm'
+        ? baseArgs
+        : [...baseArgs, '--host', '127.0.0.1', '--port', String(def.port)];
 
     const child = spawn(binPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -1,6 +1,7 @@
 import {
   createChannel,
   createWorkspace,
+  deleteChannel,
   listChannels,
   listWorkspaces,
   setClientAuth,
@@ -42,6 +43,7 @@ function channelUsage(): never {
   ctrl-f5 channel add webhook [--name <name>] [--url]
   ctrl-f5 channel start <channelId> [--url] [--token <gatewayToken>]
   ctrl-f5 channel stop <channelId> [--url] [--token <gatewayToken>]
+  ctrl-f5 channel remove <channelId> [--url] [--token <gatewayToken>]
 
 Env: TELEGRAM_BOT_TOKEN (when --token omitted for telegram add),
      CTRL_GATEWAY_TOKEN (gateway auth; preferred over --token for telegram add),
@@ -153,6 +155,16 @@ export async function channelCommand(
     process.stdout.write(
       `${sub} ${result.id}  ${result.kind}  ${result.name}  ${result.status}\n`
     );
+    return;
+  }
+
+  if (sub === 'remove' || sub === 'rm' || sub === 'delete') {
+    const channelId = positionals[1];
+    if (!channelId) {
+      channelUsage();
+    }
+    await deleteChannel(baseUrl, channelId);
+    process.stdout.write(`removed ${channelId}\n`);
     return;
   }
 

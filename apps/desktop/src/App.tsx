@@ -4,6 +4,7 @@ import {
   createChannel,
   createConversation,
   createWorkspace,
+  deleteChannel,
   exportWorkspace,
   getEmbeddingStatus,
   getProviderStatus,
@@ -19,9 +20,11 @@ import {
   listTools,
   listModels,
   listWorkspaces,
+  postChannelWebhook,
   reindexKnowledge,
   restoreBackup,
   searchKnowledge,
+  sendChannelMessage,
   setClientAuth,
   streamChat,
   updateMemory,
@@ -99,6 +102,9 @@ type DesktopApi = {
   startLocalBackend: (id: string) => Promise<LocalBackendRow>;
   stopLocalBackend: (id: string) => Promise<LocalBackendRow>;
   setLocalBackendBin: (id: string, binPath: string) => Promise<{ ok: boolean }>;
+  pickLocalBackendBin: (
+    id: string
+  ) => Promise<{ ok: boolean; path: string | null }>;
   downloadLocalBackendBin: (
     id: string,
     url: string
@@ -183,6 +189,10 @@ export function App() {
   );
   const [channelName, setChannelName] = useState('webhook');
   const [channelBotToken, setChannelBotToken] = useState('');
+  const [channelTestRecipient, setChannelTestRecipient] = useState('');
+  const [binPathDrafts, setBinPathDrafts] = useState<Record<string, string>>(
+    {}
+  );
   const [backupItems, setBackupItems] = useState<HostBackupManifest[]>([]);
   const [backupLabel, setBackupLabel] = useState('manual');
   const [backupPassphrase, setBackupPassphrase] = useState('');
@@ -239,7 +249,17 @@ export function App() {
       return;
     }
     try {
-      setLocalBackends(await api.listLocalBackends());
+      const rows = await api.listLocalBackends();
+      setLocalBackends(rows);
+      setBinPathDrafts((prev) => {
+        const next = { ...prev };
+        for (const row of rows) {
+          if (next[row.id] === undefined) {
+            next[row.id] = row.binPath ?? '';
+          }
+        }
+        return next;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -739,6 +759,88 @@ export function App() {
     workspace,
   ]);
 
+  const onRemoveChannel = useCallback(
+    async (channelId: string) => {
+      if (!gatewayUrl.startsWith('http')) {
+        return;
+      }
+      try {
+        await deleteChannel(gatewayUrl, channelId);
+        await refreshChannels();
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [gatewayUrl, refreshChannels]
+  );
+
+  const onTestChannel = useCallback(
+    async (ch: ChannelPublic) => {
+      if (!gatewayUrl.startsWith('http')) {
+        return;
+      }
+      try {
+        if (ch.kind === 'webhook') {
+          await postChannelWebhook(gatewayUrl, ch.id, {
+            externalUserId: 'desktop-test',
+            text: 'ctrl channel test',
+            displayName: 'Desktop',
+          });
+        } else {
+          const recipient = channelTestRecipient.trim();
+          if (!recipient) {
+            setError('enter a test recipient (Telegram chat id) first');
+            return;
+          }
+          await sendChannelMessage(gatewayUrl, ch.id, {
+            externalUserId: recipient,
+            text: 'ctrl channel test',
+          });
+        }
+        setError(null);
+        setToolStatus(`channel test ok · ${ch.name}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [channelTestRecipient, gatewayUrl]
+  );
+
+  const onSaveBinPath = useCallback(
+    async (id: string) => {
+      const path = (binPathDrafts[id] ?? '').trim();
+      if (!path) {
+        setError('binary path required');
+        return;
+      }
+      try {
+        await window.ctrlDesktop?.setLocalBackendBin(id, path);
+        await refreshLocalBackends();
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [binPathDrafts, refreshLocalBackends]
+  );
+
+  const onBrowseBinPath = useCallback(
+    async (id: string) => {
+      try {
+        const result = await window.ctrlDesktop?.pickLocalBackendBin(id);
+        if (result?.ok && result.path) {
+          setBinPathDrafts((prev) => ({ ...prev, [id]: result.path! }));
+          await refreshLocalBackends();
+          setError(null);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [refreshLocalBackends]
+  );
+
   const refreshKnowledge = useCallback(async () => {
     if (!workspace || !gatewayUrl.startsWith('http')) {
       return;
@@ -918,319 +1020,373 @@ export function App() {
       </header>
 
       {hostOpen ? (
-        <aside className="host-panel">
-          <p className="host-title">desktop host</p>
-          <label className="host-row">
-            <input
-              type="checkbox"
-              checked={openAtLogin}
-              onChange={(e) => {
-                const next = e.target.checked;
-                setOpenAtLogin(next);
-                void window.ctrlDesktop?.setAutostart({ openAtLogin: next });
-              }}
-            />
-            open at login
-          </label>
-          <p className="meta">
-            safeStorage: {secretsOk ? 'available' : 'unavailable'} · updates:{' '}
-            {updateLabel}
-          </p>
-          <div className="host-row">
-            <select
-              value={binDownloadId}
-              onChange={(e) =>
-                setBinDownloadId(e.target.value as 'llama' | 'litert-lm')
-              }
-            >
-              <option value="llama">llama</option>
-              <option value="litert-lm">litert-lm</option>
-            </select>
-            <input
-              value={binDownloadUrl}
-              onChange={(e) => setBinDownloadUrl(e.target.value)}
-              placeholder="binary download URL"
-            />
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled={!binDownloadUrl.trim()}
-              onClick={() => {
-                void (async () => {
-                  try {
-                    setDownloadProgress({ id: binDownloadId, downloaded: 0 });
-                    await window.ctrlDesktop?.downloadLocalBackendBin(
-                      binDownloadId,
-                      binDownloadUrl.trim()
-                    );
-                    await refreshLocalBackends();
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : String(err));
-                    setDownloadProgress(null);
-                  }
-                })();
-              }}
-            >
-              download bin
-            </button>
-          </div>
-          {downloadProgress && downloadProgress.id === binDownloadId && (
+        <aside className="host-panel host-panel-scroll">
+          <section className="host-section">
+            <p className="host-title">desktop host</p>
+            <label className="host-row">
+              <input
+                type="checkbox"
+                checked={openAtLogin}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setOpenAtLogin(next);
+                  void window.ctrlDesktop?.setAutostart({ openAtLogin: next });
+                }}
+              />
+              open at login
+            </label>
+            <p className="meta">
+              safeStorage: {secretsOk ? 'available' : 'unavailable'} · updates:{' '}
+              {updateLabel}
+            </p>
+            {updateLabel === 'disabled' ? (
+              <p className="meta">updates disabled while running from source</p>
+            ) : (
+              <div className="host-row">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => {
+                    void window.ctrlDesktop?.checkForUpdates().then((s) => {
+                      setUpdateLabel(s.state);
+                      return undefined;
+                    });
+                  }}
+                >
+                  check updates
+                </button>
+              </div>
+            )}
+          </section>
+
+          <section className="host-section">
+            <p className="host-title">pairing token</p>
+            <p className="meta">
+              {gatewayToken
+                ? showToken
+                  ? gatewayToken
+                  : `${gatewayToken.slice(0, 10)}…`
+                : '(none)'}
+            </p>
             <div className="host-row">
-              <span className="meta">
-                {downloadProgress.done
-                  ? 'done'
-                  : downloadProgress.percent !== undefined
-                    ? `${downloadProgress.percent}% (${Math.round(downloadProgress.downloaded / 1024 / 1024)} MB)`
-                    : `${Math.round(downloadProgress.downloaded / 1024 / 1024)} MB downloaded`}
-              </span>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => setShowToken((v) => !v)}
+                disabled={!gatewayToken}
+              >
+                {showToken ? 'hide' : 'reveal'}
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={!gatewayToken}
+                onClick={() => {
+                  if (gatewayToken) {
+                    void navigator.clipboard.writeText(gatewayToken);
+                  }
+                }}
+              >
+                copy
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  void window.ctrlDesktop?.rotateGatewayToken().then((t) => {
+                    setGatewayToken(t);
+                    if (t) {
+                      setClientAuth({ token: t });
+                    }
+                    setError(
+                      'Token rotated — restart the app so the gateway picks it up.'
+                    );
+                    return undefined;
+                  });
+                }}
+              >
+                rotate
+              </button>
             </div>
-          )}
-          {updateLabel === 'disabled' ? (
-            <p className="meta">updates disabled while running from source</p>
-          ) : (
+          </section>
+
+          <section className="host-section">
+            <p className="host-title">openai key</p>
+            <p className="meta">
+              {hasOpenAiKey ? 'saved in safeStorage' : 'not set'}
+            </p>
+            <div className="host-row">
+              <input
+                className="host-input"
+                type="password"
+                placeholder="sk-… (saved encrypted)"
+                value={openAiDraft}
+                onChange={(e) => setOpenAiDraft(e.target.value)}
+              />
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={openAiDraft.trim().length === 0}
+                onClick={() => {
+                  void window.ctrlDesktop
+                    ?.setOpenAiKey(openAiDraft.trim())
+                    .then(() => {
+                      setHasOpenAiKey(true);
+                      setOpenAiDraft('');
+                      setError(
+                        'API key saved — restart the app to apply to the gateway.'
+                      );
+                      return undefined;
+                    });
+                }}
+              >
+                save key
+              </button>
+            </div>
+          </section>
+          <section className="host-section">
+            <p className="host-title">phone pair</p>
+            {gatewayToken ? (
+              <>
+                <PairQr
+                  gatewayUrl={
+                    lanUrls[0] ??
+                    (gatewayUrl.startsWith('http')
+                      ? gatewayUrl
+                      : 'http://127.0.0.1:7331')
+                  }
+                  token={gatewayToken}
+                />
+                <div className="host-row">
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    disabled={
+                      lanUrls.length === 0 && !gatewayUrl.startsWith('http')
+                    }
+                    onClick={() => {
+                      const url =
+                        lanUrls[0] ??
+                        (gatewayUrl.startsWith('http') ? gatewayUrl : '');
+                      if (url) {
+                        void navigator.clipboard.writeText(url);
+                      }
+                    }}
+                  >
+                    copy LAN URL
+                  </button>
+                  <span className="meta">
+                    {lanUrls[0] ??
+                      '(no Wi‑Fi/Ethernet IP — phone cannot use 127.0.0.1)'}
+                  </span>
+                </div>
+                {lanUrls.length === 0 ? (
+                  <p className="meta warn">
+                    No LAN IP detected — phone needs the PC Wi‑Fi/Ethernet
+                    address. Windows firewall: allow inbound TCP on the gateway
+                    port (usually 7331).
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p className="meta">
+                pairing token required before QR is available
+              </p>
+            )}
+          </section>
+
+          <section className="host-section">
+            <p className="host-title">local models</p>
+            <p className="meta">
+              Set your own binary paths (llama.cpp llama-server / litert-lm),
+              then start. Prefer llama.cpp — not the Python uv llama-server.
+            </p>
             <div className="host-row">
               <button
                 type="button"
                 className="ghost-btn"
                 onClick={() => {
-                  void window.ctrlDesktop?.checkForUpdates().then((s) => {
-                    setUpdateLabel(s.state);
-                    return undefined;
-                  });
+                  void refreshLocalBackends();
                 }}
               >
-                check updates
+                detect
               </button>
             </div>
-          )}
-          <p className="meta">
-            pairing token{' '}
-            {gatewayToken
-              ? showToken
-                ? gatewayToken
-                : `${gatewayToken.slice(0, 10)}…`
-              : '(none)'}
-          </p>
-          <div className="host-row">
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => setShowToken((v) => !v)}
-              disabled={!gatewayToken}
-            >
-              {showToken ? 'hide' : 'reveal'}
-            </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled={!gatewayToken}
-              onClick={() => {
-                if (gatewayToken) {
-                  void navigator.clipboard.writeText(gatewayToken);
-                }
-              }}
-            >
-              copy
-            </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void window.ctrlDesktop?.rotateGatewayToken().then((t) => {
-                  setGatewayToken(t);
-                  if (t) {
-                    setClientAuth({ token: t });
-                  }
-                  setError(
-                    'Token rotated — restart the app so the gateway picks it up.'
-                  );
-                  return undefined;
-                });
-              }}
-            >
-              rotate
-            </button>
-          </div>
-          <p className="meta">
-            OpenAI key: {hasOpenAiKey ? 'saved in safeStorage' : 'not set'}
-          </p>
-          <div className="host-row">
-            <input
-              className="host-input"
-              type="password"
-              placeholder="sk-… (saved encrypted)"
-              value={openAiDraft}
-              onChange={(e) => setOpenAiDraft(e.target.value)}
-            />
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled={openAiDraft.trim().length === 0}
-              onClick={() => {
-                void window.ctrlDesktop
-                  ?.setOpenAiKey(openAiDraft.trim())
-                  .then(() => {
-                    setHasOpenAiKey(true);
-                    setOpenAiDraft('');
-                    setError(
-                      'API key saved — restart the app to apply to the gateway.'
-                    );
-                    return undefined;
-                  });
-              }}
-            >
-              save key
-            </button>
-          </div>
-          {gatewayToken ? (
-            <>
-              <PairQr
-                gatewayUrl={
-                  lanUrls[0] ??
-                  (gatewayUrl.startsWith('http')
-                    ? gatewayUrl
-                    : 'http://127.0.0.1:7331')
-                }
-                token={gatewayToken}
-              />
-              <div className="host-row">
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  disabled={
-                    lanUrls.length === 0 && !gatewayUrl.startsWith('http')
-                  }
-                  onClick={() => {
-                    const url =
-                      lanUrls[0] ??
-                      (gatewayUrl.startsWith('http') ? gatewayUrl : '');
-                    if (url) {
-                      void navigator.clipboard.writeText(url);
-                    }
-                  }}
-                >
-                  copy LAN URL
-                </button>
-                <span className="meta">
-                  {lanUrls[0] ??
-                    '(no Wi‑Fi/Ethernet IP — phone cannot use 127.0.0.1)'}
-                </span>
-              </div>
-              {lanUrls.length === 0 ? (
-                <p className="meta warn">
-                  No LAN IP detected — phone needs the PC Wi‑Fi/Ethernet
-                  address. Windows firewall: allow inbound TCP on the gateway
-                  port (usually 7331).
-                </p>
-              ) : null}
-            </>
-          ) : lanUrls.length > 0 ? (
-            <p className="meta">
-              mobile: use LAN URL + Bearer token from safeStorage
-            </p>
-          ) : null}
-
-          <p className="host-title">local models</p>
-          <p className="meta">
-            Detect llama-server (:8080) and litert-lm (:9379). Start uses a
-            binary already on this PC — no in-app download. See
-            docs/standalone-local.md.
-          </p>
-          <div className="host-row">
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void refreshLocalBackends();
-              }}
-            >
-              detect
-            </button>
-          </div>
-          {localBackends.length === 0 ? (
-            <p className="meta warn">
-              Tap detect. If binaries are missing, install llama-server and/or
-              litert-lm, set CTRL_LLAMA_BIN / CTRL_LITERT_LM_BIN, then detect
-              again.
-            </p>
-          ) : null}
-          <ul className="knowledge-list">
-            {localBackends.map((b) => (
-              <li key={b.id}>
-                <code>{b.id}</code> :{b.port}{' '}
-                {b.running ? '● running' : '○ stopped'}
-                {b.binFound
-                  ? ` · ${b.binPath ?? 'on PATH'}`
-                  : ' · binary missing'}
-                {b.modelsPreview.length > 0
-                  ? ` · ${b.modelsPreview.slice(0, 3).join(', ')}`
-                  : ''}
-                <div className="host-row">
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    disabled={!b.binFound || b.running}
-                    onClick={() => {
-                      void (async () => {
-                        const row = await window.ctrlDesktop?.startLocalBackend(
-                          b.id
-                        );
-                        if (row) {
+            {localBackends.length === 0 ? (
+              <p className="meta warn">
+                Tap detect, or browse to a binary path below after detect fills
+                rows.
+              </p>
+            ) : null}
+            <ul className="host-card-list">
+              {localBackends.map((b) => (
+                <li key={b.id} className="host-card">
+                  <div className="host-card-head">
+                    <code>{b.id}</code>
+                    <span className="meta">
+                      :{b.port} · {b.running ? 'running' : 'stopped'}
+                      {b.modelsPreview.length > 0
+                        ? ` · ${b.modelsPreview.slice(0, 3).join(', ')}`
+                        : ''}
+                    </span>
+                  </div>
+                  <div className="host-row">
+                    <input
+                      className="host-input"
+                      value={binPathDrafts[b.id] ?? b.binPath ?? ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setBinPathDrafts((prev) => ({
+                          ...prev,
+                          [b.id]: value,
+                        }));
+                      }}
+                      placeholder={`path to ${b.id} binary`}
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => {
+                        void onBrowseBinPath(b.id);
+                      }}
+                    >
+                      browse
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => {
+                        void onSaveBinPath(b.id);
+                      }}
+                    >
+                      save path
+                    </button>
+                  </div>
+                  <div className="host-row">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      disabled={!b.binFound || b.running}
+                      onClick={() => {
+                        void (async () => {
+                          const row =
+                            await window.ctrlDesktop?.startLocalBackend(b.id);
+                          if (row) {
+                            await refreshLocalBackends();
+                            const active =
+                              b.id === 'llama' ? 'llama' : 'litert';
+                            await updateProviderConfig(gatewayUrl, {
+                              active,
+                              ...(b.id === 'llama'
+                                ? { llama: { baseUrl: row.baseUrl } }
+                                : { litert: { baseUrl: row.baseUrl } }),
+                            });
+                            await refreshProviders();
+                          }
+                        })();
+                      }}
+                    >
+                      start
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      disabled={!b.running}
+                      onClick={() => {
+                        void (async () => {
+                          await window.ctrlDesktop?.stopLocalBackend(b.id);
                           await refreshLocalBackends();
+                        })();
+                      }}
+                    >
+                      stop
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      disabled={!b.running}
+                      onClick={() => {
+                        void (async () => {
                           const active = b.id === 'llama' ? 'llama' : 'litert';
                           await updateProviderConfig(gatewayUrl, {
                             active,
                             ...(b.id === 'llama'
-                              ? { llama: { baseUrl: row.baseUrl } }
-                              : { litert: { baseUrl: row.baseUrl } }),
+                              ? { llama: { baseUrl: b.baseUrl } }
+                              : { litert: { baseUrl: b.baseUrl } }),
                           });
                           await refreshProviders();
-                        }
-                      })();
-                    }}
-                  >
-                    start
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    disabled={!b.running}
-                    onClick={() => {
-                      void (async () => {
-                        await window.ctrlDesktop?.stopLocalBackend(b.id);
-                        await refreshLocalBackends();
-                      })();
-                    }}
-                  >
-                    stop
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    disabled={!b.running}
-                    onClick={() => {
-                      void (async () => {
-                        const active = b.id === 'llama' ? 'llama' : 'litert';
-                        await updateProviderConfig(gatewayUrl, {
-                          active,
-                          ...(b.id === 'llama'
-                            ? { llama: { baseUrl: b.baseUrl } }
-                            : { litert: { baseUrl: b.baseUrl } }),
-                        });
-                        await refreshProviders();
-                      })();
-                    }}
-                  >
-                    use
-                  </button>
-                </div>
-                {!b.binFound ? (
-                  <p className="meta warn">{b.installHint}</p>
-                ) : null}
-                {b.error ? <p className="meta warn">{b.error}</p> : null}
-              </li>
-            ))}
-          </ul>
+                        })();
+                      }}
+                    >
+                      use
+                    </button>
+                  </div>
+                  {!b.binFound ? (
+                    <p className="meta warn">{b.installHint}</p>
+                  ) : null}
+                  {b.error ? <p className="meta warn">{b.error}</p> : null}
+                </li>
+              ))}
+            </ul>
+            <p className="host-title">download binary</p>
+            <div className="host-row">
+              <select
+                className="host-input host-input-narrow"
+                value={binDownloadId}
+                onChange={(e) =>
+                  setBinDownloadId(
+                    e.target.value === 'litert-lm' ? 'litert-lm' : 'llama'
+                  )
+                }
+              >
+                <option value="llama">llama</option>
+                <option value="litert-lm">litert-lm</option>
+              </select>
+              <input
+                className="host-input"
+                value={binDownloadUrl}
+                onChange={(e) => setBinDownloadUrl(e.target.value)}
+                placeholder="binary download URL"
+              />
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={!binDownloadUrl.trim()}
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      setDownloadProgress({
+                        id: binDownloadId,
+                        downloaded: 0,
+                      });
+                      await window.ctrlDesktop?.downloadLocalBackendBin(
+                        binDownloadId,
+                        binDownloadUrl.trim()
+                      );
+                      await refreshLocalBackends();
+                    } catch (err) {
+                      setError(
+                        err instanceof Error ? err.message : String(err)
+                      );
+                      setDownloadProgress(null);
+                    }
+                  })();
+                }}
+              >
+                download
+              </button>
+            </div>
+            {downloadProgress && downloadProgress.id === binDownloadId ? (
+              <p className="meta">
+                {downloadProgress.done
+                  ? 'download done'
+                  : downloadProgress.percent !== undefined
+                    ? `${downloadProgress.percent}% (${Math.round(downloadProgress.downloaded / 1024 / 1024)} MB)`
+                    : `${Math.round(downloadProgress.downloaded / 1024 / 1024)} MB downloaded`}
+              </p>
+            ) : null}
+          </section>
         </aside>
       ) : null}
 
@@ -1417,67 +1573,112 @@ export function App() {
       ) : null}
 
       {channelsOpen ? (
-        <aside className="host-panel knowledge-panel">
-          <p className="host-title">channels</p>
-          <p className="meta">
-            webhook · telegram (long-poll) · discord/slack outbound
-          </p>
-          <div className="host-row">
-            <select
-              className="host-input"
-              value={channelKind}
-              onChange={(e) => {
-                const next =
-                  e.target.value === 'telegram' ? 'telegram' : 'webhook';
-                setChannelKind(next);
-                setChannelName(next);
-              }}
-            >
-              <option value="webhook">webhook</option>
-              <option value="telegram">telegram</option>
-            </select>
-            <input
-              className="host-input"
-              value={channelName}
-              onChange={(e) => setChannelName(e.target.value)}
-              placeholder="channel name"
-            />
-          </div>
-          {channelKind === 'telegram' ? (
+        <aside className="host-panel knowledge-panel host-panel-scroll">
+          <section className="host-section">
+            <p className="host-title">add channel</p>
+            <p className="meta">
+              webhook inbound · telegram long-poll · outbound send
+            </p>
+            <div className="host-row">
+              <select
+                className="host-input host-input-narrow"
+                value={channelKind}
+                onChange={(e) => {
+                  const next =
+                    e.target.value === 'telegram' ? 'telegram' : 'webhook';
+                  setChannelKind(next);
+                  setChannelName(next);
+                }}
+              >
+                <option value="webhook">webhook</option>
+                <option value="telegram">telegram</option>
+              </select>
+              <input
+                className="host-input"
+                value={channelName}
+                onChange={(e) => setChannelName(e.target.value)}
+                placeholder="channel name"
+              />
+            </div>
+            {channelKind === 'telegram' ? (
+              <div className="host-row">
+                <input
+                  className="host-input"
+                  type="password"
+                  value={channelBotToken}
+                  onChange={(e) => setChannelBotToken(e.target.value)}
+                  placeholder="bot token"
+                  autoComplete="off"
+                />
+              </div>
+            ) : null}
+            <div className="host-row">
+              <button
+                type="button"
+                className="demo-btn"
+                onClick={() => {
+                  void onCreateChannel();
+                }}
+                disabled={!workspace}
+              >
+                add {channelKind}
+              </button>
+            </div>
+          </section>
+
+          <section className="host-section">
+            <p className="host-title">configured</p>
             <div className="host-row">
               <input
                 className="host-input"
-                type="password"
-                value={channelBotToken}
-                onChange={(e) => setChannelBotToken(e.target.value)}
-                placeholder="bot token"
-                autoComplete="off"
+                value={channelTestRecipient}
+                onChange={(e) => setChannelTestRecipient(e.target.value)}
+                placeholder="test recipient (Telegram chat id)"
               />
             </div>
-          ) : null}
-          <div className="host-row">
-            <button
-              type="button"
-              className="demo-btn"
-              onClick={() => {
-                void onCreateChannel();
-              }}
-              disabled={!workspace}
-            >
-              add {channelKind}
-            </button>
-          </div>
-          <ul className="knowledge-list">
-            {channelItems.map((ch) => (
-              <li key={ch.id}>
-                <code>{ch.kind}</code> {ch.name} · {ch.status}
-                {ch.lastError ? ` · ${ch.lastError}` : ''}
-              </li>
-            ))}
-          </ul>
-          {channelItems.length === 0 ? (
-            <p className="meta">no channels yet</p>
-          ) : null}
+            <p className="meta">
+              Test sends “ctrl channel test”. Webhook uses a desktop-test
+              identity; Telegram needs a chat id above.
+            </p>
+            <ul className="host-card-list">
+              {channelItems.map((ch) => (
+                <li key={ch.id} className="host-card">
+                  <div className="host-card-head">
+                    <span>
+                      <code>{ch.kind}</code> {ch.name}
+                    </span>
+                    <span className="meta">
+                      {ch.status}
+                      {ch.lastError ? ` · ${ch.lastError}` : ''}
+                    </span>
+                  </div>
+                  <div className="host-row">
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => {
+                        void onTestChannel(ch);
+                      }}
+                    >
+                      test
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={() => {
+                        void onRemoveChannel(ch.id);
+                      }}
+                    >
+                      remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {channelItems.length === 0 ? (
+              <p className="meta">no channels yet</p>
+            ) : null}
+          </section>
         </aside>
       ) : null}
 

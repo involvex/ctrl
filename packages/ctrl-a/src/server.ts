@@ -1026,13 +1026,25 @@ export async function startServer(): Promise<StartedGateway> {
         }
 
         const channelItem = /^\/api\/v1\/channels\/([^/]+)$/.exec(url.pathname);
-        if (channelItem && req.method === 'GET') {
+        if (channelItem) {
           const channelId = channelItem[1]!;
-          const item = channels.get(channelId);
-          if (!item) {
-            return json(req, { error: 'channel not found' }, 404);
+          if (req.method === 'GET') {
+            const item = channels.get(channelId);
+            if (!item) {
+              return json(req, { error: 'channel not found' }, 404);
+            }
+            return json(req, item);
           }
-          return json(req, item);
+          if (req.method === 'DELETE') {
+            try {
+              await channels.deleteChannel(channelId);
+              return json(req, { ok: true });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              const status = msg === 'channel not found' ? 404 : 400;
+              return json(req, { error: msg }, status);
+            }
+          }
         }
 
         const channelStart = /^\/api\/v1\/channels\/([^/]+)\/start$/.exec(
