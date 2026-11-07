@@ -94,10 +94,8 @@ export class ChannelManager {
     }
     this.store.setStatus(channelId, 'starting');
     try {
-      await adapter.start(channel, async (message) => {
-        if (this.onInbound) {
-          await this.onInbound(message);
-        }
+      await adapter.start(channel, async (draft) => {
+        await this.persistInbound(channelId, draft);
       });
       this.store.setStatus(channelId, 'running');
     } catch (err) {
@@ -106,6 +104,36 @@ export class ChannelManager {
       throw err;
     }
     return this.store.getChannelPublic(channelId)!;
+  }
+
+  /** Persist inbound + optional app-level handler (shared by adapters + HTTP hooks). */
+  private async persistInbound(
+    channelId: string,
+    body:
+      | InboundWebhook
+      | { externalUserId: string; text: string; displayName?: string }
+  ): Promise<ChannelMessage> {
+    const channel = this.store.getChannel(channelId);
+    if (!channel) {
+      throw new Error('channel not found');
+    }
+
+    this.store.upsertIdentity(channelId, channel.workspaceId, {
+      externalUserId: body.externalUserId,
+      displayName: body.displayName,
+    });
+
+    const message = this.store.recordMessage({
+      channelId,
+      direction: 'inbound',
+      externalUserId: body.externalUserId,
+      text: body.text,
+    });
+
+    if (this.onInbound) {
+      await this.onInbound(message);
+    }
+    return message;
   }
 
   async stopChannel(channelId: string): Promise<ChannelPublic> {
@@ -143,23 +171,7 @@ export class ChannelManager {
     if (channel.status !== 'running') {
       throw new Error('channel is not running');
     }
-
-    this.store.upsertIdentity(channelId, channel.workspaceId, {
-      externalUserId: body.externalUserId,
-      displayName: body.displayName,
-    });
-
-    const message = this.store.recordMessage({
-      channelId,
-      direction: 'inbound',
-      externalUserId: body.externalUserId,
-      text: body.text,
-    });
-
-    if (this.onInbound) {
-      await this.onInbound(message);
-    }
-    return message;
+    return this.persistInbound(channelId, body);
   }
 
   upsertIdentity(channelId: string, input: UpsertIdentityInput) {

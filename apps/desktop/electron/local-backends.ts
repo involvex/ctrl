@@ -41,7 +41,7 @@ const DEFS: BackendDef[] = [
     envBin: 'CTRL_LLAMA_BIN',
     envArgs: 'CTRL_LLAMA_ARGS',
     installHint:
-      'Install llama.cpp (llama-server). Windows: build or download a release, then `setx CTRL_LLAMA_BIN C:\\path\\to\\llama-server.exe` (or add to PATH). Docs: docs/standalone-local.md',
+      'Install llama.cpp llama-server (C++ binary — not the Python `uv tool install llama-server`). Then set CTRL_LLAMA_BIN to that .exe. Docs: docs/standalone-local.md',
     knownDirs: [
       path.join(os.homedir(), 'llama.cpp'),
       path.join(os.homedir(), '.local', 'bin'),

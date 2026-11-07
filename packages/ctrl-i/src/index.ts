@@ -880,6 +880,40 @@ export async function createChannel(
   return channelPublicSchema.parse(await readJson(res));
 }
 
+export async function startChannel(
+  baseUrl: string,
+  channelId: string
+): Promise<ChannelPublic> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/channels/${channelId}/start`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`startChannel failed: ${res.status}`);
+  }
+  return channelPublicSchema.parse(await readJson(res));
+}
+
+export async function stopChannel(
+  baseUrl: string,
+  channelId: string
+): Promise<ChannelPublic> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/channels/${channelId}/stop`,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`stopChannel failed: ${res.status}`);
+  }
+  return channelPublicSchema.parse(await readJson(res));
+}
+
 export async function sendChannelMessage(
   baseUrl: string,
   channelId: string,

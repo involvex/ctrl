@@ -96,11 +96,18 @@ export class UpdateManager {
   }
 
   async check(): Promise<UpdateStatus> {
-    if (!this.autoUpdater) {
+    if (!app.isPackaged || !this.autoUpdater) {
+      if (!app.isPackaged) {
+        this.setStatus({
+          state: 'disabled',
+          reason: 'updates disabled in development',
+        });
+      }
       return this.status;
     }
     try {
-      await this.autoUpdater.checkForUpdatesAndNotify();
+      // Prefer silent check — never toast/notify from source builds.
+      await this.autoUpdater.checkForUpdates();
     } catch (err) {
       this.setStatus({
         state: 'error',

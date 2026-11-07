@@ -7,6 +7,7 @@ import {
 } from '@involvex/ctrl-s';
 import { toString as qrToString } from 'qrcode';
 import { backupCommand } from './backup';
+import { channelCommand } from './channel';
 import { chatCommand } from './chat';
 import { doctorCommand } from './doctor';
 import { completionScript, parseCompletionShell } from './completion';
@@ -28,16 +29,18 @@ function usage(): never {
   ctrl-f5 demo    [--url <baseUrl>]
   ctrl-f5 chat   [--url <baseUrl>] [--token <token>] [message...]
   ctrl-f5 backup list|create|restore […] [--url <baseUrl>] [--token <token>]
+  ctrl-f5 channel list|add|start|stop […] [--url <baseUrl>]
   ctrl-f5 pair   [--host <lanIp>] [--port <port>] [--token <token>] [--url <baseUrl>]
   ctrl-f5 completion bash|powershell
 
 start/stop/status  Manage local ctrl-a gateway (pid under data/ctrl-a.pid).
 chat               One-shot or interactive TTY chat against a running gateway.
 backup             Host snapshot list / create / restore (optional --passphrase).
+channel            List/add/start/stop gateway channels (telegram, webhook).
 pair               Print LAN QR; exits 0 after phone pairing ack (or Ctrl+C).
 completion         Print shell tab-completion script (eval / source it).
 
-Env: CTRL_A_URL, CTRL_A_HOST, CTRL_GATEWAY_TOKEN, CTRL_BACKUP_PASSPHRASE, PORT, CTRL_DATA_DIR, CTRL_REPO_ROOT
+Env: CTRL_A_URL, CTRL_A_HOST, CTRL_GATEWAY_TOKEN, CTRL_BACKUP_PASSPHRASE, TELEGRAM_BOT_TOKEN, PORT, CTRL_DATA_DIR, CTRL_REPO_ROOT
 `);
   process.exit(1);
 }
@@ -294,6 +297,18 @@ async function main(): Promise<void> {
     try {
       // Keep --label / --passphrase / --workspace for backupCommand.
       await backupCommand(baseUrl, rest, token);
+    } catch (err) {
+      process.stderr.write(
+        `${err instanceof Error ? err.message : String(err)}\n`
+      );
+      process.exit(1);
+    }
+    return;
+  }
+  if (cmd === 'channel') {
+    const baseUrl = parseUrl(rest);
+    try {
+      await channelCommand(baseUrl, rest);
     } catch (err) {
       process.stderr.write(
         `${err instanceof Error ? err.message : String(err)}\n`

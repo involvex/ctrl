@@ -42,4 +42,21 @@ describe('contract: channels', () => {
     });
     expect(job.status).toBe('sent');
   });
+
+  test('telegram channel without token: create + mock outbound', async () => {
+    const ws = await createWorkspace(baseUrl(), 'channels-telegram');
+    const channel = await createChannel(baseUrl(), ws.id, {
+      kind: 'telegram',
+      name: 'tg-mock',
+    });
+    expect(channel.kind).toBe('telegram');
+    expect(channel.status).toBe('running');
+    expect('config' in channel).toBe(false);
+
+    const job = await sendChannelMessage(baseUrl(), channel.id, {
+      externalUserId: '1001',
+      text: 'hello telegram',
+    });
+    expect(job.status).toBe('sent');
+  });
 });

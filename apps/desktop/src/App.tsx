@@ -178,7 +178,11 @@ export function App() {
     }
   });
   const [channelItems, setChannelItems] = useState<ChannelPublic[]>([]);
+  const [channelKind, setChannelKind] = useState<'webhook' | 'telegram'>(
+    'webhook'
+  );
   const [channelName, setChannelName] = useState('webhook');
+  const [channelBotToken, setChannelBotToken] = useState('');
   const [backupItems, setBackupItems] = useState<HostBackupManifest[]>([]);
   const [backupLabel, setBackupLabel] = useState('manual');
   const [backupPassphrase, setBackupPassphrase] = useState('');
@@ -702,21 +706,38 @@ export function App() {
     [backupPassphrase, gatewayUrl, refreshBackups]
   );
 
-  const onCreateWebhookChannel = useCallback(async () => {
+  const onCreateChannel = useCallback(async () => {
     if (!workspace || !gatewayUrl.startsWith('http')) {
+      return;
+    }
+    if (channelKind === 'telegram' && channelBotToken.trim().length === 0) {
+      setError('telegram bot token required');
       return;
     }
     try {
       await createChannel(gatewayUrl, workspace.id, {
-        kind: 'webhook',
-        name: channelName.trim() || 'webhook',
+        kind: channelKind,
+        name:
+          channelName.trim() ||
+          (channelKind === 'telegram' ? 'telegram' : 'webhook'),
+        ...(channelKind === 'telegram'
+          ? { config: { botToken: channelBotToken.trim() } }
+          : {}),
       });
+      setChannelBotToken('');
       await refreshChannels();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [channelName, gatewayUrl, refreshChannels, workspace]);
+  }, [
+    channelBotToken,
+    channelKind,
+    channelName,
+    gatewayUrl,
+    refreshChannels,
+    workspace,
+  ]);
 
   const refreshKnowledge = useCallback(async () => {
     if (!workspace || !gatewayUrl.startsWith('http')) {
@@ -964,20 +985,24 @@ export function App() {
               </span>
             </div>
           )}
-          <div className="host-row">
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void window.ctrlDesktop?.checkForUpdates().then((s) => {
-                  setUpdateLabel(s.state);
-                  return undefined;
-                });
-              }}
-            >
-              check updates
-            </button>
-          </div>
+          {updateLabel === 'disabled' ? (
+            <p className="meta">updates disabled while running from source</p>
+          ) : (
+            <div className="host-row">
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  void window.ctrlDesktop?.checkForUpdates().then((s) => {
+                    setUpdateLabel(s.state);
+                    return undefined;
+                  });
+                }}
+              >
+                check updates
+              </button>
+            </div>
+          )}
           <p className="meta">
             pairing token{' '}
             {gatewayToken
@@ -1395,24 +1420,51 @@ export function App() {
         <aside className="host-panel knowledge-panel">
           <p className="host-title">channels</p>
           <p className="meta">
-            webhook · telegram · discord · slack (MVP adapters)
+            webhook · telegram (long-poll) · discord/slack outbound
           </p>
           <div className="host-row">
+            <select
+              className="host-input"
+              value={channelKind}
+              onChange={(e) => {
+                const next =
+                  e.target.value === 'telegram' ? 'telegram' : 'webhook';
+                setChannelKind(next);
+                setChannelName(next);
+              }}
+            >
+              <option value="webhook">webhook</option>
+              <option value="telegram">telegram</option>
+            </select>
             <input
               className="host-input"
               value={channelName}
               onChange={(e) => setChannelName(e.target.value)}
               placeholder="channel name"
             />
+          </div>
+          {channelKind === 'telegram' ? (
+            <div className="host-row">
+              <input
+                className="host-input"
+                type="password"
+                value={channelBotToken}
+                onChange={(e) => setChannelBotToken(e.target.value)}
+                placeholder="bot token"
+                autoComplete="off"
+              />
+            </div>
+          ) : null}
+          <div className="host-row">
             <button
               type="button"
               className="demo-btn"
               onClick={() => {
-                void onCreateWebhookChannel();
+                void onCreateChannel();
               }}
               disabled={!workspace}
             >
-              add webhook
+              add {channelKind}
             </button>
           </div>
           <ul className="knowledge-list">
@@ -1651,31 +1703,8 @@ export function App() {
           <p className="host-title">first run setup</p>
           <p className="meta">
             Windows firewall: allow TCP 7331 for gateway pairing. Local models:
-            set CTRL_LLAMA_BIN / CTRL_LITERT_LM_BIN or put binaries on PATH.
-          </p>
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={() => {
-              try {
-                localStorage.setItem('ctrl.firstRunDismissed', '1');
-              } catch {
-                // ignore
-              }
-              setFirstRunDismissed(true);
-            }}
-          >
-            dismiss
-          </button>
-        </section>
-      ) : null}
-
-      {!firstRunDismissed ? (
-        <section className="first-run">
-          <p className="host-title">first run setup</p>
-          <p className="meta">
-            Windows firewall: allow TCP 7331 for gateway pairing. Local models:
-            set CTRL_LLAMA_BIN / CTRL_LITERT_LM_BIN or put binaries on PATH.
+            point CTRL_LLAMA_BIN at llama.cpp&apos;s llama-server (not the
+            Python uv tool). litert-lm via CTRL_LITERT_LM_BIN is optional.
           </p>
           <button
             type="button"

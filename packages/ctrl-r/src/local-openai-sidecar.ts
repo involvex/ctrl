@@ -16,10 +16,12 @@ export type LocalOpenAiSidecarConfig = {
   host?: string;
   port?: number;
   /**
-   * How to pass host/port. llama-server uses `--host`/`--port`;
-   * litert-lm commonly uses `--host`/`--port` as well.
+   * How to pass host/port.
+   * - `llama`: `--host` / `--port` (llama.cpp)
+   * - `plain`: same flags (legacy alias)
+   * - `none`: do not inject host/port (caller supplies via args / defaults)
    */
-  portArgs?: 'llama' | 'plain';
+  portArgs?: 'llama' | 'plain' | 'none';
 };
 
 const HEALTH_TIMEOUT_MS = 30_000;
@@ -65,22 +67,11 @@ export class LocalOpenAiSidecar {
     this.status = { state: 'starting' };
 
     const style = this.config.portArgs ?? 'llama';
+    const baseArgs = [...(this.config.args ?? [])];
     const args =
-      style === 'plain'
-        ? [
-            ...(this.config.args ?? []),
-            '--host',
-            this.host,
-            '--port',
-            String(this.port),
-          ]
-        : [
-            ...(this.config.args ?? []),
-            '--host',
-            this.host,
-            '--port',
-            String(this.port),
-          ];
+      style === 'none'
+        ? baseArgs
+        : [...baseArgs, '--host', this.host, '--port', String(this.port)];
 
     const child = spawn(this.config.bin, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -95,6 +86,16 @@ export class LocalOpenAiSidecar {
       process.stderr.write(`[${this.name}] ${buf.toString()}`);
     });
 
+    const exitAbort = new AbortController();
+    child.on('error', (err) => {
+      process.stderr.write(`[${this.name}] spawn error: ${err.message}\n`);
+      if (this.child === child) {
+        this.child = null;
+        this.status = { state: 'failed', error: err.message };
+      }
+      exitAbort.abort();
+    });
+
     child.on('exit', (code, signal) => {
       if (this.child !== child) {
         return;
@@ -104,17 +105,20 @@ export class LocalOpenAiSidecar {
         state: 'failed',
         error: `exited code=${String(code)} signal=${String(signal)}`,
       };
+      exitAbort.abort();
     });
 
     const baseUrl = this.getBaseUrl();
     try {
-      await waitForOpenAi(baseUrl, this.name);
+      await waitForOpenAi(baseUrl, this.name, exitAbort.signal);
     } catch (err) {
-      child.kill('SIGTERM');
-      this.child = null;
+      if (this.child === child) {
+        child.kill('SIGTERM');
+        this.child = null;
+      }
       const message = err instanceof Error ? err.message : String(err);
       this.status = { state: 'failed', error: message };
-      throw err;
+      throw err instanceof Error ? err : new Error(message);
     }
 
     if (!child.pid) {
@@ -150,17 +154,31 @@ export class LocalOpenAiSidecar {
 
 export async function waitForOpenAi(
   baseUrl: string,
-  name = 'openai-sidecar'
+  name = 'openai-sidecar',
+  signal?: AbortSignal
 ): Promise<void> {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
   const modelsUrl = `${baseUrl.replace(/\/$/, '')}/models`;
   while (Date.now() < deadline) {
+    if (signal?.aborted) {
+      throw new Error(`${name} exited before becoming healthy`);
+    }
     try {
-      const res = await fetch(modelsUrl);
+      const res = await fetch(modelsUrl, { signal });
       if (res.ok) {
         return;
       }
-    } catch {
+    } catch (err) {
+      if (signal?.aborted) {
+        throw new Error(`${name} exited before becoming healthy`, {
+          cause: err,
+        });
+      }
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`${name} exited before becoming healthy`, {
+          cause: err,
+        });
+      }
       // retry
     }
     await Bun.sleep(HEALTH_POLL_MS);

@@ -8,6 +8,11 @@ import { SecretVault } from './secrets';
 import { createAppTray } from './tray';
 import { UpdateManager } from './updater';
 
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+}
+
 let gateway: GatewayManager | null = null;
 let localBackends: LocalBackendsManager | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -21,9 +26,7 @@ function resolveRepoRoot(): string {
 
 function showWindow(): void {
   if (!mainWindow) {
-    if (gateway) {
-      createWindow(gateway.getUrl());
-    }
+    createWindow(gateway?.getUrl() ?? '');
     return;
   }
   if (mainWindow.isMinimized()) {
@@ -38,7 +41,20 @@ function requestQuit(): void {
   app.quit();
 }
 
+function injectGatewayUrl(win: BrowserWindow, gatewayUrl: string): void {
+  if (!gatewayUrl) {
+    return;
+  }
+  void win.webContents.executeJavaScript(
+    `window.ctrlGatewayUrl = ${JSON.stringify(gatewayUrl)}`
+  );
+}
+
 function createWindow(gatewayUrl: string): void {
+  if (mainWindow) {
+    return;
+  }
+
   const win = new BrowserWindow({
     width: 1100,
     height: 720,
@@ -61,9 +77,7 @@ function createWindow(gatewayUrl: string): void {
   }
 
   win.webContents.on('did-finish-load', () => {
-    void win.webContents.executeJavaScript(
-      `window.ctrlGatewayUrl = ${JSON.stringify(gatewayUrl)}`
-    );
+    injectGatewayUrl(win, gatewayUrl || gateway?.getUrl() || '');
   });
 
   // Close → hide to tray (Phase 3); Quit from tray/menu exits fully.
@@ -129,13 +143,24 @@ async function bootstrap(): Promise<void> {
     setAutostart,
   });
 
-  const url = await gateway.start();
-  createWindow(url);
-
+  // Show UI immediately — do not wait for gateway health.
+  createWindow('');
   createAppTray({
     gateway,
     showWindow,
     quit: requestQuit,
+  });
+
+  gateway.onStatus((status) => {
+    if (status.state === 'running' && mainWindow) {
+      injectGatewayUrl(mainWindow, status.url);
+    }
+  });
+
+  void gateway.start().catch((err) => {
+    process.stderr.write(
+      `[ctrl-desktop] gateway.start error: ${err instanceof Error ? err.message : String(err)}\n`
+    );
   });
 
   if (app.isPackaged) {
@@ -147,7 +172,17 @@ async function bootstrap(): Promise<void> {
   });
 }
 
-void bootstrap();
+if (gotLock) {
+  app.on('second-instance', () => {
+    showWindow();
+  });
+
+  void bootstrap().catch((err) => {
+    process.stderr.write(
+      `[ctrl-desktop] bootstrap failed: ${err instanceof Error ? err.message : String(err)}\n`
+    );
+  });
+}
 
 app.on('window-all-closed', () => {
   // Keep running in tray on all platforms during Phase 3.

@@ -60,6 +60,7 @@ import {
   upsertIdentityInputSchema,
   workspaceExportSchema,
   type AgentEvent,
+  type ChannelMessage,
   type CreateAttachmentInput,
   type HealthResponse,
   type KnowledgeHit,
@@ -256,54 +257,11 @@ export async function startServer(): Promise<StartedGateway> {
   const store = new Store(db);
   const knowledge = new KnowledgeStore(db);
   const backups = new BackupStore(resolveDataDir(), store);
-  const channels = new ChannelManager({ store: new ChannelStore(db) });
-  channels.startWorker(750);
 
-  let llama: LlamaSidecar | null = null;
-  let litertLm: LitertLmSidecar | null = null;
-  try {
-    llama = createLlamaSidecarFromEnv();
-    if (llama) {
-      const { baseUrl } = await llama.start();
-      process.env['CTRL_LLAMA_BASE_URL'] = baseUrl;
-      process.env['CTRL_OPENAI_BASE_URL'] =
-        process.env['CTRL_OPENAI_BASE_URL'] ?? baseUrl;
-      process.env['CTRL_OPENAI_API_KEY'] =
-        process.env['CTRL_OPENAI_API_KEY'] ??
-        process.env['OPENAI_API_KEY'] ??
-        'local';
-      if (!process.env['CTRL_PROVIDER']) {
-        process.env['CTRL_PROVIDER'] = 'llama';
-      }
-      process.stderr.write(`[ctrl-a] llama-server ${baseUrl}\n`);
-    }
-  } catch (err) {
-    process.stderr.write(
-      `[ctrl-a] llama-server failed: ${err instanceof Error ? err.message : String(err)}\n`
-    );
-    llama = null;
-  }
-
-  try {
-    litertLm = createLitertLmSidecarFromEnv();
-    if (litertLm) {
-      const { baseUrl } = await litertLm.start();
-      process.env['CTRL_LITERT_LM_BASE_URL'] = baseUrl;
-      process.env['CTRL_OPENAI_API_KEY'] =
-        process.env['CTRL_OPENAI_API_KEY'] ??
-        process.env['OPENAI_API_KEY'] ??
-        'local';
-      if (!process.env['CTRL_PROVIDER']) {
-        process.env['CTRL_PROVIDER'] = 'litert';
-      }
-      process.stderr.write(`[ctrl-a] litert-lm ${baseUrl}\n`);
-    }
-  } catch (err) {
-    process.stderr.write(
-      `[ctrl-a] litert-lm failed: ${err instanceof Error ? err.message : String(err)}\n`
-    );
-    litertLm = null;
-  }
+  // Create sidecars but do NOT await start here — broken PATH binaries
+  // (e.g. Python uv "llama-server") used to block /healthz for 30s+.
+  let llama: LlamaSidecar | null = createLlamaSidecarFromEnv();
+  let litertLm: LitertLmSidecar | null = createLitertLmSidecarFromEnv();
 
   const providerRuntime = createProviderRuntime(process.env, {
     dataDir: resolveDataDir(),
@@ -320,6 +278,66 @@ export async function startServer(): Promise<StartedGateway> {
   mcp.mountOn(registry);
   const profile = store.ensureDefaultProfile(registry.listNames());
   let lastPairingAck: PairingAck | null = null;
+
+  const channels = new ChannelManager({
+    store: new ChannelStore(db),
+    onInbound: async (message: ChannelMessage) => {
+      const channel = channels.getConfig(message.channelId);
+      if (!channel) {
+        return;
+      }
+      try {
+        const title = `channel:${message.channelId}:${message.externalUserId}`;
+        const existing = store
+          .listConversations(channel.workspaceId)
+          .find((c) => c.title === title);
+        const conversation =
+          existing ?? store.createConversation(channel.workspaceId, title);
+
+        store.addMessage(conversation.id, 'user', message.text);
+        const history = store.listMessages(conversation.id).map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
+        const runId = crypto.randomUUID();
+        const abort = new AbortController();
+        const approvals = createApprovalGate();
+        let assembled = '';
+        for await (const event of runAgentLoop(
+          {
+            runId,
+            messages: history,
+            profile,
+            signal: abort.signal,
+          },
+          {
+            provider: providerRuntime.getProvider(),
+            registry,
+            approvals,
+            sandboxRoot,
+          }
+        )) {
+          if (event.type === 'message.delta') {
+            assembled += event.text;
+          }
+        }
+        if (assembled.trim().length > 0) {
+          store.addMessage(conversation.id, 'assistant', assembled);
+          channels.enqueue(message.channelId, {
+            externalUserId: message.externalUserId,
+            text: assembled,
+          });
+          await channels.processOutbox();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `[ctrl-a] channel inbound agent failed (${message.channelId}): ${msg}\n`
+        );
+      }
+    },
+  });
+  channels.startWorker(750);
 
   async function collectLocalBackends(): Promise<LocalBackendInfo[]> {
     const candidates: Array<{
@@ -1280,6 +1298,63 @@ export async function startServer(): Promise<StartedGateway> {
     process.stderr.write(`[ctrl-a] lan ${lanUrls.join(' ')}\n`);
   }
   process.stderr.write(`[ctrl-a] press Ctrl+C to stop\n`);
+
+  // Sidecars start after /healthz is up so desktop can attach immediately.
+  void (async () => {
+    if (llama) {
+      try {
+        const { baseUrl } = await llama.start();
+        process.env['CTRL_LLAMA_BASE_URL'] = baseUrl;
+        process.env['CTRL_OPENAI_BASE_URL'] =
+          process.env['CTRL_OPENAI_BASE_URL'] ?? baseUrl;
+        process.env['CTRL_OPENAI_API_KEY'] =
+          process.env['CTRL_OPENAI_API_KEY'] ??
+          process.env['OPENAI_API_KEY'] ??
+          'local';
+        const patch: {
+          active?: 'llama';
+          llama: { baseUrl: string };
+        } = { llama: { baseUrl } };
+        if (!process.env['CTRL_PROVIDER']) {
+          process.env['CTRL_PROVIDER'] = 'llama';
+          patch.active = 'llama';
+        }
+        providerRuntime.update(patch);
+        process.stderr.write(`[ctrl-a] llama-server ${baseUrl}\n`);
+      } catch (err) {
+        process.stderr.write(
+          `[ctrl-a] llama-server failed: ${err instanceof Error ? err.message : String(err)}\n` +
+            `[ctrl-a] hint: CTRL_LLAMA_BIN must be llama.cpp llama-server, not the Python uv tool\n`
+        );
+        llama = null;
+      }
+    }
+    if (litertLm) {
+      try {
+        const { baseUrl } = await litertLm.start();
+        process.env['CTRL_LITERT_LM_BASE_URL'] = baseUrl;
+        process.env['CTRL_OPENAI_API_KEY'] =
+          process.env['CTRL_OPENAI_API_KEY'] ??
+          process.env['OPENAI_API_KEY'] ??
+          'local';
+        const patch: {
+          active?: 'litert';
+          litert: { baseUrl: string };
+        } = { litert: { baseUrl } };
+        if (!process.env['CTRL_PROVIDER']) {
+          process.env['CTRL_PROVIDER'] = 'litert';
+          patch.active = 'litert';
+        }
+        providerRuntime.update(patch);
+        process.stderr.write(`[ctrl-a] litert-lm ${baseUrl}\n`);
+      } catch (err) {
+        process.stderr.write(
+          `[ctrl-a] litert-lm failed: ${err instanceof Error ? err.message : String(err)}\n`
+        );
+        litertLm = null;
+      }
+    }
+  })();
 
   let shuttingDown = false;
   const shutdown = async (reason = 'signal'): Promise<void> => {

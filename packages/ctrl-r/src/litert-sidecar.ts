@@ -23,7 +23,8 @@ export class LitertLmSidecar extends LocalOpenAiSidecar {
       ...config,
       name: config.name ?? 'litert-lm',
       port: config.port ?? LITERT_LM_DEFAULT_PORT,
-      portArgs: config.portArgs ?? 'llama',
+      // Many litert-lm builds reject `--host`; pass port via CTRL_LITERT_LM_ARGS if needed.
+      portArgs: config.portArgs ?? 'none',
     });
   }
 }

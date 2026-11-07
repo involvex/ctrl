@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 
@@ -23,6 +24,7 @@ const HEALTH_TIMEOUT_MS = 15_000;
 const HEALTH_POLL_MS = 200;
 const STOP_TIMEOUT_MS = 5_000;
 const MAX_BACKOFF_MS = 10_000;
+const MAX_START_ATTEMPTS = 5;
 
 function isPortFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -58,6 +60,23 @@ function gatewayBinaryName(): string {
   return process.platform === 'win32' ? 'ctrl-a.exe' : 'ctrl-a';
 }
 
+function resolveBunBin(): string {
+  if (process.env['BUN_BIN']) {
+    return process.env['BUN_BIN'];
+  }
+  const home = process.env['USERPROFILE'] ?? process.env['HOME'] ?? '';
+  if (home) {
+    const candidate =
+      process.platform === 'win32'
+        ? path.join(home, '.bun', 'bin', 'bun.exe')
+        : path.join(home, '.bun', 'bin', 'bun');
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return 'bun';
+}
+
 async function waitForHealth(url: string, signal: AbortSignal): Promise<void> {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -86,6 +105,10 @@ export class GatewayManager {
   private port = 7331;
   private url = 'http://127.0.0.1:7331';
   private healthAbort: AbortController | null = null;
+  /** True while spawnWithRetry owns the restart loop (single-flight). */
+  private restartInFlight = false;
+  /** When true, exit handler must not start another spawnWithRetry. */
+  private intentionalKill = false;
 
   constructor(private readonly opts: GatewayManagerOptions) {}
 
@@ -121,6 +144,7 @@ export class GatewayManager {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    this.intentionalKill = true;
     this.healthAbort?.abort();
     this.healthAbort = null;
 
@@ -128,6 +152,7 @@ export class GatewayManager {
     this.child = null;
     if (!child || child.killed) {
       this.setStatus({ state: 'stopped' });
+      this.intentionalKill = false;
       return;
     }
 
@@ -146,31 +171,58 @@ export class GatewayManager {
     });
 
     this.setStatus({ state: 'stopped' });
+    this.intentionalKill = false;
   }
 
   private async spawnWithRetry(): Promise<void> {
-    while (!this.stopping) {
-      this.attempt += 1;
-      this.setStatus({ state: 'starting', attempt: this.attempt });
-
-      try {
-        await this.spawnOnce();
-        return;
-      } catch {
-        if (this.stopping) {
+    if (this.restartInFlight) {
+      return;
+    }
+    this.restartInFlight = true;
+    try {
+      while (!this.stopping) {
+        this.attempt += 1;
+        if (this.attempt > MAX_START_ATTEMPTS) {
+          this.setStatus({
+            state: 'failed',
+            error: `gateway failed after ${MAX_START_ATTEMPTS} start attempts`,
+          });
           return;
         }
-        const delayMs = Math.min(
-          500 * 2 ** Math.min(this.attempt - 1, 4),
-          MAX_BACKOFF_MS
-        );
-        this.setStatus({
-          state: 'restarting',
-          attempt: this.attempt,
-          delayMs,
-        });
-        await new Promise((r) => setTimeout(r, delayMs));
+        this.setStatus({ state: 'starting', attempt: this.attempt });
+
+        try {
+          await this.spawnOnce();
+          return;
+        } catch (err) {
+          if (this.stopping) {
+            return;
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(
+            `[ctrl-desktop] gateway start failed: ${message}\n`
+          );
+          if (this.attempt >= MAX_START_ATTEMPTS) {
+            this.setStatus({
+              state: 'failed',
+              error: message,
+            });
+            return;
+          }
+          const delayMs = Math.min(
+            500 * 2 ** Math.min(this.attempt - 1, 4),
+            MAX_BACKOFF_MS
+          );
+          this.setStatus({
+            state: 'restarting',
+            attempt: this.attempt,
+            delayMs,
+          });
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
       }
+    } finally {
+      this.restartInFlight = false;
     }
   }
 
@@ -191,8 +243,11 @@ export class GatewayManager {
       'src',
       'server.ts'
     );
+    if (!fs.existsSync(entry)) {
+      throw new Error(`gateway entry not found: ${entry}`);
+    }
     return {
-      command: process.env['BUN_BIN'] ?? 'bun',
+      command: resolveBunBin(),
       args: ['run', entry],
       cwd: this.opts.repoRoot,
     };
@@ -203,23 +258,36 @@ export class GatewayManager {
     this.url = `http://127.0.0.1:${this.port}`;
 
     const { command, args, cwd } = this.resolveSpawn();
-    const child = spawn(command, args, {
-      cwd,
-      env: {
-        ...process.env,
-        // Phase 0/3: bind all interfaces so Expo devices on LAN can reach the gateway.
-        // Set CTRL_A_LAN=0 to force loopback-only. Pairing token required when set.
-        CTRL_A_HOST:
-          process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
-        HOST: process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
-        PORT: String(this.port),
-        ...this.opts.envExtra,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
+    process.stderr.write(
+      `[ctrl-desktop] spawning gateway: ${command} ${args.join(' ')} (port ${this.port})\n`
+    );
+
+    let child: ChildProcess;
+    try {
+      child = spawn(command, args, {
+        cwd,
+        env: {
+          ...process.env,
+          // Phase 0/3: bind all interfaces so Expo devices on LAN can reach the gateway.
+          // Set CTRL_A_LAN=0 to force loopback-only. Pairing token required when set.
+          CTRL_A_HOST:
+            process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
+          HOST: process.env['CTRL_A_LAN'] === '0' ? '127.0.0.1' : '0.0.0.0',
+          PORT: String(this.port),
+          ...this.opts.envExtra,
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`failed to spawn gateway (${command}): ${message}`, {
+        cause: err,
+      });
+    }
 
     this.child = child;
+    this.intentionalKill = false;
 
     child.stdout?.on('data', (buf: Buffer) => {
       process.stderr.write(`[ctrl-a] ${buf.toString()}`);
@@ -228,19 +296,29 @@ export class GatewayManager {
       process.stderr.write(`[ctrl-a] ${buf.toString()}`);
     });
 
+    child.on('error', (err) => {
+      process.stderr.write(
+        `[ctrl-desktop] gateway process error: ${err.message}\n`
+      );
+    });
+
     child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
       if (this.child !== child) {
         return;
       }
       this.child = null;
-      if (this.stopping) {
-        this.setStatus({ state: 'stopped' });
+      if (this.stopping || this.intentionalKill) {
+        if (this.stopping) {
+          this.setStatus({ state: 'stopped' });
+        }
         return;
       }
       this.setStatus({
         state: 'failed',
         error: `exited code=${code ?? 'null'} signal=${signal ?? 'null'}`,
       });
+      // Only the exit handler restarts after a previously healthy process dies.
+      // Health-timeout kills set intentionalKill so they do not double-start.
       void this.spawnWithRetry();
     });
 
@@ -248,6 +326,10 @@ export class GatewayManager {
     try {
       await waitForHealth(this.url, this.healthAbort.signal);
     } catch (err) {
+      this.intentionalKill = true;
+      if (this.child === child) {
+        this.child = null;
+      }
       child.kill('SIGTERM');
       throw err;
     }
@@ -256,6 +338,7 @@ export class GatewayManager {
       throw new Error('gateway process has no pid');
     }
 
+    this.attempt = 0;
     this.setStatus({
       state: 'running',
       url: this.url,

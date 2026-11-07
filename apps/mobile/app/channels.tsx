@@ -18,10 +18,14 @@ import {
 } from '@involvex/ctrl-i';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
 
+type ChannelKindChoice = 'webhook' | 'telegram';
+
 export default function ChannelsScreen() {
   const router = useRouter();
   const [items, setItems] = useState<ChannelPublic[]>([]);
+  const [kind, setKind] = useState<ChannelKindChoice>('webhook');
   const [name, setName] = useState('webhook');
+  const [botToken, setBotToken] = useState('');
   const [status, setStatus] = useState('loading…');
   const [busy, setBusy] = useState(true);
   const [gatewayUrl, setGatewayUrl] = useState<string | null>(null);
@@ -82,25 +86,38 @@ export default function ChannelsScreen() {
     };
   }, []);
 
-  const onCreateWebhook = useCallback(() => {
+  const selectKind = useCallback((next: ChannelKindChoice) => {
+    setKind(next);
+    setName(next);
+  }, []);
+
+  const onCreateChannel = useCallback(() => {
     if (!gatewayUrl || !workspaceId || name.trim().length === 0) {
+      return;
+    }
+    if (kind === 'telegram' && botToken.trim().length === 0) {
+      setStatus('telegram bot token required');
       return;
     }
     setBusy(true);
     void (async () => {
       try {
         await createChannel(gatewayUrl, workspaceId, {
-          kind: 'webhook',
+          kind,
           name: name.trim(),
+          ...(kind === 'telegram'
+            ? { config: { botToken: botToken.trim() } }
+            : {}),
         });
-        setName('webhook');
+        setBotToken('');
+        setName(kind);
         await refresh();
       } catch (err) {
         setStatus(err instanceof Error ? err.message : String(err));
         setBusy(false);
       }
     })();
-  }, [gatewayUrl, name, refresh, workspaceId]);
+  }, [botToken, gatewayUrl, kind, name, refresh, workspaceId]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -111,14 +128,47 @@ export default function ChannelsScreen() {
         </Pressable>
         <Text style={styles.title}>channels</Text>
         <Text style={styles.meta}>{status}</Text>
-        <Text style={styles.meta}>
-          webhook · telegram · discord · slack (gateway adapters)
-        </Text>
+        <Text style={styles.meta}>webhook · telegram (long-poll inbound)</Text>
         <Pressable onPress={() => void refresh()}>
           <Text style={styles.link}>{busy ? 'refreshing…' : 'refresh'}</Text>
         </Pressable>
 
-        <Text style={styles.label}>add webhook channel</Text>
+        <Text style={styles.label}>kind</Text>
+        <View style={styles.kindRow}>
+          <Pressable
+            style={[styles.kindBtn, kind === 'webhook' && styles.kindBtnActive]}
+            onPress={() => selectKind('webhook')}
+            disabled={busy}
+          >
+            <Text
+              style={[
+                styles.kindBtnText,
+                kind === 'webhook' && styles.kindBtnTextActive,
+              ]}
+            >
+              webhook
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[
+              styles.kindBtn,
+              kind === 'telegram' && styles.kindBtnActive,
+            ]}
+            onPress={() => selectKind('telegram')}
+            disabled={busy}
+          >
+            <Text
+              style={[
+                styles.kindBtnText,
+                kind === 'telegram' && styles.kindBtnTextActive,
+              ]}
+            >
+              telegram
+            </Text>
+          </Pressable>
+        </View>
+
+        <Text style={styles.label}>add {kind} channel</Text>
         <TextInput
           style={styles.input}
           value={name}
@@ -129,15 +179,28 @@ export default function ChannelsScreen() {
           placeholderTextColor="#6b7f72"
           placeholder="channel name"
         />
+        {kind === 'telegram' ? (
+          <TextInput
+            style={styles.input}
+            value={botToken}
+            onChangeText={setBotToken}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!busy}
+            placeholderTextColor="#6b7f72"
+            placeholder="bot token"
+            secureTextEntry
+          />
+        ) : null}
         <Pressable
           style={[styles.button, busy && styles.buttonDisabled]}
-          onPress={onCreateWebhook}
+          onPress={onCreateChannel}
           disabled={busy || !workspaceId}
         >
           {busy ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text style={styles.buttonText}>add webhook</Text>
+            <Text style={styles.buttonText}>add {kind}</Text>
           )}
         </Pressable>
 
@@ -203,6 +266,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
+  kindRow: { flexDirection: 'row', gap: 8 },
+  kindBtn: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  kindBtnActive: { backgroundColor: '#00ff66' },
+  kindBtnText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 12 },
+  kindBtnTextActive: { color: '#000', fontWeight: '700' },
   input: {
     borderWidth: 1,
     borderColor: '#00ff66',
