@@ -14,14 +14,17 @@ import {
   listChannels,
   listConversations,
   listHfModelCatalog,
+  deleteMcpServer,
   listMcpServers,
   listMemory,
   listMessages,
+  listSkills,
   listTools,
   listModels,
   listWorkspaces,
   postChannelWebhook,
   reindexKnowledge,
+  reloadMcp,
   restoreBackup,
   searchKnowledge,
   sendChannelMessage,
@@ -29,6 +32,8 @@ import {
   streamChat,
   updateMemory,
   updateProviderConfig,
+  updateSkill,
+  upsertMcpServer,
   uploadAttachmentText,
   type ChannelPublic,
   type Conversation,
@@ -42,6 +47,7 @@ import {
   type Message,
   type ProviderStatusResponse,
   type RunSession,
+  type SkillManifest,
   type Workspace,
 } from '@involvex/ctrl-i';
 import {
@@ -218,6 +224,11 @@ export function App() {
   const [providerModelDraft, setProviderModelDraft] = useState('');
   const [toolItems, setToolItems] = useState<ToolDefinition[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerInfo[]>([]);
+  const [skillItems, setSkillItems] = useState<SkillManifest[]>([]);
+  const [mcpIdDraft, setMcpIdDraft] = useState('demo');
+  const [mcpNameDraft, setMcpNameDraft] = useState('Demo MCP');
+  const [mcpCommandDraft, setMcpCommandDraft] = useState('');
+  const [mcpArgsDraft, setMcpArgsDraft] = useState('');
   const hostOpen = openPanel === 'host';
   const knowledgeOpen = openPanel === 'knowledge';
   const channelsOpen = openPanel === 'channels';
@@ -447,12 +458,14 @@ export function App() {
       return;
     }
     try {
-      const [tools, servers] = await Promise.all([
+      const [tools, servers, skills] = await Promise.all([
         listTools(gatewayUrl),
         listMcpServers(gatewayUrl),
+        listSkills(gatewayUrl),
       ]);
       setToolItems(tools);
       setMcpServers(servers);
+      setSkillItems(skills);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1532,8 +1545,8 @@ export function App() {
       ) : null}
 
       {toolsOpen ? (
-        <aside className="host-panel knowledge-panel">
-          <p className="host-title">tools / MCP</p>
+        <aside className="host-panel knowledge-panel host-panel-scroll">
+          <p className="host-title">tools / MCP / skills</p>
           <div className="host-row">
             <button
               type="button"
@@ -1544,7 +1557,88 @@ export function App() {
             >
               refresh
             </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                void (async () => {
+                  try {
+                    await reloadMcp(gatewayUrl);
+                    await refreshTools();
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err));
+                  }
+                })();
+              }}
+            >
+              reload MCP
+            </button>
           </div>
+
+          <section className="host-section">
+            <p className="host-title">add / update MCP server</p>
+            <p className="meta">
+              stdio command + args (space-separated). empty command = stub.
+            </p>
+            <div className="host-row">
+              <input
+                className="host-input host-input-narrow"
+                value={mcpIdDraft}
+                onChange={(e) => setMcpIdDraft(e.target.value)}
+                placeholder="id"
+              />
+              <input
+                className="host-input"
+                value={mcpNameDraft}
+                onChange={(e) => setMcpNameDraft(e.target.value)}
+                placeholder="name"
+              />
+            </div>
+            <div className="host-row">
+              <input
+                className="host-input"
+                value={mcpCommandDraft}
+                onChange={(e) => setMcpCommandDraft(e.target.value)}
+                placeholder="command (e.g. npx)"
+              />
+            </div>
+            <div className="host-row">
+              <input
+                className="host-input"
+                value={mcpArgsDraft}
+                onChange={(e) => setMcpArgsDraft(e.target.value)}
+                placeholder="args (space-separated)"
+              />
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const args = mcpArgsDraft
+                        .trim()
+                        .split(/\s+/)
+                        .filter(Boolean);
+                      await upsertMcpServer(gatewayUrl, {
+                        id: mcpIdDraft.trim(),
+                        name: mcpNameDraft.trim() || mcpIdDraft.trim(),
+                        command: mcpCommandDraft.trim(),
+                        args,
+                      });
+                      await refreshTools();
+                    } catch (err) {
+                      setError(
+                        err instanceof Error ? err.message : String(err)
+                      );
+                    }
+                  })();
+                }}
+              >
+                save
+              </button>
+            </div>
+          </section>
+
           <p className="host-title">MCP servers</p>
           <ul className="knowledge-list">
             {mcpServers.map((server) => (
@@ -1552,13 +1646,65 @@ export function App() {
                 <code>{server.id}</code> {server.name}
                 {server.command
                   ? ` · ${server.command} ${(server.args ?? []).join(' ')}`
-                  : ' · stub'}
+                  : ' · stub'}{' '}
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        await deleteMcpServer(gatewayUrl, server.id);
+                        await refreshTools();
+                      } catch (err) {
+                        setError(
+                          err instanceof Error ? err.message : String(err)
+                        );
+                      }
+                    })();
+                  }}
+                >
+                  remove
+                </button>
               </li>
             ))}
           </ul>
           {mcpServers.length === 0 ? (
             <p className="meta">no MCP servers</p>
           ) : null}
+
+          <p className="host-title">skills</p>
+          <ul className="knowledge-list">
+            {skillItems.map((skill) => (
+              <li key={skill.id}>
+                <label className="host-row">
+                  <input
+                    type="checkbox"
+                    checked={skill.enabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      void (async () => {
+                        try {
+                          await updateSkill(gatewayUrl, skill.id, { enabled });
+                          await refreshTools();
+                        } catch (err) {
+                          setError(
+                            err instanceof Error ? err.message : String(err)
+                          );
+                        }
+                      })();
+                    }}
+                  />
+                  <span>
+                    <code>{skill.id}</code> {skill.name}
+                    {skill.builtin ? ' · builtin' : ''}
+                    {skill.description ? ` — ${skill.description}` : ''}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          {skillItems.length === 0 ? <p className="meta">no skills</p> : null}
+
           <p className="host-title">registered tools</p>
           <ul className="knowledge-list">
             {toolItems.map((tool) => (

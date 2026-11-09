@@ -6,7 +6,14 @@ export {
   resolveMcpClientFromEnv,
   type McpServerConfig,
   type McpRemoteTool,
+  type ResolveMcpOptions,
 } from './client';
+export {
+  mcpPersistPath,
+  loadPersistedMcp,
+  savePersistedMcp,
+  parseMcpServersEnv,
+} from './persist';
 export {
   McpSession,
   flattenMcpResult,

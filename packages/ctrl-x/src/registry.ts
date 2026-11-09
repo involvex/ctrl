@@ -38,4 +38,25 @@ export class ToolRegistry {
   listNames(): string[] {
     return [...this.tools.keys()];
   }
+
+  /** Remove a single tool by name. Returns true if it existed. */
+  unregister(name: string): boolean {
+    return this.tools.delete(name);
+  }
+
+  /** Remove every tool whose name matches the predicate. */
+  unregisterWhere(predicate: (name: string) => boolean): number {
+    let removed = 0;
+    const names: string[] = [];
+    for (const name of this.tools.keys()) {
+      names.push(name);
+    }
+    for (const name of names) {
+      if (predicate(name)) {
+        this.tools.delete(name);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
 }

@@ -122,6 +122,7 @@
         "@involvex/ctrl-m": "workspace:*",
         "@involvex/ctrl-r": "workspace:*",
         "@involvex/ctrl-s": "workspace:*",
+        "@involvex/ctrl-slash": "workspace:*",
         "@involvex/ctrl-x": "workspace:*",
         "@involvex/ctrl-z": "workspace:*",
       },
@@ -171,6 +172,13 @@
       "version": "0.0.1",
       "dependencies": {
         "zod": "^4.6.7",
+      },
+    },
+    "packages/ctrl-slash": {
+      "name": "@involvex/ctrl-slash",
+      "version": "0.0.1",
+      "dependencies": {
+        "@involvex/ctrl-s": "workspace:*",
       },
     },
     "packages/ctrl-t": {
@@ -620,6 +628,8 @@
     "@involvex/ctrl-r": ["@involvex/ctrl-r@workspace:packages/ctrl-r"],
 
     "@involvex/ctrl-s": ["@involvex/ctrl-s@workspace:packages/ctrl-s"],
+
+    "@involvex/ctrl-slash": ["@involvex/ctrl-slash@workspace:packages/ctrl-slash"],
 
     "@involvex/ctrl-t": ["@involvex/ctrl-t@workspace:packages/ctrl-t"],
 

@@ -24,7 +24,11 @@ function checkRateLimit(
   reindexRateLimit.set(key, recent);
   return true;
 }
-import { resolveMcpClientFromEnv } from '@involvex/ctrl-m';
+import {
+  mcpPersistPath,
+  resolveMcpClientFromEnv,
+  savePersistedMcp,
+} from '@involvex/ctrl-m';
 import {
   createEmbedderFromEnv,
   createLitertLmSidecarFromEnv,
@@ -43,8 +47,10 @@ import {
   restoreBackupInputSchema,
   createChannelInputSchema,
   createConversationInputSchema,
+  createMcpServerInputSchema,
   createMemoryInputSchema,
   createMessageInputSchema,
+  createSkillInputSchema,
   upsertMessagesInputSchema,
   createWorkspaceInputSchema,
   healthResponseSchema,
@@ -57,9 +63,11 @@ import {
   updateAgentProfileInputSchema,
   updateMemoryInputSchema,
   updateProviderConfigInputSchema,
+  updateSkillInputSchema,
   upsertIdentityInputSchema,
   workspaceExportSchema,
   type AgentEvent,
+  type AgentProfile,
   type ChannelMessage,
   type CreateAttachmentInput,
   type HealthResponse,
@@ -67,6 +75,7 @@ import {
   type LocalBackendInfo,
   type PairingAck,
 } from '@involvex/ctrl-s';
+import { applySkillsToProfile, SkillStore } from '@involvex/ctrl-slash';
 import {
   createApprovalGate,
   registerBuiltinTools,
@@ -271,12 +280,34 @@ export async function startServer(): Promise<StartedGateway> {
     providerRuntime.getConfig()
   );
   const sandboxRoot = resolveSandboxRoot();
+  const dataDir = resolveDataDir();
+  const mcpPath = mcpPersistPath(dataDir);
+  const skillStore = new SkillStore(dataDir);
   const registry = new ToolRegistry();
   registerBuiltinTools(registry, sandboxRoot);
-  const mcp = resolveMcpClientFromEnv();
+  const mcp = resolveMcpClientFromEnv({ persistPath: mcpPath });
   await mcp.connectConfigured();
+  mcp.ensureDemoStubIfEmpty();
   mcp.mountOn(registry);
-  const profile = store.ensureDefaultProfile(registry.listNames());
+
+  const syncProfileTools = (current: AgentProfile): AgentProfile => {
+    const names = registry.listNames();
+    return store.updateAgentProfile(current.id, { toolNames: names });
+  };
+
+  let profile = syncProfileTools(
+    store.ensureDefaultProfile(registry.listNames())
+  );
+
+  const effectiveProfile = (): AgentProfile =>
+    applySkillsToProfile(profile, skillStore.list());
+
+  const persistMcpAndReload = async (): Promise<void> => {
+    savePersistedMcp(mcpPath, mcp.listServers());
+    await mcp.reload(registry);
+    profile = syncProfileTools(profile);
+  };
+
   let lastPairingAck: PairingAck | null = null;
 
   const channels = new ChannelManager({
@@ -307,7 +338,7 @@ export async function startServer(): Promise<StartedGateway> {
           {
             runId,
             messages: history,
-            profile,
+            profile: effectiveProfile(),
             signal: abort.signal,
           },
           {
@@ -807,6 +838,122 @@ export async function startServer(): Promise<StartedGateway> {
           return json(req, { items: mcp.listServers() });
         }
 
+        if (req.method === 'POST' && url.pathname === '/api/v1/mcp/servers') {
+          try {
+            const body: unknown = await req.json();
+            const input = createMcpServerInputSchema.parse(body);
+            const saved = mcp.upsertServer({
+              id: input.id,
+              name: input.name,
+              command: input.command ?? '',
+              args: input.args ?? [],
+            });
+            await persistMcpAndReload();
+            return json(req, saved, 201);
+          } catch (err) {
+            return json(
+              req,
+              {
+                error: err instanceof Error ? err.message : String(err),
+              },
+              400
+            );
+          }
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/v1/mcp/reload') {
+          try {
+            await persistMcpAndReload();
+            return json(req, {
+              ok: true,
+              servers: mcp.listServers(),
+              tools: registry.list(),
+            });
+          } catch (err) {
+            return json(
+              req,
+              {
+                error: err instanceof Error ? err.message : String(err),
+              },
+              500
+            );
+          }
+        }
+
+        const mcpServerMatch = /^\/api\/v1\/mcp\/servers\/([^/]+)$/.exec(
+          url.pathname
+        );
+        if (mcpServerMatch && req.method === 'DELETE') {
+          const serverId = decodeURIComponent(mcpServerMatch[1]!);
+          if (!mcp.removeServer(serverId)) {
+            return json(req, { error: 'mcp server not found' }, 404);
+          }
+          try {
+            await persistMcpAndReload();
+            return json(req, { ok: true });
+          } catch (err) {
+            return json(
+              req,
+              {
+                error: err instanceof Error ? err.message : String(err),
+              },
+              500
+            );
+          }
+        }
+
+        if (req.method === 'GET' && url.pathname === '/api/v1/skills') {
+          return json(req, { items: skillStore.list() });
+        }
+
+        if (req.method === 'POST' && url.pathname === '/api/v1/skills') {
+          try {
+            const body: unknown = await req.json();
+            const input = createSkillInputSchema.parse(body);
+            return json(req, skillStore.create(input), 201);
+          } catch (err) {
+            return json(
+              req,
+              {
+                error: err instanceof Error ? err.message : String(err),
+              },
+              400
+            );
+          }
+        }
+
+        const skillMatch = /^\/api\/v1\/skills\/([^/]+)$/.exec(url.pathname);
+        if (skillMatch && req.method === 'PATCH') {
+          const skillId = decodeURIComponent(skillMatch[1]!);
+          try {
+            const body: unknown = await req.json();
+            const input = updateSkillInputSchema.parse(body);
+            return json(req, skillStore.update(skillId, input));
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const status = message.includes('not found') ? 404 : 400;
+            return json(req, { error: message }, status);
+          }
+        }
+
+        if (skillMatch && req.method === 'DELETE') {
+          const skillId = decodeURIComponent(skillMatch[1]!);
+          try {
+            if (!skillStore.delete(skillId)) {
+              return json(req, { error: 'skill not found' }, 404);
+            }
+            return json(req, { ok: true });
+          } catch (err) {
+            return json(
+              req,
+              {
+                error: err instanceof Error ? err.message : String(err),
+              },
+              400
+            );
+          }
+        }
+
         if (req.method === 'GET' && url.pathname === '/api/v1/workspaces') {
           return json(req, { items: store.listWorkspaces() });
         }
@@ -1210,7 +1357,7 @@ export async function startServer(): Promise<StartedGateway> {
                   {
                     runId,
                     messages: history,
-                    profile,
+                    profile: effectiveProfile(),
                     signal: abort.signal,
                   },
                   {

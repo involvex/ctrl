@@ -9,20 +9,25 @@ import {
   conversationSchema,
   createAgentProfileInputSchema,
   createBackupInputSchema,
+  createMcpServerInputSchema,
+  createSkillInputSchema,
   embeddingStatusSchema,
   healthResponseSchema,
   hostBackupManifestSchema,
   hostBackupSnapshotSchema,
   knowledgeHitSchema,
   knowledgeReindexResultSchema,
+  mcpServerConfigSchema,
   memoryItemSchema,
   messageSchema,
   outboxJobSchema,
   pairingStatusSchema,
   providerStatusResponseSchema,
+  skillManifestSchema,
   toolDefinitionSchema,
   updateAgentProfileInputSchema,
   updateProviderConfigInputSchema,
+  updateSkillInputSchema,
   workspaceExportSchema,
   workspaceSchema,
   type AgentEvent,
@@ -35,6 +40,8 @@ import {
   type ContextInspect,
   type Conversation,
   type CreateBackupInput,
+  type CreateMcpServerInput,
+  type CreateSkillInput,
   type EmbeddingStatus,
   type HealthResponse,
   type HostBackupManifest,
@@ -42,14 +49,17 @@ import {
   type KnowledgeHit,
   type KnowledgeReindexResult,
   type KnowledgeSearchMode,
+  type McpServerConfig,
   type MemoryItem,
   type MemoryStatus,
   type Message,
   type OutboxJob,
   type PairingStatus,
   type ProviderStatusResponse,
+  type SkillManifest,
   type ToolDefinition,
   type UpdateProviderConfigInput,
+  type UpdateSkillInput,
   type Workspace,
   type WorkspaceExport,
 } from '@involvex/ctrl-s';
@@ -68,8 +78,13 @@ export {
 export type {
   AgentProfile,
   CreateBackupInput,
+  CreateMcpServerInput,
+  CreateSkillInput,
   HostBackupManifest,
   HostBackupSnapshot,
+  McpServerConfig,
+  SkillManifest,
+  UpdateSkillInput,
 } from '@involvex/ctrl-s';
 
 export function normalizeBaseUrl(baseUrl: string): string {
@@ -230,14 +245,7 @@ export async function updateProviderConfig(
   return providerStatusResponseSchema.parse(await readJson(res));
 }
 
-const mcpServerSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  command: z.string().optional(),
-  args: z.array(z.string()).optional(),
-});
-
-export type McpServerInfo = z.infer<typeof mcpServerSchema>;
+export type McpServerInfo = McpServerConfig;
 
 export async function listTools(baseUrl: string): Promise<ToolDefinition[]> {
   const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/tools`, {
@@ -311,8 +319,125 @@ export async function listMcpServers(
     throw new Error(`listMcpServers failed: ${res.status}`);
   }
   return z
-    .object({ items: z.array(mcpServerSchema) })
+    .object({ items: z.array(mcpServerConfigSchema) })
     .parse(await readJson(res)).items;
+}
+
+export async function upsertMcpServer(
+  baseUrl: string,
+  input: CreateMcpServerInput
+): Promise<McpServerInfo> {
+  const body = createMcpServerInputSchema.parse(input);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/mcp/servers`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`upsertMcpServer failed: ${res.status}`);
+  }
+  return mcpServerConfigSchema.parse(await readJson(res));
+}
+
+export async function deleteMcpServer(
+  baseUrl: string,
+  serverId: string
+): Promise<void> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/mcp/servers/${encodeURIComponent(serverId)}`,
+    {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`deleteMcpServer failed: ${res.status}`);
+  }
+}
+
+export async function reloadMcp(baseUrl: string): Promise<{
+  ok: boolean;
+  servers: McpServerInfo[];
+  tools: ToolDefinition[];
+}> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/mcp/reload`, {
+    method: 'POST',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`reloadMcp failed: ${res.status}`);
+  }
+  return z
+    .object({
+      ok: z.boolean(),
+      servers: z.array(mcpServerConfigSchema),
+      tools: z.array(toolDefinitionSchema),
+    })
+    .parse(await readJson(res));
+}
+
+export async function listSkills(baseUrl: string): Promise<SkillManifest[]> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/skills`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`listSkills failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(skillManifestSchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function createSkill(
+  baseUrl: string,
+  input: CreateSkillInput
+): Promise<SkillManifest> {
+  const body = createSkillInputSchema.parse(input);
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/api/v1/skills`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`createSkill failed: ${res.status}`);
+  }
+  return skillManifestSchema.parse(await readJson(res));
+}
+
+export async function updateSkill(
+  baseUrl: string,
+  skillId: string,
+  input: UpdateSkillInput
+): Promise<SkillManifest> {
+  const body = updateSkillInputSchema.parse(input);
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/skills/${encodeURIComponent(skillId)}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(body),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`updateSkill failed: ${res.status}`);
+  }
+  return skillManifestSchema.parse(await readJson(res));
+}
+
+export async function deleteSkill(
+  baseUrl: string,
+  skillId: string
+): Promise<void> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/skills/${encodeURIComponent(skillId)}`,
+    {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`deleteSkill failed: ${res.status}`);
+  }
 }
 
 async function readJson(res: Response): Promise<unknown> {

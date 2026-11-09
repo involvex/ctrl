@@ -13,7 +13,9 @@ const root = path.resolve(
 const serverEntry = path.join(root, 'packages/ctrl-a/src/server.ts');
 const port = 40_000 + Math.floor(Math.random() * 20_000);
 const baseUrl = `http://127.0.0.1:${port}`;
-const tmpDb = path.join(root, 'data', `contract-${port}.db`);
+/** Isolated data dir so developer provider.json / mcp.json cannot poison contracts. */
+const tmpDataDir = path.join(root, 'data', `contract-${port}`);
+const tmpDb = path.join(tmpDataDir, 'app.db');
 
 async function waitForHealth(url: string, ms = 15_000): Promise<void> {
   const deadline = Date.now() + ms;
@@ -40,7 +42,10 @@ const child = spawn('bun', ['run', serverEntry], {
     CTRL_A_HOST: '127.0.0.1',
     HOST: '127.0.0.1',
     PORT: String(port),
+    CTRL_DATA_DIR: tmpDataDir,
     CTRL_DB_PATH: tmpDb,
+    // Deterministic mock provider for chat / LLM-tool contracts
+    CTRL_PROVIDER: 'mock',
     // Real MCP stdio JSON-RPC for contract coverage
     CTRL_MCP_STDIO: '1',
   },

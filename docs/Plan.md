@@ -272,18 +272,22 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 11. Phase 6 On-Device Inference (Android) — **done**: LiteRT-LM Expo plugin (`react-native-litert-lm`), capability probe (ABI/RAM/battery), thermal/battery policy in `ctrl-s` (re-exported from `ctrl-r`), mobile `/on-device` UI with download retries + filesystem `.litertlm` import (CDN mid-stream failures), `expo-dev-client`, release ProGuard consumer-rules plugin, `native/android-litert` docs.
 12. Phase 7 Sync — **done** (MVP + 7b): host backups under `data/backups/` (`BackupStore`), `/api/v1/backups` create/list/get/restore, optional passphrase AES-256-GCM encryption, desktop panel + `ctrl-f5 backup`, contracts. No device↔device SQLite sync.
 13. Phase 8 Featured CLI (`ctrl-f5`) — **done**: LAN pair QR; gateway `0.0.0.0`; Metro host auto-fill; `start`/`stop`/`status`/`chat`/`backup`; `completion bash|powershell`.
-14. Phase 9 Rust `agentd` — optional. Provider selection persists in `data/provider.json` (non-secret); desktop/mobile/web provider + knowledge + tools + channels lockstep. Desktop nav panels are exclusive (one open at a time; Escape closes). Telegram Bot API send adapter (real); Discord/Slack still mock.
+14. Phase 9 Rust `agentd` — optional. Provider selection persists in `data/provider.json` (non-secret); desktop/mobile/web provider + knowledge + tools + channels lockstep. Desktop nav panels are exclusive (one open at a time; Escape closes). Telegram Bot API real (poll + send); Discord/Slack **outbound** real (webhook / bot HTTP); inbound poll still Telegram-first.
 15. Phase 10 — Local-first chat (done this slice):
     - One chat UI with generator picker `litert` | `gateway` | `zen`; `/on-device` is model setup only.
     - Local brain (`ctrl.mobile.brain.v1`) + append-only sync when gateway health succeeds.
     - Empty Android ABI counts as arm64 for LiteRT policy; policy disables LiteRT only, not chat.
     - Standalone `android:release` = Gradle `assembleRelease` (embedded JS; no Metro `:8081`/`:8082`).
-    - Out of this pass: Rust `agentd`, Discord/Slack real SDKs, vector search.
+    - Out of this pass: Rust `agentd`, Discord/Slack inbound SDKs, vector search.
 16. Phase 11 — Personal Knowledge vector & hybrid search (done this slice):
     - Schema v5 `knowledge_vectors` (raw `float32` BLOBs, cascade with chunks); cosine scoring in-process inside `ctrl-k` (see [ADR-0004](adr/ADR-0004-vector-search.md)).
     - `Embedder` contract in `ctrl-s`; `ctrl-r` embedders `hash` (deterministic default, offline), `openai`/`llama`/`litert` via OpenAI-compatible `/embeddings`, `off`.
     - `searchKnowledge` gains `mode: fts | vector | hybrid`; hybrid fuses `bm25` + cosine with reciprocal rank fusion (k = 60); hits gain `score` + `source`.
     - Embed on ingest (failure tolerated), `POST /api/v1/workspaces/:id/knowledge/reindex`, `GET /api/v1/embeddings` status; desktop knowledge panel gets mode picker, status line, reindex button; unit + contract tests.
     - Out of this pass: cross-workspace search (done via `/api/v1/knowledge/search`), re-embedding on model switch (use `reindex --force`), semantic reranking. ANN index: shipped as in-process HNSW (see `packages/ctrl-k/src/ann`).
-17. Ship v0 (standalone daily-driver) — see [standalone-local.md](standalone-local.md), [soak-v0.md](soak-v0.md), [RELEASE-v0.md](RELEASE-v0.md).
-    - Parked until soak is boring: in-app binary downloaders, HF catalog, Discord/Slack real SDKs, incremental device sync, Rust `agentd`, monetization.
+17. Ship v0 (standalone daily-driver) — see [standalone-local.md](standalone-local.md), [soak-v0.md](soak-v0.md), [RELEASE-v0.md](RELEASE-v0.md). Operator soak rows may still be pending on hardware.
+18. Skills + MCP configure (done this slice):
+    - `@involvex/ctrl-slash` — builtin `knowledge-assistant`, `data/skills/` + `skills.json`, `applySkillsToProfile` on each run.
+    - MCP persist `data/mcp.json`; gateway `POST/DELETE /api/v1/mcp/servers`, `POST /api/v1/mcp/reload`; skills `GET/POST/PATCH/DELETE /api/v1/skills`.
+    - Desktop tools panel: add/remove MCP, reload, skill toggles; mobile/web skill enable.
+    - Still parked: Discord/Slack inbound, incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

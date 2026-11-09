@@ -188,3 +188,20 @@ export {
   type UpdateProviderConfigInput,
   type ProviderStatusResponse,
 } from './providers';
+
+export {
+  skillManifestSchema,
+  createSkillInputSchema,
+  updateSkillInputSchema,
+  mcpServerConfigSchema,
+  createMcpServerInputSchema,
+  persistedMcpFileSchema,
+  persistedSkillsStateSchema,
+  type SkillManifest,
+  type CreateSkillInput,
+  type UpdateSkillInput,
+  type McpServerConfig,
+  type CreateMcpServerInput,
+  type PersistedMcpFile,
+  type PersistedSkillsState,
+} from './skills';

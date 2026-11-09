@@ -43,7 +43,16 @@ setx CTRL_LITERT_LM_BIN "C:\path\to\litert-lm.exe"
 # Restart desktop so the gateway child inherits env.
 ```
 
-This pass does **not** download binaries in-app — install CLIs yourself and put them on PATH (or set the env vars).
+Desktop Host can also set a binary path, pick a file, or download from a URL when you have one.
+
+## Skills + MCP (Host tools panel)
+
+1. Open desktop **tools** (exclusive panel).
+2. **Skills** — toggle `knowledge-assistant` (or a user skill under `data/skills/`). Enabled skills append instructions to the agent profile on the next chat turn.
+3. **MCP** — enter id / name / command / args → **save**. Gateway writes `data/mcp.json`, reloads stdio servers, and remounts `mcp__*` tools. Empty command keeps the in-process demo echo stub.
+4. **reload MCP** forces reconnect without changing config. Mobile/web can toggle skills; add MCP from the Host (it owns the daemon).
+
+Env overrides still work: `CTRL_MCP_SERVERS` (JSON array) or `CTRL_MCP_STDIO=1` for the bundled stdio demo. File config wins when `data/mcp.json` has servers.
 
 ## Pairing
 
@@ -75,12 +84,13 @@ ctrl-f5 backup restore <id>
 
 Or use desktop **backups** panel: create → restore. Confirm a workspace/conversation returns.
 
-## Parked until v0 is boring (R4)
+## Parked (R4+)
 
-Do **not** start these until soak rows 1–5 pass and you use the build daily:
+Operator soak rows 1–5 may still be pending on your hardware ([soak-v0.md](soak-v0.md)) — finish them when you can; they no longer block Skills/MCP work.
 
-1. In-app binary downloaders for llama / litert-lm
-2. HF / full model catalog browser on PC
-3. Real Discord / Slack SDKs (Telegram already real)
-4. Device↔host incremental sync beyond backups
-5. Rust `agentd` / monetization experiments
+Still parked:
+
+1. Discord / Slack **inbound** (outbound already works)
+2. Device↔host incremental sync beyond backups
+3. Rust `agentd` / monetization experiments
+4. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)

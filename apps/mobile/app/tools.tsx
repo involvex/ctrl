@@ -12,8 +12,11 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   listMcpServers,
+  listSkills,
   listTools,
+  updateSkill,
   type McpServerInfo,
+  type SkillManifest,
 } from '@involvex/ctrl-i';
 import type { ToolDefinition } from '@involvex/ctrl-s';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
@@ -22,6 +25,8 @@ export default function ToolsScreen() {
   const router = useRouter();
   const [tools, setTools] = useState<ToolDefinition[]>([]);
   const [servers, setServers] = useState<McpServerInfo[]>([]);
+  const [skills, setSkills] = useState<SkillManifest[]>([]);
+  const [gatewayUrl, setGatewayUrl] = useState('');
   const [status, setStatus] = useState('loading…');
   const [busy, setBusy] = useState(true);
 
@@ -29,14 +34,17 @@ export default function ToolsScreen() {
     setBusy(true);
     try {
       const connected = await resolveConnectedWorkspace();
-      const [toolItems, mcpItems] = await Promise.all([
+      setGatewayUrl(connected.gatewayUrl);
+      const [toolItems, mcpItems, skillItems] = await Promise.all([
         listTools(connected.gatewayUrl),
         listMcpServers(connected.gatewayUrl),
+        listSkills(connected.gatewayUrl),
       ]);
       setTools(toolItems);
       setServers(mcpItems);
+      setSkills(skillItems);
       setStatus(
-        `gateway · ${connected.gatewayUrl} · ${toolItems.length} tools · ${mcpItems.length} mcp`
+        `gateway · ${connected.gatewayUrl} · ${toolItems.length} tools · ${mcpItems.length} mcp · ${skillItems.length} skills`
       );
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -51,17 +59,23 @@ export default function ToolsScreen() {
       setBusy(true);
       try {
         const connected = await resolveConnectedWorkspace();
-        const [toolItems, mcpItems] = await Promise.all([
+        if (cancelled) {
+          return;
+        }
+        setGatewayUrl(connected.gatewayUrl);
+        const [toolItems, mcpItems, skillItems] = await Promise.all([
           listTools(connected.gatewayUrl),
           listMcpServers(connected.gatewayUrl),
+          listSkills(connected.gatewayUrl),
         ]);
         if (cancelled) {
           return;
         }
         setTools(toolItems);
         setServers(mcpItems);
+        setSkills(skillItems);
         setStatus(
-          `gateway · ${connected.gatewayUrl} · ${toolItems.length} tools · ${mcpItems.length} mcp`
+          `gateway · ${connected.gatewayUrl} · ${toolItems.length} tools · ${mcpItems.length} mcp · ${skillItems.length} skills`
         );
       } catch (err) {
         if (!cancelled) {
@@ -85,11 +99,46 @@ export default function ToolsScreen() {
         <Pressable onPress={() => router.back()}>
           <Text style={styles.link}>← back</Text>
         </Pressable>
-        <Text style={styles.title}>tools / MCP</Text>
+        <Text style={styles.title}>tools / MCP / skills</Text>
         <Text style={styles.meta}>{status}</Text>
         <Pressable onPress={() => void refresh()}>
           <Text style={styles.link}>{busy ? 'refreshing…' : 'refresh'}</Text>
         </Pressable>
+
+        <Text style={styles.label}>skills</Text>
+        {skills.map((skill) => (
+          <Pressable
+            key={skill.id}
+            style={styles.panel}
+            onPress={() => {
+              if (!gatewayUrl) {
+                return;
+              }
+              void (async () => {
+                try {
+                  await updateSkill(gatewayUrl, skill.id, {
+                    enabled: !skill.enabled,
+                  });
+                  await refresh();
+                } catch (err) {
+                  setStatus(err instanceof Error ? err.message : String(err));
+                }
+              })();
+            }}
+          >
+            <Text style={styles.emphasis}>
+              [{skill.enabled ? 'on' : 'off'}] {skill.name}
+              {skill.builtin ? ' · builtin' : ''}
+            </Text>
+            <Text style={styles.meta}>
+              {skill.id}
+              {skill.description ? ` — ${skill.description}` : ''}
+            </Text>
+          </Pressable>
+        ))}
+        {skills.length === 0 && !busy ? (
+          <Text style={styles.meta}>no skills</Text>
+        ) : null}
 
         <Text style={styles.label}>MCP servers</Text>
         {busy && servers.length === 0 ? (

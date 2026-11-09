@@ -20,6 +20,7 @@
     "@involvex/ctrl-m": "workspace:*",
     "@involvex/ctrl-r": "workspace:*",
     "@involvex/ctrl-s": "workspace:*",
+    "@involvex/ctrl-slash": "workspace:*",
     "@involvex/ctrl-x": "workspace:*",
     "@involvex/ctrl-z": "workspace:*"
   }

@@ -2,31 +2,32 @@ import { describe, expect, test } from 'bun:test';
 import {
   createConversation,
   createWorkspace,
+  listMcpServers,
+  listTools,
+  reloadMcp,
   streamChat,
+  upsertMcpServer,
 } from '@involvex/ctrl-i';
 import { type AgentEvent } from '@involvex/ctrl-s';
 import { baseUrl } from './env';
 
 describe('contract: MCP stdio', () => {
   test('lists stdio demo MCP server', async () => {
-    const res = await fetch(`${baseUrl()}/api/v1/mcp/servers`);
-    expect(res.ok).toBe(true);
-    const body: unknown = await res.json();
-    expect(body && typeof body === 'object' && 'items' in body).toBe(true);
-    if (body && typeof body === 'object' && 'items' in body) {
-      const items = body.items;
-      expect(Array.isArray(items)).toBe(true);
-      if (Array.isArray(items)) {
-        expect(
-          items.some((s) => {
-            if (!s || typeof s !== 'object') return false;
-            if (!('id' in s)) return false;
-            const id = (s as { id: unknown }).id;
-            return typeof id === 'string' && id === 'demo';
-          })
-        ).toBe(true);
-      }
-    }
+    const items = await listMcpServers(baseUrl());
+    expect(items.some((s) => s.id === 'demo')).toBe(true);
+  });
+
+  test('upsert + reload keeps demo echo tool', async () => {
+    await upsertMcpServer(baseUrl(), {
+      id: 'demo',
+      name: 'Demo MCP',
+      command: '',
+      args: [],
+    });
+    const reloaded = await reloadMcp(baseUrl());
+    expect(reloaded.ok).toBe(true);
+    const tools = await listTools(baseUrl());
+    expect(tools.some((t) => t.name === 'mcp__demo__echo')).toBe(true);
   });
 
   test('mcp__demo__echo via /tool requires approval and echoes', async () => {

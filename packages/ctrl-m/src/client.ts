@@ -1,17 +1,16 @@
-import type { ToolCall, ToolDefinition } from '@involvex/ctrl-s';
+import {
+  mcpServerConfigSchema,
+  type McpServerConfig,
+  type ToolCall,
+  type ToolDefinition,
+} from '@involvex/ctrl-s';
 import type { ToolHandler, ToolRegistry } from '@involvex/ctrl-x';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { flattenMcpResult, McpSession } from './session';
+import { loadPersistedMcp, parseMcpServersEnv } from './persist';
 
-export type McpServerConfig = {
-  id: string;
-  /** Display name */
-  name: string;
-  /** Command to spawn (stdio transport). Empty = stub/disabled. */
-  command?: string;
-  args?: string[];
-};
+export type { McpServerConfig };
 
 export type McpRemoteTool = ToolDefinition & {
   serverId: string;
@@ -21,14 +20,39 @@ export type McpRemoteTool = ToolDefinition & {
  * MCP client: stub tools and/or stdio JSON-RPC sessions.
  */
 export class McpClient {
+  private servers: McpServerConfig[];
   private readonly remotes = new Map<string, McpRemoteTool>();
   private readonly handlers = new Map<string, ToolHandler | undefined>();
   private readonly sessions = new Map<string, McpSession>();
 
-  constructor(private readonly servers: McpServerConfig[] = []) {}
+  constructor(servers: McpServerConfig[] = []) {
+    this.servers = servers.map((s) => mcpServerConfigSchema.parse(s));
+  }
 
   listServers(): McpServerConfig[] {
-    return [...this.servers];
+    return this.servers.map((s) => ({ ...s, args: [...s.args] }));
+  }
+
+  /** Replace the full server list (does not connect or mount). */
+  setServers(servers: McpServerConfig[]): void {
+    this.servers = servers.map((s) => mcpServerConfigSchema.parse(s));
+  }
+
+  upsertServer(server: McpServerConfig): McpServerConfig {
+    const next = mcpServerConfigSchema.parse(server);
+    const idx = this.servers.findIndex((s) => s.id === next.id);
+    if (idx >= 0) {
+      this.servers[idx] = next;
+    } else {
+      this.servers.push(next);
+    }
+    return { ...next, args: [...next.args] };
+  }
+
+  removeServer(id: string): boolean {
+    const before = this.servers.length;
+    this.servers = this.servers.filter((s) => s.id !== id);
+    return this.servers.length < before;
   }
 
   /** Register a remote tool descriptor (used by stubs / discovery). */
@@ -41,17 +65,22 @@ export class McpClient {
     return [...this.remotes.values()];
   }
 
+  clearRemotes(): void {
+    this.remotes.clear();
+    this.handlers.clear();
+  }
+
   /**
    * Connect configured stdio servers, discover tools, and register handlers.
    * Servers without a command are skipped (stub-only).
    */
   async connectConfigured(): Promise<void> {
     for (const server of this.servers) {
-      const command = server.command?.trim();
+      const command = server.command.trim();
       if (!command) {
         continue;
       }
-      const session = new McpSession(server.id, command, server.args ?? []);
+      const session = new McpSession(server.id, command, server.args);
       await session.connect();
       this.sessions.set(server.id, session);
       const tools = await session.listTools();
@@ -76,6 +105,53 @@ export class McpClient {
         );
       }
     }
+  }
+
+  /**
+   * When no stdio servers are configured, register the in-process demo echo
+   * stub so contracts and first-run stay deterministic.
+   */
+  ensureDemoStubIfEmpty(): void {
+    const hasCommand = this.servers.some((s) => s.command.trim().length > 0);
+    if (hasCommand || this.remotes.size > 0) {
+      return;
+    }
+    if (!this.servers.some((s) => s.id === 'demo')) {
+      this.servers.push(
+        mcpServerConfigSchema.parse({
+          id: 'demo',
+          name: 'Demo MCP',
+          command: '',
+          args: [],
+        })
+      );
+    }
+    this.registerRemoteTool(
+      {
+        serverId: 'demo',
+        name: 'echo',
+        description: 'Echo a string via the demo MCP stub',
+        parameters: {
+          type: 'object',
+          properties: { text: { type: 'string' } },
+          required: ['text'],
+        },
+        requiresApproval: true,
+        risk: 'low',
+      },
+      (call) => {
+        let text = '';
+        if (
+          call.arguments &&
+          typeof call.arguments === 'object' &&
+          'text' in call.arguments
+        ) {
+          const value = (call.arguments as { text?: unknown }).text;
+          text = typeof value === 'string' ? value : '';
+        }
+        return Promise.resolve({ echo: text });
+      }
+    );
   }
 
   /** Mount discovered/stub MCP tools onto the shared ToolRegistry with `mcp__` prefix. */
@@ -109,6 +185,23 @@ export class McpClient {
     }
   }
 
+  /** Unmount all `mcp__*` tools, close sessions, clear remotes. */
+  async unmount(registry: ToolRegistry): Promise<void> {
+    registry.unregisterWhere((name) => name.startsWith('mcp__'));
+    await this.close();
+    this.clearRemotes();
+  }
+
+  /**
+   * Full reload: unmount → reconnect configured → ensure stub if empty → mount.
+   */
+  async reload(registry: ToolRegistry): Promise<void> {
+    await this.unmount(registry);
+    await this.connectConfigured();
+    this.ensureDemoStubIfEmpty();
+    this.mountOn(registry);
+  }
+
   async close(): Promise<void> {
     for (const session of this.sessions.values()) {
       await session.close();
@@ -130,33 +223,10 @@ export function demoMcpServerScript(): string {
  * Prefer {@link createStdioDemoMcpClient} when you need real JSON-RPC.
  */
 export function createDemoMcpClient(): McpClient {
-  const client = new McpClient([{ id: 'demo', name: 'Demo MCP', command: '' }]);
-  client.registerRemoteTool(
-    {
-      serverId: 'demo',
-      name: 'echo',
-      description: 'Echo a string via the demo MCP stub',
-      parameters: {
-        type: 'object',
-        properties: { text: { type: 'string' } },
-        required: ['text'],
-      },
-      requiresApproval: true,
-      risk: 'low',
-    },
-    (call) => {
-      let text = '';
-      if (
-        call.arguments &&
-        typeof call.arguments === 'object' &&
-        'text' in call.arguments
-      ) {
-        const value = (call.arguments as { text?: unknown }).text;
-        text = typeof value === 'string' ? value : '';
-      }
-      return Promise.resolve({ echo: text });
-    }
-  );
+  const client = new McpClient([
+    { id: 'demo', name: 'Demo MCP', command: '', args: [] },
+  ]);
+  client.ensureDemoStubIfEmpty();
   return client;
 }
 
@@ -175,46 +245,27 @@ export function createStdioDemoMcpClient(): McpClient {
   ]);
 }
 
+export type ResolveMcpOptions = {
+  /** Absolute path to data/mcp.json */
+  persistPath?: string;
+};
+
 /**
- * Parse `CTRL_MCP_SERVERS` JSON env, or fall back to stdio demo when
- * `CTRL_MCP_STDIO=1`, else the in-process stub.
+ * Resolve MCP client: `data/mcp.json` → `CTRL_MCP_SERVERS` → stdio demo
+ * (`CTRL_MCP_STDIO=1`) → in-process stub.
  */
-export function resolveMcpClientFromEnv(): McpClient {
-  const raw = process.env['CTRL_MCP_SERVERS']?.trim();
-  if (raw) {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      throw new Error('CTRL_MCP_SERVERS must be a JSON array');
+export function resolveMcpClientFromEnv(
+  options: ResolveMcpOptions = {}
+): McpClient {
+  if (options.persistPath) {
+    const fromDisk = loadPersistedMcp(options.persistPath);
+    if (fromDisk && fromDisk.length > 0) {
+      return new McpClient(fromDisk);
     }
-    const servers: McpServerConfig[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== 'object') {
-        continue;
-      }
-      if (
-        !('id' in item) ||
-        !('name' in item) ||
-        typeof item.id !== 'string' ||
-        typeof item.name !== 'string'
-      ) {
-        continue;
-      }
-      servers.push({
-        id: item.id,
-        name: item.name,
-        command:
-          'command' in item && typeof item.command === 'string'
-            ? item.command
-            : '',
-        args:
-          'args' in item && Array.isArray(item.args)
-            ? item.args.filter(
-                (a: unknown): a is string => typeof a === 'string'
-              )
-            : [],
-      });
-    }
-    return new McpClient(servers);
+  }
+  const fromEnv = parseMcpServersEnv(process.env['CTRL_MCP_SERVERS']);
+  if (fromEnv && fromEnv.length > 0) {
+    return new McpClient(fromEnv);
   }
   if (process.env['CTRL_MCP_STDIO'] === '1') {
     return createStdioDemoMcpClient();
