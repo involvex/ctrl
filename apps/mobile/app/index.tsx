@@ -55,6 +55,7 @@ import {
   saveGeneratorMode,
   type GeneratorMode,
 } from '../src/device/inference-mode';
+import { unloadLitertEngine } from '../src/device/litert-engine';
 import {
   useLitertEngine,
   type LitertEngineStatus,
@@ -80,7 +81,7 @@ import {
 
 type LitertGenerate = (prompt: string) => Promise<string>;
 
-/** Mounts LiteRT without auto-load — cascade may fall back to phone. */
+/** Binds chat cascade to the process-wide LiteRT singleton (no useModel). */
 function LitertEngineHost({
   systemPrompt,
   onStatus,
@@ -486,6 +487,17 @@ export default function ChatHomeScreen() {
     [brain, eventStatus, hostOnline, litertStatus]
   );
 
+  useEffect(() => {
+    if (mode === 'litert') {
+      return;
+    }
+    litertGenerateRef.current = null;
+    void unloadLitertEngine();
+    queueMicrotask(() => {
+      setLitertStatus(null);
+    });
+  }, [mode]);
+
   if (!brain) {
     return (
       <SafeAreaView style={styles.root}>
@@ -501,16 +513,14 @@ export default function ChatHomeScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar style="light" />
-      <LitertEngineHost
-        key={
-          agent
-            ? `${agent.mode}:${agent.activePersonaId}:${agent.rules.length}`
-            : 'default'
-        }
-        systemPrompt={systemPrompt}
-        onStatus={onLitertStatus}
-        generateRef={litertGenerateRef}
-      />
+      {mode === 'litert' ? (
+        <LitertEngineHost
+          key="litert-singleton"
+          systemPrompt={systemPrompt}
+          onStatus={onLitertStatus}
+          generateRef={litertGenerateRef}
+        />
+      ) : null}
       <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
       <View style={styles.top}>

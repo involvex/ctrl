@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { ModelRegistry } from 'react-native-litert-lm';
 import { normalizeModelPath } from './model-path';
+import { minBytesForSource } from './model-path';
 import { saveModelSource } from './model-source';
 
 export type ImportModelResult =
@@ -34,9 +35,12 @@ export async function importLitertModelFromPicker(): Promise<ImportModelResult> 
   let localPath = normalizeModelPath(asset.uri);
   let size = 0;
   try {
-    size = ModelRegistry.getFileSizeBytes(localPath);
+    const bytes = ModelRegistry.getFileSizeBytes(localPath);
+    if (bytes > 0) {
+      size = bytes;
+    }
   } catch {
-    size = 0;
+    // need copy into app storage
   }
 
   if (size <= 0) {
@@ -87,6 +91,14 @@ export async function importLitertModelFromPicker(): Promise<ImportModelResult> 
     return {
       ok: false,
       error: `Imported path not readable (${localPath}). Re-import or copy via USB/adb.`,
+    };
+  }
+
+  const minBytes = minBytesForSource(localPath);
+  if (size < minBytes) {
+    return {
+      ok: false,
+      error: `File looks incomplete (${(size / (1024 * 1024)).toFixed(0)} MB, need ≥${(minBytes / (1024 * 1024)).toFixed(0)} MB). Pick a full .litertlm.`,
     };
   }
 

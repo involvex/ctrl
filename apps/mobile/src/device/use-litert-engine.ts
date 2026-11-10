@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { evaluateOnDevicePolicy, type PolicyDecision } from '@involvex/ctrl-s';
-import { useModel } from 'react-native-litert-lm';
 import { backendForPolicy, probeDeviceCapabilities } from './capabilities';
-import { ModelRegistry } from 'react-native-litert-lm';
+import {
+  ensureLitertLoaded,
+  generateWithLitert,
+  isLitertEngineLoaded,
+  unloadLitertEngine,
+} from './litert-engine';
+import { assertModelFileUsable } from './model-size';
 import {
   DEFAULT_MODEL_URL,
   isRemoteModelUrl,
@@ -20,11 +25,10 @@ export type LitertEngineStatus = {
 };
 
 /**
- * LiteRT engine for chat. Mount only when generator === 'litert'.
- * autoLoad is always false — load on first generate to avoid OOM on chat open.
+ * LiteRT status/generate API for chat — backed by the process singleton.
+ * Does not call useModel (avoids a second native engine next to Model setup).
  */
 export function useLitertEngine(systemPrompt: string) {
-  // Freeze prompt at mount so brain hydrate does not remount the native engine.
   const [frozenPrompt] = useState(systemPrompt);
   const [modelSource, setModelSource] = useState(DEFAULT_MODEL_URL);
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
@@ -32,6 +36,9 @@ export function useLitertEngine(systemPrompt: string) {
     null
   );
   const [loadedOnce, setLoadedOnce] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [engineError, setEngineError] = useState<string | null>(null);
 
   const probe = useCallback(async () => {
     const caps = await probeDeviceCapabilities();
@@ -69,88 +76,80 @@ export function useLitertEngine(systemPrompt: string) {
         );
         return;
       }
-      let size = 0;
       try {
-        size = ModelRegistry.getFileSizeBytes(saved);
-      } catch {
-        size = 0;
-      }
-      if (size <= 0) {
-        setUnavailableReason(
-          `Model file not readable. Re-import from Model setup.`
-        );
+        assertModelFileUsable(saved);
+      } catch (err) {
+        setUnavailableReason(err instanceof Error ? err.message : String(err));
         return;
       }
       await probe();
+      if (!cancelled) {
+        setReady(isLitertEngineLoaded(saved));
+        setLoadedOnce(isLitertEngineLoaded(saved));
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [probe]);
 
-  const backend = backendForPolicy(decision?.backend ?? null);
-
-  const engine = useModel(modelSource, {
-    backend,
-    autoLoad: false,
-    enableMemoryTracking: true,
-    systemPrompt: frozenPrompt,
-    maxOutputTokens: 512,
-    maxContextTokens: 2048,
-  });
-
   const generate = useCallback(
     async (prompt: string): Promise<string> => {
+      setEngineError(null);
       const fresh = await probe();
       if (!fresh.allowed) {
         throw new Error(
           `On-device blocked: ${fresh.reasons.join('; ') || 'not allowed'}`
         );
       }
-      if (isRemoteModelUrl(modelSource)) {
-        throw new Error(
-          'Model not downloaded. Open Model setup to download or import a .litertlm file.'
-        );
-      }
-      let size = 0;
+      assertModelFileUsable(modelSource);
+      const backend = backendForPolicy(fresh.backend);
+      setLoadedOnce(true);
+      setGenerating(true);
       try {
-        size = ModelRegistry.getFileSizeBytes(modelSource);
-      } catch {
-        size = 0;
+        await ensureLitertLoaded({
+          path: modelSource,
+          backend,
+          systemPrompt: frozenPrompt,
+        });
+        setReady(true);
+        return await generateWithLitert(prompt);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setEngineError(message);
+        setReady(false);
+        throw err;
+      } finally {
+        setGenerating(false);
       }
-      if (size <= 0) {
-        throw new Error(
-          `Model file not readable (${modelSource}). Re-import from Model setup.`
-        );
-      }
-      if (!engine.isReady) {
-        setLoadedOnce(true);
-        await engine.load();
-      }
-      return engine.generate(prompt.trim());
     },
-    [engine, modelSource, probe]
+    [frozenPrompt, modelSource, probe]
   );
+
+  const unload = useCallback(async () => {
+    await unloadLitertEngine();
+    setReady(false);
+  }, []);
 
   const status: LitertEngineStatus = useMemo(
     () => ({
-      ready: engine.isReady && !unavailableReason,
-      generating: engine.isGenerating,
-      unavailableReason: unavailableReason ?? engine.error,
+      ready: ready && !unavailableReason,
+      generating,
+      unavailableReason: unavailableReason ?? engineError,
       decision,
       modelSource,
-      loadedOnce: loadedOnce || engine.isReady,
+      loadedOnce: loadedOnce || ready,
     }),
     [
       decision,
-      engine.error,
-      engine.isGenerating,
-      engine.isReady,
+      engineError,
+      generating,
       loadedOnce,
       modelSource,
+      ready,
       unavailableReason,
     ]
   );
 
-  return { status, generate, probe, setModelSource };
+  return { status, generate, probe, setModelSource, unload };
 }

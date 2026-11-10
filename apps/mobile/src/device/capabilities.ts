@@ -2,6 +2,10 @@ import { Platform } from 'react-native';
 import type { DeviceCapabilities, InferenceBackend } from '@involvex/ctrl-s';
 import { resolveIsArm64 } from './abi';
 
+let litertAvailableCache: boolean | null = null;
+let capsCache: { at: number; value: DeviceCapabilities } | null = null;
+const CAPS_TTL_MS = 30_000;
+
 async function readBattery(): Promise<{
   batteryLevel: number | null;
   batteryState: DeviceCapabilities['batteryState'];
@@ -36,31 +40,56 @@ async function readBattery(): Promise<{
   }
 }
 
+/**
+ * Detect LiteRT without leaking HybridObjects on every probe.
+ * Creating LiteRTLM registers a native engine; we cache the first result.
+ */
 function detectLitertNative(): boolean {
+  if (litertAvailableCache !== null) {
+    return litertAvailableCache;
+  }
   if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+    litertAvailableCache = false;
     return false;
   }
   try {
-    // Presence of Nitro + LiteRT hybrid objects (dev client / release builds).
-    // Expo Go / web: require succeeds for JS but native object creation fails.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { NitroModules } = require('react-native-nitro-modules') as {
-      NitroModules?: { createHybridObject?: (name: string) => unknown };
+      NitroModules?: {
+        createHybridObject?: (name: string) => {
+          close?: () => void;
+        };
+      };
     };
     if (!NitroModules?.createHybridObject) {
+      litertAvailableCache = false;
       return false;
     }
-    NitroModules.createHybridObject('LiteRTLM');
+    const probe = NitroModules.createHybridObject('LiteRTLM');
+    try {
+      probe.close?.();
+    } catch {
+      // ignore
+    }
+    litertAvailableCache = true;
     return true;
   } catch {
+    litertAvailableCache = false;
     return false;
   }
 }
 
 /**
  * Live device probe for on-device policy + LiteRT load decisions.
+ * Results are TTL-cached so chat generate does not spam native probes.
  */
-export async function probeDeviceCapabilities(): Promise<DeviceCapabilities> {
+export async function probeDeviceCapabilities(
+  options: { force?: boolean } = {}
+): Promise<DeviceCapabilities> {
+  if (!options.force && capsCache && Date.now() - capsCache.at < CAPS_TTL_MS) {
+    return capsCache.value;
+  }
+
   const battery = await readBattery();
   let abi: string[] = [];
   let apiLevel: number | null = null;
@@ -94,7 +123,7 @@ export async function probeDeviceCapabilities(): Promise<DeviceCapabilities> {
 
   const isArm64 = resolveIsArm64({ platform, abi, isDevice });
 
-  return {
+  const value: DeviceCapabilities = {
     platform,
     isDevice,
     abi,
@@ -112,6 +141,8 @@ export async function probeDeviceCapabilities(): Promise<DeviceCapabilities> {
     },
     litertAvailable: detectLitertNative(),
   };
+  capsCache = { at: Date.now(), value };
+  return value;
 }
 
 export function backendForPolicy(

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GEMMA_4_E2B_IT, ModelRegistry } from 'react-native-litert-lm';
-import { isRemoteModelUrl } from './model-path';
+import { isRemoteModelUrl, minBytesForSource } from './model-path';
+import { readModelFileBytes } from './model-size';
 
 export {
   describeDownloadError,
@@ -17,8 +18,8 @@ export async function loadSavedModelSource(): Promise<string> {
     const saved = await AsyncStorage.getItem(MODEL_SOURCE_KEY);
     if (saved && saved.length > 0) {
       if (!isRemoteModelUrl(saved)) {
-        const size = ModelRegistry.getFileSizeBytes(saved);
-        if (size > 0) {
+        const size = readModelFileBytes(saved);
+        if (size >= minBytesForSource(saved)) {
           return saved;
         }
       } else {
@@ -68,6 +69,7 @@ export async function clearDownloadProgress(): Promise<void> {
 /**
  * Download with retries. HuggingFace CDN often closes mid-transfer
  * (`unexpected end of stream`); clear partial cache and try again.
+ * Note: retries are full re-downloads (no HTTP Range resume yet).
  */
 export async function downloadModelWithRetry(
   url: string,
@@ -77,21 +79,34 @@ export async function downloadModelWithRetry(
   } = {}
 ): Promise<string> {
   const attempts = options.attempts ?? 3;
+  const minBytes = minBytesForSource(url);
   let lastError: unknown;
   for (let i = 1; i <= attempts; i++) {
     try {
       if (ModelRegistry.isCached(url)) {
         const path = ModelRegistry.getFilePath(url);
-        const size = ModelRegistry.getFileSizeBytes(path);
-        if (size > 1024 * 1024) {
+        const size = readModelFileBytes(path);
+        if (size >= minBytes) {
           options.onProgress?.(1);
           return path;
         }
         ModelRegistry.deleteFile(url);
       }
-      return await ModelRegistry.resolveModel(url, {
+      const path = await ModelRegistry.resolveModel(url, {
         onProgress: options.onProgress,
       });
+      const size = readModelFileBytes(path);
+      if (size < minBytes) {
+        try {
+          ModelRegistry.deleteFile(url);
+        } catch {
+          // ignore
+        }
+        throw new Error(
+          `Download incomplete (${(size / (1024 * 1024)).toFixed(0)} MB, need ≥${(minBytes / (1024 * 1024)).toFixed(0)} MB)`
+        );
+      }
+      return path;
     } catch (err) {
       lastError = err;
       try {

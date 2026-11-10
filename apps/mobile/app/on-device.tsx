@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,12 +15,17 @@ import {
   type DeviceCapabilities,
   type PolicyDecision,
 } from '@involvex/ctrl-s';
-import { ModelRegistry, useModel } from 'react-native-litert-lm';
+import { ModelRegistry } from 'react-native-litert-lm';
 import {
   backendForPolicy,
   probeDeviceCapabilities,
 } from '../src/device/capabilities';
 import { saveGeneratorMode } from '../src/device/inference-mode';
+import {
+  ensureLitertLoaded,
+  unloadLitertEngine,
+} from '../src/device/litert-engine';
+import { assertModelFileUsable } from '../src/device/model-size';
 import {
   DEFAULT_MODEL_URL,
   describeDownloadError,
@@ -44,9 +49,9 @@ import {
 } from '../src/ui';
 
 /**
- * Mounted only after the user taps Load model.
- * autoLoad is always false — nativeCreateConversation aborts the process if
- * load runs with a bad/partial file (JNI mid == null).
+ * Loads via the process-wide LiteRT singleton (never useModel here — chat
+ * uses the same singleton; dual engines OOM phones).
+ * Partial/bad files abort native createConversation — size-gated before load.
  */
 function ModelEngineHost({
   pathOrUrl,
@@ -63,54 +68,50 @@ function ModelEngineHost({
   onFailed: (message: string) => void;
   onUnloadRequest: () => void;
 }) {
-  const engine = useModel(pathOrUrl, {
-    backend,
-    autoLoad: false,
-    enableMemoryTracking: true,
-    systemPrompt: 'You are ctrl on-device assistant. Be concise.',
-    maxOutputTokens: 512,
-    maxContextTokens: 2048,
-  });
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const onReprobeRef = useRef(onReprobe);
+  const onLoadedRef = useRef(onLoaded);
+  const onFailedRef = useRef(onFailed);
+
+  useEffect(() => {
+    onReprobeRef.current = onReprobe;
+    onLoadedRef.current = onLoaded;
+    onFailedRef.current = onFailed;
+  }, [onFailed, onLoaded, onReprobe]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setLoading(true);
+      setError(null);
       try {
-        if (isRemoteModelUrl(pathOrUrl)) {
-          onFailed(
-            'Download the model first — Load only works on a local path.'
-          );
-          return;
-        }
-        const size = ModelRegistry.getFileSizeBytes(pathOrUrl);
-        if (size <= 0) {
-          onFailed(
-            `File not readable (${pathOrUrl}). Re-import the .litertlm file.`
-          );
-          return;
-        }
-        const fresh = await onReprobe();
+        const size = assertModelFileUsable(pathOrUrl);
+        const fresh = await onReprobeRef.current();
         if (fresh && !fresh.allowed) {
-          onFailed(
+          onFailedRef.current(
             `policy blocked: ${fresh.reasons.join('; ') || 'not allowed'}`
           );
           return;
         }
-        if (!engine.isReady) {
-          await engine.load();
-        }
+        await ensureLitertLoaded({
+          path: pathOrUrl,
+          backend,
+          systemPrompt: 'You are ctrl on-device assistant. Be concise.',
+        });
         if (cancelled) {
           return;
         }
-        const mem = engine.memoryEstimate?.verdict
-          ? ` · memory ${engine.memoryEstimate.verdict}`
-          : '';
-        onLoaded(`model ready · ${(size / (1024 * 1024)).toFixed(0)} MB${mem}`);
+        setReady(true);
+        onLoadedRef.current(
+          `model ready · ${(size / (1024 * 1024)).toFixed(0)} MB`
+        );
       } catch (err: unknown) {
         if (!cancelled) {
-          onFailed(err instanceof Error ? err.message : String(err));
+          const message = err instanceof Error ? err.message : String(err);
+          setError(message);
+          onFailedRef.current(message);
         }
       } finally {
         if (!cancelled) {
@@ -121,21 +122,14 @@ function ModelEngineHost({
     return () => {
       cancelled = true;
     };
-    // Mount once per path — intentional.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathOrUrl]);
+  }, [backend, pathOrUrl]);
 
   return (
     <View style={styles.block}>
       {loading ? (
         <ActivityIndicator color={colors.accent} />
-      ) : engine.isReady ? (
-        <Text style={styles.meta}>
-          engine loaded
-          {engine.memoryEstimate?.verdict
-            ? ` · ${engine.memoryEstimate.verdict}`
-            : ''}
-        </Text>
+      ) : ready ? (
+        <Text style={styles.meta}>engine loaded (shared with chat)</Text>
       ) : (
         <Text style={styles.meta}>engine idle</Text>
       )}
@@ -144,17 +138,18 @@ function ModelEngineHost({
         onPress={() => {
           void (async () => {
             try {
-              await engine.deleteModel();
+              await unloadLitertEngine();
             } catch {
               // ignore
             }
+            setReady(false);
             onUnloadRequest();
           })();
         }}
       >
-        <Text style={styles.link}>unload engine / switch source</Text>
+        <Text style={styles.link}>unload engine (keeps file on disk)</Text>
       </Pressable>
-      {engine.error ? <Text style={styles.error}>{engine.error}</Text> : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
 }
@@ -276,13 +271,7 @@ function ModelSourcePanel({
       return;
     }
     try {
-      const size = ModelRegistry.getFileSizeBytes(pathOrUrl);
-      if (size <= 0) {
-        setLocalError(
-          `File not readable (${pathOrUrl}). Re-import the .litertlm file.`
-        );
-        return;
-      }
+      assertModelFileUsable(pathOrUrl);
     } catch (err: unknown) {
       setLocalError(err instanceof Error ? err.message : String(err));
       return;
@@ -300,8 +289,9 @@ function ModelSourcePanel({
       </Text>
       <Text style={styles.meta}>source · {sourceLabel}</Text>
       <Text style={styles.meta}>
-        Engine stays unloaded until you tap Load model (avoids native crash on
-        open).
+        Engine stays unloaded until you tap Load model. Incomplete downloads
+        (&lt;2 GB for Gemma E2B) are rejected before native load. One shared
+        engine with Chat — unload frees RAM without deleting the file.
       </Text>
 
       {remote ? (
@@ -317,8 +307,8 @@ function ModelSourcePanel({
               {downloading
                 ? `downloading ${downloadPct}%`
                 : savedProgress > 0 && savedProgress < 1
-                  ? `resume download (${Math.round(savedProgress * 100)}%)`
-                  : 'download (~2.6 GB, 3 retries)'}
+                  ? `retry full download (${Math.round(savedProgress * 100)}% was progress UI only)`
+                  : 'download (~2.6 GB, 3 full retries)'}
             </Text>
           )}
         </Pressable>
