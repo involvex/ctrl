@@ -100,3 +100,4 @@ Still parked:
 1. Device↔host incremental sync beyond backups
 2. Rust `agentd` / monetization experiments
 3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
+4. Channel-inbound tool approvals (interactive chat clients now approve; channel runs still time out / deny without a host listener)

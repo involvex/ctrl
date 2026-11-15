@@ -47,6 +47,7 @@ import {
   restoreBackupInputSchema,
   createChannelInputSchema,
   createConversationInputSchema,
+  renameConversationInputSchema,
   createMcpServerInputSchema,
   createMemoryInputSchema,
   createMessageInputSchema,
@@ -143,7 +144,7 @@ function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') ?? '*';
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     Vary: 'Origin',
   };
@@ -1059,6 +1060,29 @@ export async function startServer(): Promise<StartedGateway> {
               return json(req, conversation, 201);
             } catch {
               return json(req, { error: 'workspace not found' }, 404);
+            }
+          }
+        }
+
+        const conversationById = /^\/api\/v1\/conversations\/([^/]+)$/.exec(
+          url.pathname
+        );
+        if (conversationById) {
+          const conversationId = conversationById[1]!;
+          if (req.method === 'PATCH') {
+            const existing = store.getConversation(conversationId);
+            if (!existing) {
+              return json(req, { error: 'conversation not found' }, 404);
+            }
+            const body: unknown = await req.json();
+            const input = renameConversationInputSchema.parse(body);
+            try {
+              return json(
+                req,
+                store.renameConversation(conversationId, input.title)
+              );
+            } catch {
+              return json(req, { error: 'conversation not found' }, 404);
             }
           }
         }

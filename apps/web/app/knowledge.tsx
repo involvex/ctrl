@@ -13,6 +13,7 @@ import {
   createMemory,
   inspectContext,
   listMemory,
+  reindexKnowledge,
   searchKnowledge,
   uploadAttachmentText,
   type KnowledgeHit,
@@ -171,6 +172,33 @@ export default function KnowledgeScreen() {
         ) : (
           <Text style={styles.buttonText}>refresh</Text>
         )}
+      </Pressable>
+      <Pressable
+        style={styles.button}
+        disabled={busy || !gatewayUrl || !workspaceId}
+        onPress={() => {
+          if (!gatewayUrl || !workspaceId) {
+            return;
+          }
+          void (async () => {
+            setBusy(true);
+            try {
+              const result = await reindexKnowledge(gatewayUrl, workspaceId, {
+                force: true,
+              });
+              setStatus(
+                `reindex · indexed ${result.indexed}/${result.totalChunks} · skipped ${result.skipped}`
+              );
+              await refresh();
+            } catch (err) {
+              setStatus(err instanceof Error ? err.message : String(err));
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+      >
+        <Text style={styles.buttonText}>reindex embeddings</Text>
       </Pressable>
       {hits.map((hit) => (
         <View key={hit.chunkId} style={styles.panel}>

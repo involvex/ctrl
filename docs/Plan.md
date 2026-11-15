@@ -294,4 +294,9 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Discord Bot Gateway WebSocket (`MESSAGE_CREATE`) → `onInbound`; Slack Socket Mode (`apps.connections.open` + Events API envelopes) → `onInbound`.
     - Config: Discord `botToken`; Slack `botToken` + `appToken` (xapp). Without tokens, create/start/send stay no-op for contracts.
     - Desktop/mobile/web channel create UI for all four kinds; `running` = inbound connected.
+20. Client parity (done this slice):
+    - Mobile cascade + web chat handle `approval.requested` / `approval.resolve` (desktop already did).
+    - Desktop exclusive conversations panel: list / create / switch / rename (`PATCH /api/v1/conversations/:id`).
+    - Mobile/web: knowledge reindex + MCP reload buttons.
+    - Out of this pass: channel-inbound approvals (no chat WS client on those runs).
     - Still parked: incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

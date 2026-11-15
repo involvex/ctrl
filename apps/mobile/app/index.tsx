@@ -64,7 +64,11 @@ import {
   attachTextFileToChat,
   formatAttachmentDraft,
 } from '../src/chat/attach-text';
-import { isCancelledError, runProviderCascade } from '../src/providers/cascade';
+import {
+  isCancelledError,
+  runProviderCascade,
+  type ApprovalRequest,
+} from '../src/providers/cascade';
 import {
   loadProviderStack,
   providersForGenerator,
@@ -153,12 +157,17 @@ export default function ChatHomeScreen() {
   const [litertStatus, setLitertStatus] = useState<LitertEngineStatus | null>(
     null
   );
+  const [pendingApproval, setPendingApproval] =
+    useState<ApprovalRequest | null>(null);
   const gatewayConversationIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
   const brainRef = useRef<BrainState | null>(null);
   const syncingRef = useRef(false);
   const litertGenerateRef = useRef<LitertGenerate | null>(null);
   const cancelCascadeRef = useRef(false);
+  const approvalResolverRef = useRef<
+    ((decision: 'approved' | 'denied') => void) | null
+  >(null);
 
   const systemPrompt = useMemo(
     () => (agent ? buildSystemPrompt(agent) : 'You are ctrl.'),
@@ -324,6 +333,11 @@ export default function ChatHomeScreen() {
 
   const stop = useCallback(() => {
     cancelCascadeRef.current = true;
+    if (approvalResolverRef.current) {
+      approvalResolverRef.current('denied');
+      approvalResolverRef.current = null;
+    }
+    setPendingApproval(null);
     const session = sessionRef.current;
     if (session) {
       try {
@@ -339,6 +353,12 @@ export default function ChatHomeScreen() {
     }
     setStreaming('');
     setEventStatus('cancelled');
+  }, []);
+
+  const decideApproval = useCallback((decision: 'approved' | 'denied') => {
+    approvalResolverRef.current?.(decision);
+    approvalResolverRef.current = null;
+    setPendingApproval(null);
   }, []);
 
   const attachFile = useCallback(() => {
@@ -374,6 +394,8 @@ export default function ChatHomeScreen() {
     setBusy(true);
     setStreaming('');
     setEventStatus(null);
+    setPendingApproval(null);
+    approvalResolverRef.current = null;
     cancelCascadeRef.current = false;
 
     void (async () => {
@@ -424,6 +446,16 @@ export default function ChatHomeScreen() {
           gatewayUrl: saved?.gatewayUrl ?? null,
           systemPrefix: buildSystemPrompt(agentCfg),
           isCancelled: () => cancelCascadeRef.current,
+          onApprovalRequested: (req) =>
+            new Promise<'approved' | 'denied'>((resolve) => {
+              if (cancelCascadeRef.current) {
+                resolve('denied');
+                return;
+              }
+              setPendingApproval(req);
+              setEventStatus(`approve tool · ${req.call.name}`);
+              approvalResolverRef.current = resolve;
+            }),
         });
 
         if (cancelCascadeRef.current) {
@@ -457,12 +489,15 @@ export default function ChatHomeScreen() {
         }
       } catch (err: unknown) {
         setStreaming('');
+        setPendingApproval(null);
+        approvalResolverRef.current = null;
         if (isCancelledError(err) || cancelCascadeRef.current) {
           setEventStatus('cancelled');
         } else {
           setEventStatus(err instanceof Error ? err.message : String(err));
         }
       } finally {
+        setPendingApproval(null);
         setBusy(false);
       }
     })();
@@ -651,6 +686,29 @@ export default function ChatHomeScreen() {
         }
       />
 
+      {pendingApproval ? (
+        <View style={styles.approval}>
+          <Text style={styles.approvalTitle}>
+            approve tool {pendingApproval.call.name} [{pendingApproval.risk}]
+          </Text>
+          <Text style={styles.approvalArgs}>
+            {JSON.stringify(pendingApproval.call.arguments, null, 2)}
+          </Text>
+          <View style={styles.approvalActions}>
+            <PrimaryButton
+              label="approve"
+              onPress={() => decideApproval('approved')}
+              style={styles.approvalBtn}
+            />
+            <GhostButton
+              label="deny"
+              onPress={() => decideApproval('denied')}
+              style={styles.approvalBtn}
+            />
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.composer}>
         <GhostButton
           label="file"
@@ -798,4 +856,26 @@ const styles = StyleSheet.create({
   },
   send: { paddingHorizontal: 16, justifyContent: 'center' },
   attach: { paddingHorizontal: 10, justifyContent: 'center' },
+  approval: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.panel,
+    gap: 8,
+  },
+  approvalTitle: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  approvalArgs: {
+    color: colors.muted,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+  },
+  approvalActions: { flexDirection: 'row', gap: 8 },
+  approvalBtn: { paddingHorizontal: 14 },
 });

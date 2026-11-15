@@ -15,6 +15,7 @@ import {
   createMemory,
   inspectContext,
   listMemory,
+  reindexKnowledge,
   searchKnowledge,
   updateMemory,
   uploadAttachmentText,
@@ -161,6 +162,32 @@ export default function KnowledgeScreen() {
           }}
         >
           <Text style={styles.buttonText}>ingest</Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.ghost, busy && styles.buttonDisabled]}
+          disabled={busy || !gatewayUrl || !workspaceId}
+          onPress={() => {
+            if (!gatewayUrl || !workspaceId) {
+              return;
+            }
+            setBusy(true);
+            void reindexKnowledge(gatewayUrl, workspaceId, { force: true })
+              .then((result) => {
+                setStatus(
+                  `reindex · indexed ${result.indexed}/${result.totalChunks} · skipped ${result.skipped}`
+                );
+                return refresh();
+              })
+              .catch((err: unknown) => {
+                setStatus(err instanceof Error ? err.message : String(err));
+                setBusy(false);
+              });
+          }}
+        >
+          <Text style={styles.link}>
+            {busy ? '…' : 'reindex embeddings (force)'}
+          </Text>
         </Pressable>
 
         <Text style={styles.label}>FTS search / context</Text>

@@ -14,6 +14,7 @@ import {
   listMcpServers,
   listSkills,
   listTools,
+  reloadMcp,
   updateSkill,
   type McpServerInfo,
   type SkillManifest,
@@ -141,6 +142,28 @@ export default function ToolsScreen() {
         ) : null}
 
         <Text style={styles.label}>MCP servers</Text>
+        <Pressable
+          onPress={() => {
+            if (!gatewayUrl || busy) {
+              return;
+            }
+            void (async () => {
+              setBusy(true);
+              try {
+                const result = await reloadMcp(gatewayUrl);
+                setStatus(
+                  `mcp reload · ${result.servers.length} servers · ${result.tools.length} tools`
+                );
+                await refresh();
+              } catch (err) {
+                setStatus(err instanceof Error ? err.message : String(err));
+                setBusy(false);
+              }
+            })();
+          }}
+        >
+          <Text style={styles.link}>{busy ? '…' : 'reload MCP servers'}</Text>
+        </Pressable>
         {busy && servers.length === 0 ? (
           <ActivityIndicator color="#00ff66" />
         ) : null}

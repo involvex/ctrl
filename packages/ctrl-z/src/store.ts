@@ -169,6 +169,18 @@ export class Store {
     return row ? mapConversation(row) : null;
   }
 
+  renameConversation(conversationId: string, title: string): Conversation {
+    const existing = this.getConversation(conversationId);
+    if (!existing) {
+      throw new Error('conversation not found');
+    }
+    const now = Date.now();
+    this.db
+      .query(`UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?`)
+      .run(title, now, conversationId);
+    return { ...existing, title, updatedAt: now };
+  }
+
   listMessages(conversationId: string): Message[] {
     const rows = this.db
       .query<MessageRow, [string]>(

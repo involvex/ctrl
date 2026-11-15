@@ -508,6 +508,25 @@ export async function createConversation(
   return conversationSchema.parse(await readJson(res));
 }
 
+export async function renameConversation(
+  baseUrl: string,
+  conversationId: string,
+  title: string
+): Promise<Conversation> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/conversations/${conversationId}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ title }),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`renameConversation failed: ${res.status}`);
+  }
+  return conversationSchema.parse(await readJson(res));
+}
+
 export async function listMessages(
   baseUrl: string,
   conversationId: string

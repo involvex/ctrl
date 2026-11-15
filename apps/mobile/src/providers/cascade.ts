@@ -3,12 +3,20 @@ import {
   updateProviderConfig,
   type RunSession,
 } from '@involvex/ctrl-i';
+import type { ToolCall } from '@involvex/ctrl-s';
 import type { MutableRefObject } from 'react';
 import type { ProviderEntry } from './stack';
 
 export const CANCELLED_ERROR = 'cancelled';
 
 export type CascadeGenerate = (prompt: string) => Promise<string>;
+
+export type ApprovalRequest = {
+  approvalId: string;
+  call: ToolCall;
+  risk: 'low' | 'high';
+  timeoutMs: number;
+};
 
 export type CascadeCallbacks = {
   onStatus: (line: string) => void;
@@ -21,6 +29,13 @@ export type CascadeCallbacks = {
   /** Prefixed onto host/cloud turns (LiteRT uses engine systemPrompt). */
   systemPrefix?: string;
   isCancelled?: () => boolean;
+  /**
+   * When the gateway agent needs tool approval, resolve with approve/deny.
+   * Missing callback auto-denies so the run does not hang until timeout.
+   */
+  onApprovalRequested?: (
+    req: ApprovalRequest
+  ) => Promise<'approved' | 'denied'>;
 };
 
 export type CascadeResult = {
@@ -72,17 +87,23 @@ function abortGatewaySession(
   sessionRef.current = null;
 }
 
-async function streamGatewayReply(
+type StreamConnect = typeof streamChat;
+
+/** @internal exported for unit tests */
+export async function streamGatewayReply(
   baseUrl: string,
   conversationId: string,
   content: string,
   onDelta: (text: string) => void,
   sessionRef: MutableRefObject<RunSession | null>,
-  isCancelled?: () => boolean
+  isCancelled?: () => boolean,
+  onApprovalRequested?: CascadeCallbacks['onApprovalRequested'],
+  connect: StreamConnect = streamChat
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let assembled = '';
     let settled = false;
+    let approvalInFlight: Promise<void> | null = null;
     abortGatewaySession(sessionRef);
 
     const settle = (fn: () => void) => {
@@ -106,7 +127,7 @@ async function streamGatewayReply(
       });
     }, 200);
 
-    sessionRef.current = streamChat(baseUrl, conversationId, content, {
+    sessionRef.current = connect(baseUrl, conversationId, content, {
       onEvent: (event) => {
         if (settled) {
           return;
@@ -122,10 +143,43 @@ async function streamGatewayReply(
           assembled += event.text;
           onDelta(assembled);
         }
-        if (event.type === 'run.completed') {
-          settle(() => {
-            resolve(assembled || '(empty reply)');
+        if (event.type === 'approval.requested') {
+          const session = sessionRef.current;
+          if (!session) {
+            return;
+          }
+          const req: ApprovalRequest = {
+            approvalId: event.approvalId,
+            call: event.call,
+            risk: event.risk,
+            timeoutMs: event.timeoutMs,
+          };
+          approvalInFlight = (async () => {
+            const decision = onApprovalRequested
+              ? await onApprovalRequested(req)
+              : 'denied';
+            if (settled || isCancelled?.()) {
+              return;
+            }
+            session.resolveApproval(event.approvalId, decision);
+          })().catch((err: unknown) => {
+            settle(() => {
+              reject(err instanceof Error ? err : new Error(String(err)));
+            });
           });
+          return;
+        }
+        if (event.type === 'run.completed') {
+          const finish = () => {
+            settle(() => {
+              resolve(assembled || '(empty reply)');
+            });
+          };
+          if (approvalInFlight) {
+            void approvalInFlight.finally(finish);
+          } else {
+            finish();
+          }
         }
         if (event.type === 'run.failed') {
           settle(() => {
@@ -221,7 +275,8 @@ export async function runProviderCascade(
         outbound,
         cb.onDelta,
         cb.sessionRef,
-        cb.isCancelled
+        cb.isCancelled,
+        cb.onApprovalRequested
       );
       throwIfCancelled(cb.isCancelled);
       return {

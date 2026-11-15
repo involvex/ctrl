@@ -6,6 +6,7 @@ import {
   createWorkspace,
   deleteChannel,
   exportWorkspace,
+  renameConversation,
   getEmbeddingStatus,
   getProviderStatus,
   importWorkspace,
@@ -76,7 +77,14 @@ function toKnowledgeSearchMode(value: string): KnowledgeSearchMode {
 
 /** Exclusive side panels — opening one closes the others. */
 type DesktopPanel =
-  'host' | 'knowledge' | 'channels' | 'providers' | 'tools' | 'backups' | null;
+  | 'host'
+  | 'conversations'
+  | 'knowledge'
+  | 'channels'
+  | 'providers'
+  | 'tools'
+  | 'backups'
+  | null;
 
 type DesktopApi = {
   platform: string;
@@ -153,6 +161,14 @@ export function App() {
   const [lanUrls, setLanUrls] = useState<string[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [conversationItems, setConversationItems] = useState<Conversation[]>(
+    []
+  );
+  const [conversationTitleDraft, setConversationTitleDraft] = useState('');
+  const [renameConversationId, setRenameConversationId] = useState<
+    string | null
+  >(null);
+  const [renameDraft, setRenameDraft] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [streaming, setStreaming] = useState('');
@@ -231,6 +247,7 @@ export function App() {
   const [mcpCommandDraft, setMcpCommandDraft] = useState('');
   const [mcpArgsDraft, setMcpArgsDraft] = useState('');
   const hostOpen = openPanel === 'host';
+  const conversationsOpen = openPanel === 'conversations';
   const knowledgeOpen = openPanel === 'knowledge';
   const channelsOpen = openPanel === 'channels';
   const providersOpen = openPanel === 'providers';
@@ -371,14 +388,16 @@ export function App() {
             return;
           }
           setWorkspace(ws);
-          const conversations = await listConversations(gatewayUrl, ws.id);
+          let conversations = await listConversations(gatewayUrl, ws.id);
           let cv = conversations[0] ?? null;
           if (!cv) {
             cv = await createConversation(gatewayUrl, ws.id, 'Chat');
+            conversations = await listConversations(gatewayUrl, ws.id);
           }
           if (cancelled) {
             return;
           }
+          setConversationItems(conversations);
           setConversation(cv);
           setMessages(await listMessages(gatewayUrl, cv.id));
           setError(null);
@@ -413,6 +432,86 @@ export function App() {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [openPanel]);
+
+  const refreshConversations = useCallback(async () => {
+    if (!workspace || !gatewayUrl.startsWith('http')) {
+      return;
+    }
+    try {
+      const items = await listConversations(gatewayUrl, workspace.id);
+      setConversationItems(items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [gatewayUrl, workspace]);
+
+  const switchConversation = useCallback(
+    async (next: Conversation) => {
+      if (busy) {
+        setError('finish or stop the current run before switching chats');
+        return;
+      }
+      if (!gatewayUrl.startsWith('http')) {
+        return;
+      }
+      try {
+        setConversation(next);
+        setMessages(await listMessages(gatewayUrl, next.id));
+        setStreaming('');
+        setPendingApproval(null);
+        setError(null);
+        setOpenPanel(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [busy, gatewayUrl]
+  );
+
+  const createDesktopConversation = useCallback(async () => {
+    if (!workspace || !gatewayUrl.startsWith('http') || busy) {
+      if (busy) {
+        setError('finish or stop the current run before creating a chat');
+      }
+      return;
+    }
+    try {
+      const title = conversationTitleDraft.trim() || 'New chat';
+      const created = await createConversation(gatewayUrl, workspace.id, title);
+      setConversationTitleDraft('');
+      const items = await listConversations(gatewayUrl, workspace.id);
+      setConversationItems(items);
+      await switchConversation(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [busy, conversationTitleDraft, gatewayUrl, switchConversation, workspace]);
+
+  const submitRenameConversation = useCallback(async () => {
+    if (!renameConversationId || !gatewayUrl.startsWith('http')) {
+      return;
+    }
+    const title = renameDraft.trim();
+    if (!title) {
+      return;
+    }
+    try {
+      const updated = await renameConversation(
+        gatewayUrl,
+        renameConversationId,
+        title
+      );
+      setRenameConversationId(null);
+      setRenameDraft('');
+      await refreshConversations();
+      setConversation((prev) =>
+        prev && prev.id === updated.id ? updated : prev
+      );
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [gatewayUrl, refreshConversations, renameConversationId, renameDraft]);
 
   const refreshModels = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {
@@ -958,6 +1057,7 @@ export function App() {
         <h1 className="brand">ctrl</h1>
         <p className="meta">
           gateway [{status}] → {gatewayUrl}
+          {conversation ? ` · ${conversation.title}` : ''}
         </p>
         {lanUrls.length > 0 ? (
           <p className="meta lan">LAN: {lanUrls.join(' · ')}</p>
@@ -973,6 +1073,17 @@ export function App() {
             }}
           >
             host
+          </button>
+          <button
+            type="button"
+            className={`ghost-btn${conversationsOpen ? ' ghost-btn-active' : ''}`}
+            onClick={() => {
+              togglePanel('conversations', () => {
+                void refreshConversations();
+              });
+            }}
+          >
+            chats
           </button>
           <button
             type="button"
@@ -1054,6 +1165,103 @@ export function App() {
           />
         </div>
       </header>
+
+      {conversationsOpen ? (
+        <aside className="host-panel knowledge-panel host-panel-scroll">
+          <section className="host-section">
+            <p className="host-title">conversations</p>
+            <p className="meta">
+              Host threads in this workspace. Switching is blocked while a run
+              is busy.
+            </p>
+            <div className="host-row">
+              <input
+                className="host-input"
+                value={conversationTitleDraft}
+                onChange={(e) => {
+                  setConversationTitleDraft(e.target.value);
+                }}
+                placeholder="new chat title"
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="demo-btn"
+                disabled={busy || !workspace}
+                onClick={() => {
+                  void createDesktopConversation();
+                }}
+              >
+                new
+              </button>
+            </div>
+            <ul className="host-card-list">
+              {conversationItems.map((item) => (
+                <li key={item.id} className="host-card">
+                  {renameConversationId === item.id ? (
+                    <div className="host-row">
+                      <input
+                        className="host-input"
+                        value={renameDraft}
+                        onChange={(e) => {
+                          setRenameDraft(e.target.value);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            void submitRenameConversation();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="demo-btn"
+                        onClick={() => {
+                          void submitRenameConversation();
+                        }}
+                      >
+                        save
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => {
+                          setRenameConversationId(null);
+                          setRenameDraft('');
+                        }}
+                      >
+                        cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="host-row">
+                      <button
+                        type="button"
+                        className={`ghost-btn${conversation?.id === item.id ? ' ghost-btn-active' : ''}`}
+                        disabled={busy && conversation?.id !== item.id}
+                        onClick={() => {
+                          void switchConversation(item);
+                        }}
+                      >
+                        {item.title}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-btn"
+                        onClick={() => {
+                          setRenameConversationId(item.id);
+                          setRenameDraft(item.title);
+                        }}
+                      >
+                        rename
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </aside>
+      ) : null}
 
       {hostOpen ? (
         <aside className="host-panel host-panel-scroll">
@@ -1746,8 +1954,8 @@ export function App() {
           <section className="host-section">
             <p className="host-title">add channel</p>
             <p className="meta">
-              webhook · telegram long-poll · discord gateway · slack socket
-              mode · status running = inbound connected
+              webhook · telegram long-poll · discord gateway · slack socket mode
+              · status running = inbound connected
             </p>
             <div className="host-row">
               <select

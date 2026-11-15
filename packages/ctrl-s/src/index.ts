@@ -20,6 +20,7 @@ export {
   messageRoleSchema,
   createWorkspaceInputSchema,
   createConversationInputSchema,
+  renameConversationInputSchema,
   createMessageInputSchema,
   upsertMessagesInputSchema,
   workspaceExportSchema,

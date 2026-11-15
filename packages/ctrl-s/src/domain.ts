@@ -42,6 +42,10 @@ export const createConversationInputSchema = z.object({
   title: z.string().min(1).max(200).optional(),
 });
 
+export const renameConversationInputSchema = z.object({
+  title: z.string().min(1).max(200),
+});
+
 export const createMessageInputSchema = z.object({
   role: messageRoleSchema,
   content: z.string().min(1),

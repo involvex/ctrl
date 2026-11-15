@@ -21,6 +21,7 @@ import {
   updateProviderConfig,
   type RunSession,
 } from '@involvex/ctrl-i';
+import type { ToolCall } from '@involvex/ctrl-s';
 import {
   generatorLabel,
   loadGeneratorMode,
@@ -42,6 +43,13 @@ import { loadSavedConnection } from '../src/connection/storage';
 
 const GENERATORS: WebGeneratorMode[] = ['gateway', 'zen'];
 
+type PendingApproval = {
+  approvalId: string;
+  call: ToolCall;
+  risk: 'low' | 'high';
+  timeoutMs: number;
+};
+
 export default function ChatScreen() {
   const router = useRouter();
   const [brain, setBrain] = useState<BrainState | null>(null);
@@ -53,6 +61,8 @@ export default function ChatScreen() {
   const [syncing, setSyncing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [hostOnline, setHostOnline] = useState<boolean | null>(null);
+  const [pendingApproval, setPendingApproval] =
+    useState<PendingApproval | null>(null);
   const gatewayConversationIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
   const brainRef = useRef<BrainState | null>(null);
@@ -201,6 +211,17 @@ export default function ChatScreen() {
     [persist, refreshHost]
   );
 
+  const decideApproval = useCallback(
+    (decision: 'approved' | 'denied') => {
+      if (!pendingApproval || !sessionRef.current) {
+        return;
+      }
+      sessionRef.current.resolveApproval(pendingApproval.approvalId, decision);
+      setPendingApproval(null);
+    },
+    [pendingApproval]
+  );
+
   const send = useCallback(() => {
     const content = draft.trim();
     const current = brainRef.current;
@@ -210,6 +231,7 @@ export default function ChatScreen() {
     setDraft('');
     setBusy(true);
     setStreaming('');
+    setPendingApproval(null);
 
     void (async () => {
       let next = appendLocalMessage(current, {
@@ -252,8 +274,21 @@ export default function ChatScreen() {
                 assembled += event.text;
                 setStreaming(assembled);
               }
+              if (event.type === 'approval.requested') {
+                setPendingApproval({
+                  approvalId: event.approvalId,
+                  call: event.call,
+                  risk: event.risk,
+                  timeoutMs: event.timeoutMs,
+                });
+                setStatus(`approve tool · ${event.call.name}`);
+              }
+              if (event.type === 'approval.resolved') {
+                setPendingApproval(null);
+              }
               if (event.type === 'run.completed') {
                 setBusy(false);
+                setPendingApproval(null);
                 void (async () => {
                   const base = brainRef.current ?? next;
                   const withAssistant = appendLocalMessage(base, {
@@ -269,18 +304,27 @@ export default function ChatScreen() {
               }
               if (event.type === 'run.failed') {
                 setBusy(false);
+                setPendingApproval(null);
                 setStatus(event.error.message);
+                setStreaming('');
+              }
+              if (event.type === 'run.cancelled') {
+                setBusy(false);
+                setPendingApproval(null);
+                setStatus(event.reason ?? 'cancelled');
                 setStreaming('');
               }
             },
             onError: (err) => {
               setBusy(false);
+              setPendingApproval(null);
               setStatus(err.message);
             },
           }
         );
       } catch (err) {
         setBusy(false);
+        setPendingApproval(null);
         setStatus(err instanceof Error ? err.message : String(err));
       }
     })();
@@ -385,6 +429,31 @@ export default function ChatScreen() {
           </Text>
         }
       />
+
+      {pendingApproval ? (
+        <View style={styles.approval}>
+          <Text style={styles.approvalTitle}>
+            approve tool {pendingApproval.call.name} [{pendingApproval.risk}]
+          </Text>
+          <Text style={styles.approvalArgs}>
+            {JSON.stringify(pendingApproval.call.arguments, null, 2)}
+          </Text>
+          <View style={styles.approvalActions}>
+            <Pressable
+              style={styles.approveBtn}
+              onPress={() => decideApproval('approved')}
+            >
+              <Text style={styles.approveText}>approve</Text>
+            </Pressable>
+            <Pressable
+              style={styles.denyBtn}
+              onPress={() => decideApproval('denied')}
+            >
+              <Text style={styles.denyText}>deny</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.composer}>
         <TextInput
@@ -551,6 +620,46 @@ const styles = StyleSheet.create({
   },
   sheetRowActive: { borderColor: '#00ff66' },
   sheetRowTitle: {
+    color: '#00ff66',
+    fontFamily: 'monospace',
+    fontWeight: '700',
+  },
+  approval: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    backgroundColor: '#0a0f0c',
+    padding: 12,
+    gap: 8,
+  },
+  approvalTitle: {
+    color: '#00ff66',
+    fontFamily: 'monospace',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  approvalArgs: {
+    color: '#6b7f72',
+    fontFamily: 'monospace',
+    fontSize: 11,
+  },
+  approvalActions: { flexDirection: 'row', gap: 8 },
+  approveBtn: {
+    backgroundColor: '#00ff66',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  approveText: {
+    color: '#000',
+    fontFamily: 'monospace',
+    fontWeight: '700',
+  },
+  denyBtn: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  denyText: {
     color: '#00ff66',
     fontFamily: 'monospace',
     fontWeight: '700',

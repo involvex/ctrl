@@ -268,20 +268,22 @@ async function runGateway(
               heartbeatTimer = setInterval(sendHeartbeat, interval);
             }, jitter);
 
-            ws.send(
-              JSON.stringify({
-                op: 2,
-                d: {
-                  token,
-                  intents: GATEWAY_INTENTS,
-                  properties: {
-                    os: process.platform,
-                    browser: 'ctrl-c',
-                    device: 'ctrl-c',
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(
+                JSON.stringify({
+                  op: 2,
+                  d: {
+                    token,
+                    intents: GATEWAY_INTENTS,
+                    properties: {
+                      os: process.platform,
+                      browser: 'ctrl-c',
+                      device: 'ctrl-c',
+                    },
                   },
-                },
-              })
-            );
+                })
+              );
+            }
             return;
           }
 
@@ -434,17 +436,14 @@ export const discordAdapter: ChannelAdapter = {
     if (!channelId || !token) {
       throw new Error('discord: missing channel id or bot token');
     }
-    const res = await fetch(
-      `${DISCORD_API}/channels/${channelId}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bot ${token}`,
-        },
-        body: JSON.stringify({ content: text }),
-      }
-    );
+    const res = await fetch(`${DISCORD_API}/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bot ${token}`,
+      },
+      body: JSON.stringify({ content: text }),
+    });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(
