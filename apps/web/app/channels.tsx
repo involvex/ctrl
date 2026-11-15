@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {
   createChannel,
+  deleteChannel,
   listChannels,
   type ChannelPublic,
 } from '@involvex/ctrl-i';
@@ -238,6 +239,27 @@ export default function ChannelsScreen() {
               {ch.kind} · {ch.name} · {ch.status}
               {ch.lastError ? ` · ${ch.lastError}` : ''}
             </Text>
+            <Pressable
+              style={styles.ghostBtn}
+              disabled={busy || !gatewayUrl || !workspaceId}
+              onPress={() => {
+                if (!gatewayUrl || !workspaceId) {
+                  return;
+                }
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    await deleteChannel(gatewayUrl, ch.id);
+                    await refresh();
+                  } catch (err) {
+                    setStatus(err instanceof Error ? err.message : String(err));
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              <Text style={styles.ghostText}>delete</Text>
+            </Pressable>
           </View>
         ))
       )}
@@ -300,5 +322,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f3328',
     padding: 12,
+    gap: 8,
   },
+  ghostBtn: {
+    borderWidth: 1,
+    borderColor: '#1f3328',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  ghostText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 11 },
 });

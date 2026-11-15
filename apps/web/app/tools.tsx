@@ -6,14 +6,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import {
+  deleteMcpServer,
   listMcpServers,
   listSkills,
   listTools,
   reloadMcp,
   updateSkill,
+  upsertMcpServer,
   type McpServerInfo,
   type SkillManifest,
 } from '@involvex/ctrl-i';
@@ -28,6 +31,10 @@ export default function ToolsScreen() {
   const [gatewayUrl, setGatewayUrl] = useState('');
   const [status, setStatus] = useState('loading…');
   const [busy, setBusy] = useState(true);
+  const [mcpId, setMcpId] = useState('');
+  const [mcpName, setMcpName] = useState('');
+  const [mcpCommand, setMcpCommand] = useState('');
+  const [mcpArgs, setMcpArgs] = useState('');
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -138,6 +145,66 @@ export default function ToolsScreen() {
         ))
       )}
       <Text style={styles.label}>MCP servers</Text>
+      <Text style={styles.meta}>Add or update stdio MCP server</Text>
+      <TextInput
+        style={styles.input}
+        value={mcpId}
+        onChangeText={setMcpId}
+        placeholder="id"
+        placeholderTextColor="#6b7f72"
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={styles.input}
+        value={mcpName}
+        onChangeText={setMcpName}
+        placeholder="name"
+        placeholderTextColor="#6b7f72"
+      />
+      <TextInput
+        style={styles.input}
+        value={mcpCommand}
+        onChangeText={setMcpCommand}
+        placeholder="command (e.g. npx)"
+        placeholderTextColor="#6b7f72"
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={styles.input}
+        value={mcpArgs}
+        onChangeText={setMcpArgs}
+        placeholder="args (space-separated)"
+        placeholderTextColor="#6b7f72"
+        autoCapitalize="none"
+      />
+      <Pressable
+        style={[styles.button, (!gatewayUrl || busy) && styles.buttonDisabled]}
+        disabled={!gatewayUrl || busy || !mcpId.trim() || !mcpCommand.trim()}
+        onPress={() => {
+          if (!gatewayUrl) {
+            return;
+          }
+          void (async () => {
+            setBusy(true);
+            try {
+              const args = mcpArgs.trim().split(/\s+/).filter(Boolean);
+              await upsertMcpServer(gatewayUrl, {
+                id: mcpId.trim(),
+                name: mcpName.trim() || mcpId.trim(),
+                command: mcpCommand.trim(),
+                args,
+              });
+              await refresh();
+            } catch (err) {
+              setStatus(err instanceof Error ? err.message : String(err));
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+      >
+        <Text style={styles.buttonText}>save MCP server</Text>
+      </Pressable>
       <Pressable
         style={styles.button}
         disabled={busy || !gatewayUrl}
@@ -173,6 +240,25 @@ export default function ToolsScreen() {
                 ? ` · ${server.command} ${(server.args ?? []).join(' ')}`
                 : ' · stub'}
             </Text>
+            <Pressable
+              style={styles.ghostBtn}
+              disabled={!gatewayUrl || busy}
+              onPress={() => {
+                if (!gatewayUrl) {
+                  return;
+                }
+                void (async () => {
+                  try {
+                    await deleteMcpServer(gatewayUrl, server.id);
+                    await refresh();
+                  } catch (err) {
+                    setStatus(err instanceof Error ? err.message : String(err));
+                  }
+                })();
+              }}
+            >
+              <Text style={styles.ghostText}>remove</Text>
+            </Pressable>
           </View>
         ))
       )}
@@ -190,6 +276,9 @@ export default function ToolsScreen() {
       </Pressable>
       <Pressable onPress={() => router.push('/settings')}>
         <Text style={styles.link}>providers →</Text>
+      </Pressable>
+      <Pressable onPress={() => router.push('/backups')}>
+        <Text style={styles.link}>backups →</Text>
       </Pressable>
     </ScrollView>
   );
@@ -212,11 +301,30 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
   },
+  buttonDisabled: { opacity: 0.45 },
   buttonText: { color: '#000', fontFamily: 'monospace', fontWeight: '700' },
+  input: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    color: '#00ff66',
+    fontFamily: 'monospace',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#111613',
+  },
   panel: {
     borderWidth: 1,
     borderColor: '#1f3328',
     padding: 12,
     backgroundColor: '#0a0f0c',
+    gap: 8,
   },
+  ghostBtn: {
+    borderWidth: 1,
+    borderColor: '#1f3328',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  ghostText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 11 },
 });

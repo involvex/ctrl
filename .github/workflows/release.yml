@@ -79,18 +79,78 @@ jobs:
             apps/desktop/release/latest.yml
           if-no-files-found: error
 
+  build-android:
+    name: build-android-apk
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Sync package versions from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          node -e '
+            const fs = require("fs");
+            const version = process.argv[1];
+            const files = [
+              "package.json",
+              "apps/mobile/package.json",
+            ];
+            for (const file of files) {
+              const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+              pkg.version = version;
+              fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n");
+            }
+            console.log("synced version", version);
+          ' "$VERSION"
+      - run: bun install --frozen-lockfile
+      - name: Expo prebuild Android
+        run: bun run --filter @involvex/ctrl-mobile prebuild:android
+      - name: Assemble release APK
+        run: bun run --filter @involvex/ctrl-mobile android:release
+      - name: Stage APK
+        run: |
+          APK="apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then
+            echo "APK not found at $APK" >&2
+            find apps/mobile/android -name '*.apk' -print >&2 || true
+            exit 1
+          fi
+          mkdir -p dist-apk
+          cp "$APK" "dist-apk/ctrl-${VERSION}-android-release.apk"
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ctrl-android-${{ env.VERSION }}
+          path: dist-apk/ctrl-*-android-release.apk
+          if-no-files-found: error
+
   github-release:
     name: github-release
     runs-on: ubuntu-latest
-    needs: build-win
+    needs: [build-win, build-android]
     steps:
       - uses: actions/checkout@v7
       - name: Resolve version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-      - name: Download artifacts
+      - name: Download Windows artifacts
         uses: actions/download-artifact@v8
         with:
           name: ctrl-win-x64-${{ env.VERSION }}
+          path: dist-release
+      - name: Download Android APK
+        uses: actions/download-artifact@v8
+        with:
+          name: ctrl-android-${{ env.VERSION }}
           path: dist-release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -101,14 +161,17 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           body: |
-            ## Artifacts (Windows x64)
+            ## Artifacts
 
             | File | Description |
             | --- | --- |
             | `ctrl-${{ env.VERSION }}-win-x64-portable.exe` | Portable single-file build |
             | `ctrl-${{ env.VERSION }}-win-x64-setup.exe` | NSIS installer |
             | `ctrl-${{ env.VERSION }}-win-x64-unpacked.zip` | Unpacked directory (recommended for daily use) |
+            | `ctrl-${{ env.VERSION }}-android-release.apk` | Android release APK (manual install) |
 
+            Workspace version line is **${{ env.VERSION }}** (aligns with root `package.json` after tag sync).
+            Auto-update is scaffolded — treat this tag as a manual install.
             See [SECURITY.md](./SECURITY.md) for vulnerability reporting.
           files: |
             dist-release/*

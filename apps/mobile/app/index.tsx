@@ -25,6 +25,8 @@ import {
   listConversations,
   listWorkspaces,
   setClientAuth,
+  streamApprovals,
+  type ApprovalSession,
   type RunSession,
 } from '@involvex/ctrl-i';
 import {
@@ -160,7 +162,9 @@ export default function ChatHomeScreen() {
   const [pendingApproval, setPendingApproval] =
     useState<ApprovalRequest | null>(null);
   const gatewayConversationIdRef = useRef<string | null>(null);
+  const gatewayWorkspaceIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
+  const approvalsSessionRef = useRef<ApprovalSession | null>(null);
   const brainRef = useRef<BrainState | null>(null);
   const syncingRef = useRef(false);
   const litertGenerateRef = useRef<LitertGenerate | null>(null);
@@ -200,7 +204,7 @@ export default function ChatHomeScreen() {
 
   const ensureGatewayConversation = useCallback(
     async (baseUrl: string): Promise<string> => {
-      if (gatewayConversationIdRef.current) {
+      if (gatewayConversationIdRef.current && gatewayWorkspaceIdRef.current) {
         return gatewayConversationIdRef.current;
       }
       const workspaces = await listWorkspaces(baseUrl);
@@ -208,6 +212,7 @@ export default function ChatHomeScreen() {
       if (!ws) {
         ws = await createWorkspace(baseUrl, 'Mobile');
       }
+      gatewayWorkspaceIdRef.current = ws.id;
       const conversations = await listConversations(baseUrl, ws.id);
       let cv = conversations[0] ?? null;
       if (!cv) {
@@ -217,6 +222,52 @@ export default function ChatHomeScreen() {
       return cv.id;
     },
     []
+  );
+
+  const attachApprovalsListener = useCallback(
+    async (baseUrl: string) => {
+      try {
+        await ensureGatewayConversation(baseUrl);
+        const workspaceId = gatewayWorkspaceIdRef.current;
+        if (!workspaceId) {
+          return;
+        }
+        approvalsSessionRef.current?.close();
+        approvalsSessionRef.current = streamApprovals(baseUrl, workspaceId, {
+          onEvent: (event) => {
+            if (
+              event.type === 'approval.requested' &&
+              event.source === 'channel'
+            ) {
+              setPendingApproval({
+                approvalId: event.approvalId,
+                call: event.call,
+                risk: event.risk,
+                timeoutMs: event.timeoutMs,
+                source: 'channel',
+                ...(event.channelId ? { channelId: event.channelId } : {}),
+              });
+              setEventStatus(
+                `approve channel tool · ${event.call.name}${
+                  event.channelId ? ` · ${event.channelId}` : ''
+                }`
+              );
+            }
+            if (
+              event.type === 'approval.resolved' &&
+              event.source === 'channel'
+            ) {
+              setPendingApproval((prev) =>
+                prev?.approvalId === event.approvalId ? null : prev
+              );
+            }
+          },
+        });
+      } catch {
+        // host may be offline
+      }
+    },
+    [ensureGatewayConversation]
   );
 
   const runSync = useCallback(async () => {
@@ -275,13 +326,17 @@ export default function ChatHomeScreen() {
       );
       gatewayConversationIdRef.current = conv?.gatewayConversationId ?? null;
       setEventStatus(null);
-      await refreshHost();
+      const online = await refreshHost();
+      if (!cancelled && online) {
+        await attachApprovalsListener(online.gatewayUrl);
+      }
     })();
     return () => {
       cancelled = true;
       sessionRef.current?.close();
+      approvalsSessionRef.current?.close();
     };
-  }, [refreshHost]);
+  }, [attachApprovalsListener, refreshHost]);
 
   useFocusEffect(
     useCallback(() => {
@@ -306,11 +361,12 @@ export default function ChatHomeScreen() {
           return;
         }
         await runSync();
+        await attachApprovalsListener(online.gatewayUrl);
       })();
       return () => {
         active = false;
       };
-    }, [refreshHost, runSync])
+    }, [attachApprovalsListener, refreshHost, runSync])
   );
 
   const startNewChat = useCallback(() => {
@@ -355,11 +411,22 @@ export default function ChatHomeScreen() {
     setEventStatus('cancelled');
   }, []);
 
-  const decideApproval = useCallback((decision: 'approved' | 'denied') => {
-    approvalResolverRef.current?.(decision);
-    approvalResolverRef.current = null;
-    setPendingApproval(null);
-  }, []);
+  const decideApproval = useCallback(
+    (decision: 'approved' | 'denied') => {
+      if (pendingApproval?.source === 'channel') {
+        approvalsSessionRef.current?.resolveApproval(
+          pendingApproval.approvalId,
+          decision
+        );
+        setPendingApproval(null);
+        return;
+      }
+      approvalResolverRef.current?.(decision);
+      approvalResolverRef.current = null;
+      setPendingApproval(null);
+    },
+    [pendingApproval]
+  );
 
   const attachFile = useCallback(() => {
     if (busy) {
@@ -690,6 +757,9 @@ export default function ChatHomeScreen() {
         <View style={styles.approval}>
           <Text style={styles.approvalTitle}>
             approve tool {pendingApproval.call.name} [{pendingApproval.risk}]
+            {pendingApproval.source === 'channel'
+              ? ` · channel${pendingApproval.channelId ? ` ${pendingApproval.channelId}` : ''}`
+              : ''}
           </Text>
           <Text style={styles.approvalArgs}>
             {JSON.stringify(pendingApproval.call.arguments, null, 2)}

@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   createChannel,
+  deleteChannel,
   listChannels,
   type ChannelPublic,
 } from '@involvex/ctrl-i';
@@ -244,6 +245,26 @@ export default function ChannelsScreen() {
             {ch.lastError ? (
               <Text style={styles.meta}>{ch.lastError}</Text>
             ) : null}
+            <Pressable
+              disabled={busy || !gatewayUrl}
+              onPress={() => {
+                if (!gatewayUrl) {
+                  return;
+                }
+                setBusy(true);
+                void (async () => {
+                  try {
+                    await deleteChannel(gatewayUrl, ch.id);
+                    await refresh();
+                  } catch (err) {
+                    setStatus(err instanceof Error ? err.message : String(err));
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              <Text style={styles.link}>remove</Text>
+            </Pressable>
           </View>
         ))}
         {items.length === 0 && !busy ? (

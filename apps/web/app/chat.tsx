@@ -17,8 +17,10 @@ import {
   listConversations,
   listWorkspaces,
   setClientAuth,
+  streamApprovals,
   streamChat,
   updateProviderConfig,
+  type ApprovalSession,
   type RunSession,
 } from '@involvex/ctrl-i';
 import type { ToolCall } from '@involvex/ctrl-s';
@@ -29,9 +31,12 @@ import {
   type WebGeneratorMode,
 } from '../src/brain/generator';
 import {
+  activeConversation,
   appendLocalMessage,
+  createLocalConversation,
   listActiveMessages,
   loadBrain,
+  maybeTitleFromFirstMessage,
   saveBrain,
   setBrainGenerator,
   setGatewayConversationId,
@@ -40,6 +45,13 @@ import {
 } from '../src/brain/store';
 import { syncBrainWithGateway } from '../src/brain/sync';
 import { loadSavedConnection } from '../src/connection/storage';
+import {
+  activePersona,
+  loadAgentConfig,
+  modeLabel,
+  type AgentConfig,
+} from '../src/agents/config';
+import { AppDrawer } from '../src/ui/AppDrawer';
 
 const GENERATORS: WebGeneratorMode[] = ['gateway', 'zen'];
 
@@ -48,6 +60,8 @@ type PendingApproval = {
   call: ToolCall;
   risk: 'low' | 'high';
   timeoutMs: number;
+  source?: 'chat' | 'channel';
+  channelId?: string;
 };
 
 export default function ChatScreen() {
@@ -63,8 +77,12 @@ export default function ChatScreen() {
   const [hostOnline, setHostOnline] = useState<boolean | null>(null);
   const [pendingApproval, setPendingApproval] =
     useState<PendingApproval | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [agent, setAgent] = useState<AgentConfig | null>(null);
   const gatewayConversationIdRef = useRef<string | null>(null);
+  const gatewayWorkspaceIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RunSession | null>(null);
+  const approvalsSessionRef = useRef<ApprovalSession | null>(null);
   const brainRef = useRef<BrainState | null>(null);
   const syncingRef = useRef(false);
 
@@ -94,7 +112,7 @@ export default function ChatScreen() {
 
   const ensureGatewayConversation = useCallback(
     async (baseUrl: string): Promise<string> => {
-      if (gatewayConversationIdRef.current) {
+      if (gatewayConversationIdRef.current && gatewayWorkspaceIdRef.current) {
         return gatewayConversationIdRef.current;
       }
       const workspaces = await listWorkspaces(baseUrl);
@@ -102,6 +120,7 @@ export default function ChatScreen() {
       if (!ws) {
         ws = await createWorkspace(baseUrl, 'Web');
       }
+      gatewayWorkspaceIdRef.current = ws.id;
       const conversations = await listConversations(baseUrl, ws.id);
       let cv = conversations[0] ?? null;
       if (!cv) {
@@ -111,6 +130,52 @@ export default function ChatScreen() {
       return cv.id;
     },
     []
+  );
+
+  const attachApprovalsListener = useCallback(
+    async (baseUrl: string) => {
+      try {
+        await ensureGatewayConversation(baseUrl);
+        const workspaceId = gatewayWorkspaceIdRef.current;
+        if (!workspaceId) {
+          return;
+        }
+        approvalsSessionRef.current?.close();
+        approvalsSessionRef.current = streamApprovals(baseUrl, workspaceId, {
+          onEvent: (event) => {
+            if (
+              event.type === 'approval.requested' &&
+              event.source === 'channel'
+            ) {
+              setPendingApproval({
+                approvalId: event.approvalId,
+                call: event.call,
+                risk: event.risk,
+                timeoutMs: event.timeoutMs,
+                source: 'channel',
+                ...(event.channelId ? { channelId: event.channelId } : {}),
+              });
+              setStatus(
+                `approve channel tool · ${event.call.name}${
+                  event.channelId ? ` · ${event.channelId}` : ''
+                }`
+              );
+            }
+            if (
+              event.type === 'approval.resolved' &&
+              event.source === 'channel'
+            ) {
+              setPendingApproval((prev) =>
+                prev?.approvalId === event.approvalId ? null : prev
+              );
+            }
+          },
+        });
+      } catch {
+        // host may be offline
+      }
+    },
+    [ensureGatewayConversation]
   );
 
   const runSync = useCallback(async () => {
@@ -149,9 +214,10 @@ export default function ChatScreen() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [loaded, mode] = await Promise.all([
+      const [loaded, mode, agentCfg] = await Promise.all([
         loadBrain(),
         loadGeneratorMode(),
+        loadAgentConfig(),
       ]);
       if (cancelled) {
         return;
@@ -159,6 +225,7 @@ export default function ChatScreen() {
       const aligned = setBrainGenerator(loaded, mode);
       brainRef.current = aligned;
       setBrain(aligned);
+      setAgent(agentCfg);
       await saveBrain(aligned);
       const conv = aligned.conversations.find(
         (c) => c.id === aligned.activeConversationId
@@ -170,13 +237,15 @@ export default function ChatScreen() {
       const online = await refreshHost();
       if (!cancelled && online && brainRef.current) {
         await runSync();
+        await attachApprovalsListener(online.gatewayUrl);
       }
     })();
     return () => {
       cancelled = true;
       sessionRef.current?.close();
+      approvalsSessionRef.current?.close();
     };
-  }, [refreshHost, runSync]);
+  }, [attachApprovalsListener, refreshHost, runSync]);
 
   const selectGenerator = useCallback(
     async (mode: WebGeneratorMode) => {
@@ -213,10 +282,25 @@ export default function ChatScreen() {
 
   const decideApproval = useCallback(
     (decision: 'approved' | 'denied') => {
-      if (!pendingApproval || !sessionRef.current) {
+      if (!pendingApproval) {
         return;
       }
-      sessionRef.current.resolveApproval(pendingApproval.approvalId, decision);
+      if (pendingApproval.source === 'channel') {
+        approvalsSessionRef.current?.resolveApproval(
+          pendingApproval.approvalId,
+          decision
+        );
+      } else if (sessionRef.current) {
+        sessionRef.current.resolveApproval(
+          pendingApproval.approvalId,
+          decision
+        );
+      } else {
+        approvalsSessionRef.current?.resolveApproval(
+          pendingApproval.approvalId,
+          decision
+        );
+      }
       setPendingApproval(null);
     },
     [pendingApproval]
@@ -239,6 +323,7 @@ export default function ChatScreen() {
         content,
         origin: 'local',
       });
+      next = maybeTitleFromFirstMessage(next, content);
       await persist(next);
 
       const mode = next.generator;
@@ -330,6 +415,20 @@ export default function ChatScreen() {
     })();
   }, [busy, draft, ensureGatewayConversation, persist, refreshHost, runSync]);
 
+  const startNewChat = useCallback(() => {
+    const current = brainRef.current;
+    if (!current || busy) {
+      return;
+    }
+    void (async () => {
+      gatewayConversationIdRef.current = null;
+      const next = createLocalConversation(current);
+      await persist(next);
+      setStatus('new chat');
+      setStreaming('');
+    })();
+  }, [busy, persist]);
+
   if (!brain) {
     return (
       <View style={styles.root}>
@@ -340,25 +439,31 @@ export default function ChatScreen() {
 
   const messages = listActiveMessages(brain);
   const mode = brain.generator;
+  const personaName = agent ? activePersona(agent).name : '…';
+  const modeChip = agent ? modeLabel(agent.mode) : 'Ask';
 
   return (
     <View style={styles.root}>
+      <AppDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <View style={styles.top}>
-        <Pressable
-          onPress={() => {
-            router.back();
-          }}
-        >
-          <Text style={styles.link}>← back</Text>
+        <Pressable onPress={() => setDrawerOpen(true)}>
+          <Text style={styles.link}>☰</Text>
         </Pressable>
-        <Text style={styles.title}>chat</Text>
-        <Pressable
-          onPress={() => {
-            void runSync();
-          }}
-        >
-          <Text style={styles.link}>{syncing ? 'sync…' : 'sync'}</Text>
-        </Pressable>
+        <Text style={styles.title} numberOfLines={1}>
+          {activeConversation(brain)?.title ?? 'chat'}
+        </Text>
+        <View style={styles.topRight}>
+          <Pressable onPress={startNewChat} disabled={busy}>
+            <Text style={styles.link}>new</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              void runSync();
+            }}
+          >
+            <Text style={styles.link}>{syncing ? 'sync…' : 'sync'}</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.modeRow}>
@@ -370,6 +475,11 @@ export default function ChatScreen() {
         >
           <Text style={styles.chipText}>
             generator · {generatorLabel(mode)} ▾
+          </Text>
+        </Pressable>
+        <Pressable style={styles.chip} onPress={() => router.push('/agents')}>
+          <Text style={styles.chipText}>
+            {modeChip} · {personaName}
           </Text>
         </Pressable>
         <View
@@ -392,10 +502,10 @@ export default function ChatScreen() {
         </View>
         <Pressable
           onPress={() => {
-            router.push('/settings');
+            router.push('/conversations');
           }}
         >
-          <Text style={styles.link}>providers</Text>
+          <Text style={styles.link}>threads</Text>
         </Pressable>
       </View>
 
@@ -434,6 +544,9 @@ export default function ChatScreen() {
         <View style={styles.approval}>
           <Text style={styles.approvalTitle}>
             approve tool {pendingApproval.call.name} [{pendingApproval.risk}]
+            {pendingApproval.source === 'channel'
+              ? ` · channel${pendingApproval.channelId ? ` ${pendingApproval.channelId}` : ''}`
+              : ''}
           </Text>
           <Text style={styles.approvalArgs}>
             {JSON.stringify(pendingApproval.call.arguments, null, 2)}
@@ -526,12 +639,20 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000', padding: 16, gap: 8 },
-  top: { flexDirection: 'row', justifyContent: 'space-between' },
+  top: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topRight: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   title: {
+    flex: 1,
     color: '#00ff66',
     fontFamily: 'monospace',
     fontSize: 18,
     fontWeight: '700',
+    textAlign: 'center',
   },
   link: { color: '#00ff66', fontFamily: 'monospace' },
   modeRow: {

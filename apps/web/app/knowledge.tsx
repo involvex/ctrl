@@ -11,15 +11,20 @@ import {
 } from 'react-native';
 import {
   createMemory,
+  getEmbeddingStatus,
   inspectContext,
   listMemory,
   reindexKnowledge,
   searchKnowledge,
+  updateMemory,
   uploadAttachmentText,
   type KnowledgeHit,
   type MemoryItem,
 } from '@involvex/ctrl-i';
+import type { KnowledgeSearchMode } from '@involvex/ctrl-s';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
+
+const SEARCH_MODES: KnowledgeSearchMode[] = ['hybrid', 'vector', 'fts'];
 
 export default function KnowledgeScreen() {
   const router = useRouter();
@@ -35,6 +40,8 @@ export default function KnowledgeScreen() {
   const [memoryDraft, setMemoryDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('loading…');
+  const [searchMode, setSearchMode] = useState<KnowledgeSearchMode>('hybrid');
+  const [embeddingLine, setEmbeddingLine] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!gatewayUrl || !workspaceId) {
@@ -42,9 +49,29 @@ export default function KnowledgeScreen() {
     }
     setBusy(true);
     try {
+      const embed = await getEmbeddingStatus(gatewayUrl, workspaceId).catch(
+        () => null
+      );
+      if (embed) {
+        setEmbeddingLine(
+          embed.enabled
+            ? `embeddings · ${embed.provider} · ${embed.indexedChunks}/${embed.totalChunks} indexed · dim ${embed.dims}`
+            : 'embeddings · off'
+        );
+      } else {
+        setEmbeddingLine('embeddings · unknown');
+      }
       setMemory(await listMemory(gatewayUrl, workspaceId));
       if (query.trim()) {
-        setHits(await searchKnowledge(gatewayUrl, workspaceId, query.trim()));
+        setHits(
+          await searchKnowledge(
+            gatewayUrl,
+            workspaceId,
+            query.trim(),
+            undefined,
+            searchMode
+          )
+        );
       } else {
         setHits([]);
       }
@@ -59,7 +86,7 @@ export default function KnowledgeScreen() {
     } finally {
       setBusy(false);
     }
-  }, [conversationId, gatewayUrl, query, workspaceId]);
+  }, [conversationId, gatewayUrl, query, searchMode, workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +182,30 @@ export default function KnowledgeScreen() {
       >
         <Text style={styles.buttonText}>upload</Text>
       </Pressable>
+      {embeddingLine ? <Text style={styles.meta}>{embeddingLine}</Text> : null}
+      <Text style={styles.label}>search mode</Text>
+      <View style={styles.modeRow}>
+        {SEARCH_MODES.map((mode) => (
+          <Pressable
+            key={mode}
+            style={[
+              styles.modeBtn,
+              searchMode === mode ? styles.modeBtnActive : null,
+            ]}
+            onPress={() => setSearchMode(mode)}
+            disabled={busy}
+          >
+            <Text
+              style={[
+                styles.modeBtnText,
+                searchMode === mode ? styles.modeBtnTextActive : null,
+              ]}
+            >
+              {mode}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <Text style={styles.label}>search</Text>
       <TextInput
         style={styles.input}
@@ -204,6 +255,9 @@ export default function KnowledgeScreen() {
         <View key={hit.chunkId} style={styles.panel}>
           <Text style={styles.meta}>
             {hit.filename} · rank {hit.rank}
+            {hit.score !== undefined
+              ? ` · ${hit.source ?? 'hit'} ${hit.score.toFixed(3)}`
+              : ''}
           </Text>
           <Text style={styles.body}>{hit.snippet}</Text>
         </View>
@@ -236,7 +290,48 @@ export default function KnowledgeScreen() {
       </Pressable>
       {memory.map((item) => (
         <View key={item.id} style={styles.panel}>
+          <Text style={styles.meta}>
+            [{item.status}] {item.kind}
+            {item.pinned ? ' ★' : ''}
+          </Text>
           <Text style={styles.body}>{item.content}</Text>
+          <View style={styles.memActions}>
+            {item.status === 'pending_review' ? (
+              <Pressable
+                style={styles.ghostBtn}
+                onPress={() => {
+                  if (!gatewayUrl || !workspaceId) {
+                    return;
+                  }
+                  void (async () => {
+                    await updateMemory(gatewayUrl, item.id, {
+                      status: 'active',
+                      pinned: true,
+                    });
+                    await refresh();
+                  })();
+                }}
+              >
+                <Text style={styles.ghostText}>approve + pin</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              style={styles.ghostBtn}
+              onPress={() => {
+                if (!gatewayUrl || !workspaceId) {
+                  return;
+                }
+                void (async () => {
+                  await updateMemory(gatewayUrl, item.id, {
+                    status: 'archived',
+                  });
+                  await refresh();
+                })();
+              }}
+            >
+              <Text style={styles.ghostText}>archive</Text>
+            </Pressable>
+          </View>
         </View>
       ))}
       {preview ? (
@@ -287,4 +382,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0f0c',
     gap: 4,
   },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  modeBtn: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modeBtnActive: { backgroundColor: '#00ff66' },
+  modeBtnText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 12 },
+  modeBtnTextActive: { color: '#000', fontWeight: '700' },
+  memActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  ghostBtn: {
+    borderWidth: 1,
+    borderColor: '#1f3328',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  ghostText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 11 },
 });

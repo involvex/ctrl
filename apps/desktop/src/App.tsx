@@ -30,6 +30,7 @@ import {
   searchKnowledge,
   sendChannelMessage,
   setClientAuth,
+  streamApprovals,
   streamChat,
   updateMemory,
   updateProviderConfig,
@@ -47,6 +48,7 @@ import {
   type MemoryItem,
   type Message,
   type ProviderStatusResponse,
+  type ApprovalSession,
   type RunSession,
   type SkillManifest,
   type Workspace,
@@ -65,6 +67,8 @@ type PendingApproval = {
   call: ToolCall;
   risk: 'low' | 'high';
   timeoutMs: number;
+  source?: 'chat' | 'channel';
+  channelId?: string;
 };
 
 /** Narrow the `<select>` value without an unchecked cast. */
@@ -269,6 +273,7 @@ export function App() {
     []
   );
   const sessionRef = useRef<RunSession | null>(null);
+  const approvalsSessionRef = useRef<ApprovalSession | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -334,7 +339,7 @@ export function App() {
   useEffect(() => {
     const api = window.ctrlDesktop;
     if (!api?.onDownloadProgress) {
-      return;
+      return undefined;
     }
     const unsub = api.onDownloadProgress((info) => {
       setDownloadProgress(info);
@@ -343,7 +348,9 @@ export function App() {
         setTimeout(() => setDownloadProgress(null), 3000);
       }
     });
-    return () => unsub();
+    return () => {
+      unsub();
+    };
   }, [refreshLocalBackends]);
 
   useEffect(() => {
@@ -412,6 +419,41 @@ export function App() {
       cancelled = true;
     };
   }, [gatewayUrl, status]);
+
+  useEffect(() => {
+    if (!workspace || !gatewayUrl.startsWith('http')) {
+      approvalsSessionRef.current?.close();
+      approvalsSessionRef.current = null;
+      return undefined;
+    }
+    approvalsSessionRef.current?.close();
+    approvalsSessionRef.current = streamApprovals(gatewayUrl, workspace.id, {
+      onEvent: (event) => {
+        if (event.type === 'approval.requested' && event.source === 'channel') {
+          setPendingApproval({
+            approvalId: event.approvalId,
+            call: event.call,
+            risk: event.risk,
+            timeoutMs: event.timeoutMs,
+            source: 'channel',
+            ...(event.channelId ? { channelId: event.channelId } : {}),
+          });
+        }
+        if (event.type === 'approval.resolved' && event.source === 'channel') {
+          setPendingApproval((prev) =>
+            prev?.approvalId === event.approvalId ? null : prev
+          );
+        }
+      },
+      onError: (err) => {
+        setError(err.message);
+      },
+    });
+    return () => {
+      approvalsSessionRef.current?.close();
+      approvalsSessionRef.current = null;
+    };
+  }, [gatewayUrl, workspace]);
 
   useEffect(() => {
     const length = messages.length + (streaming ? 1 : 0);
@@ -702,10 +744,25 @@ export function App() {
 
   const decide = useCallback(
     (decision: 'approved' | 'denied') => {
-      if (!pendingApproval || !sessionRef.current) {
+      if (!pendingApproval) {
         return;
       }
-      sessionRef.current.resolveApproval(pendingApproval.approvalId, decision);
+      if (pendingApproval.source === 'channel') {
+        approvalsSessionRef.current?.resolveApproval(
+          pendingApproval.approvalId,
+          decision
+        );
+      } else if (sessionRef.current) {
+        sessionRef.current.resolveApproval(
+          pendingApproval.approvalId,
+          decision
+        );
+      } else {
+        approvalsSessionRef.current?.resolveApproval(
+          pendingApproval.approvalId,
+          decision
+        );
+      }
       setPendingApproval(null);
     },
     [pendingApproval]
@@ -2366,6 +2423,9 @@ export function App() {
           <p className="approval-title">
             approve tool <code>{pendingApproval.call.name}</code> [
             {pendingApproval.risk}]
+            {pendingApproval.source === 'channel'
+              ? ` · channel${pendingApproval.channelId ? ` ${pendingApproval.channelId}` : ''}`
+              : ''}
           </p>
           <pre className="approval-args">
             {JSON.stringify(pendingApproval.call.arguments, null, 2)}

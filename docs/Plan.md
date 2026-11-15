@@ -300,3 +300,14 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Mobile/web: knowledge reindex + MCP reload buttons.
     - Out of this pass: channel-inbound approvals (no chat WS client on those runs).
     - Still parked: incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+21. Channel-inbound approvals (done this slice):
+    - Gateway `ApprovalBroker` + `GET /ws/v1/workspaces/:workspaceId/approvals`; `ctrl-i` `streamApprovals`.
+    - Channel `onInbound` audits events; fan-out includes `source` / `channelId` context.
+    - No workspace listener → immediate deny (default); `CTRL_CHANNEL_APPROVAL_FALLBACK=timeout|deny`.
+    - Desktop / mobile / web subscribe and show channel source badge on the approval UI.
+22. Daily-driver harden + client admin parity (done this slice):
+    - Contracts: bearer (tokened pass), pairing ack, models, profiles; channel approval contracts.
+    - Release workflow builds Android APK + Windows; soak gate = rows 1–6 (operator Status still pending hardware).
+    - Web: chat-first hub, agents/conversations/backups, knowledge mode + MCP upsert, channel delete, model picker.
+    - Mobile: MCP upsert/delete, knowledge hybrid/vector/fts + embedding status, channel delete.
+    - Still parked: incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

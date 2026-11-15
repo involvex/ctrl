@@ -765,6 +765,33 @@ export function streamChat(
   );
 }
 
+export type ApprovalSession = {
+  resolveApproval: (
+    approvalId: string,
+    decision: 'approved' | 'denied'
+  ) => void;
+  close: () => void;
+};
+
+/**
+ * Long-lived workspace listener for tool approvals (chat + channel inbound).
+ * Prefer this for channel-sourced `approval.requested` while the chat UI is idle.
+ */
+export function streamApprovals(
+  baseUrl: string,
+  workspaceId: string,
+  handlers: StreamHandlers
+): ApprovalSession {
+  const session = attachWs(
+    toWsUrl(baseUrl, `/ws/v1/workspaces/${workspaceId}/approvals`),
+    handlers
+  );
+  return {
+    resolveApproval: session.resolveApproval,
+    close: session.close,
+  };
+}
+
 export async function listAttachments(
   baseUrl: string,
   workspaceId: string
@@ -1132,6 +1159,22 @@ export async function listChannelIdentities(
   }
   return z
     .object({ items: z.array(channelIdentitySchema) })
+    .parse(await readJson(res)).items;
+}
+
+export async function listChannelMessages(
+  baseUrl: string,
+  channelId: string
+): Promise<ChannelMessage[]> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/channels/${channelId}/messages`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`listChannelMessages failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(channelMessageSchema) })
     .parse(await readJson(res)).items;
 }
 

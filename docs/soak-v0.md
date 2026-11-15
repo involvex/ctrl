@@ -23,7 +23,9 @@ Operator checklist for the standalone ship story. Automated proxies ran in-repo;
 | 5   | Model browser                          | List + select model affects next turn           | pending you |
 | 6   | Cold start                             | Reboot; reconnect or stay local                 | pending you |
 
-Tag / GitHub Release after rows 1–5 pass on your hardware. Code + unit coverage for 1–5 behaviors is in place; R1 hardens first-run copy for friends.
+Tag / GitHub Release after rows **1–6** pass on your hardware. Automated proxies + contract coverage for pairing/models/auth are in place; fill the Status column during the device pass. R1 hardens first-run copy for friends once 1–6 are green.
+
+Engineering note (feature batch): channel-inbound approvals, release APK job, and extra contracts landed without clearing this matrix — Status stays **pending you** until you run the phone/PC paths.
 
 ## Friend install checklist
 

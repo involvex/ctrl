@@ -86,7 +86,7 @@ Or use desktop **backups** panel: create → restore. Confirm a workspace/conver
 
 ## Parked (R4+)
 
-Operator soak rows 1–5 may still be pending on your hardware ([soak-v0.md](soak-v0.md)) — finish them when you can; they no longer block Skills/MCP or channel-inbound work.
+Operator soak rows 1–6 may still be pending on your hardware ([soak-v0.md](soak-v0.md)) — finish them when you can; they no longer block Skills/MCP, channel-inbound, or approval work.
 
 ### Channels (Discord / Slack inbound)
 
@@ -95,9 +95,12 @@ Operator soak rows 1–5 may still be pending on your hardware ([soak-v0.md](soa
 - **Slack** — bot token (`xoxb-…`) + app-level token (`xapp-…` with `connections:write`) for Socket Mode inbound; subscribe the bot to `message.im` / channel messages as needed.
 - Channel status `running` means the inbound loop/socket is up. Replies use the chat/channel id as the test recipient.
 
+### Channel-inbound tool approvals
+
+Desktop / mobile / web subscribe to `GET /ws/v1/workspaces/:id/approvals` while connected. Channel runs that need tool approval fan out there; Approve/Deny from the chat UI. With no listener, the gateway **denies immediately** (default). Set `CTRL_CHANNEL_APPROVAL_FALLBACK=timeout` to wait on the gate timer instead.
+
 Still parked:
 
 1. Device↔host incremental sync beyond backups
 2. Rust `agentd` / monetization experiments
 3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
-4. Channel-inbound tool approvals (interactive chat clients now approve; channel runs still time out / deny without a host listener)

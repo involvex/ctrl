@@ -7,13 +7,18 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from 'react-native';
 import {
   getProviderStatus,
+  listHfModelCatalog,
+  listModels,
   setClientAuth,
   updateProviderConfig,
   type ProviderStatusResponse,
 } from '@involvex/ctrl-i';
+
+type ModelRow = { id: string; displayName?: string };
 import type { ProviderId } from '@involvex/ctrl-s';
 import { loadSavedConnection } from '../src/connection/storage';
 
@@ -25,12 +30,40 @@ export default function SettingsScreen() {
   const [modelDraft, setModelDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [modelItems, setModelItems] = useState<ModelRow[]>([]);
+  const [hfLine, setHfLine] = useState<string | null>(null);
 
-  const refresh = useCallback(async (url: string) => {
-    const next = await getProviderStatus(url);
-    setStatus(next);
-    setModelDraft(next.model ?? '');
+  const refreshModels = useCallback(async (url: string) => {
+    try {
+      const listed = await listModels(url);
+      setModelItems(listed.items);
+    } catch {
+      setModelItems([]);
+    }
+    try {
+      const hf = await listHfModelCatalog(url);
+      setHfLine(
+        hf.items.length === 0
+          ? 'HF catalog · empty'
+          : `HF catalog · ${hf.items
+              .slice(0, 5)
+              .map((m) => m.id)
+              .join(', ')}${hf.items.length > 5 ? '…' : ''}`
+      );
+    } catch {
+      setHfLine(null);
+    }
   }, []);
+
+  const refresh = useCallback(
+    async (url: string) => {
+      const next = await getProviderStatus(url);
+      setStatus(next);
+      setModelDraft(next.model ?? '');
+      await refreshModels(url);
+    },
+    [refreshModels]
+  );
 
   useEffect(() => {
     void (async () => {
@@ -116,6 +149,51 @@ export default function SettingsScreen() {
       />
       {busy ? <ActivityIndicator color="#00ff66" /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Text style={styles.label}>remote models</Text>
+      {modelItems.length === 0 ? (
+        <Text style={styles.meta}>connect gateway to list models</Text>
+      ) : (
+        <View style={styles.modelList}>
+          {modelItems.map((m) => (
+            <Pressable
+              key={m.id}
+              style={[
+                styles.modelRow,
+                m.id === modelDraft ? styles.modelRowActive : null,
+              ]}
+              disabled={busy || !gatewayUrl}
+              onPress={() => {
+                setModelDraft(m.id);
+                if (gatewayUrl && status?.active) {
+                  void (async () => {
+                    setBusy(true);
+                    try {
+                      const next = await updateProviderConfig(gatewayUrl, {
+                        active: status.active,
+                        model: m.id,
+                      });
+                      setStatus(next);
+                      setModelDraft(next.model ?? m.id);
+                    } catch (err) {
+                      setError(
+                        err instanceof Error ? err.message : String(err)
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  })();
+                }
+              }}
+            >
+              <Text style={styles.modelId}>{m.id}</Text>
+              {m.displayName && m.displayName !== m.id ? (
+                <Text style={styles.meta}>{m.displayName}</Text>
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      )}
+      {hfLine ? <Text style={styles.meta}>{hfLine}</Text> : null}
       {(status?.providers ?? []).map((p) => (
         <Pressable
           key={p.id}
@@ -173,6 +251,20 @@ const styles = StyleSheet.create({
   providerTitle: {
     color: '#00ff66',
     fontFamily: 'monospace',
+    fontWeight: '700',
+  },
+  modelList: { gap: 6 },
+  modelRow: {
+    borderWidth: 1,
+    borderColor: '#1f3328',
+    padding: 10,
+    gap: 2,
+  },
+  modelRowActive: { borderColor: '#00ff66' },
+  modelId: {
+    color: '#00ff66',
+    fontFamily: 'monospace',
+    fontSize: 12,
     fontWeight: '700',
   },
 });
