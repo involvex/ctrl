@@ -311,3 +311,8 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Web: chat-first hub, agents/conversations/backups, knowledge mode + MCP upsert, channel delete, model picker.
     - Mobile: MCP upsert/delete, knowledge hybrid/vector/fts + embedding status, channel delete.
     - Still parked: incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+23. Daily-driver polish + soak prep (done this slice):
+    - CLI TTY approve/deny for chat + `streamApprovals` for channel tools (non-TTY auto-deny).
+    - Desktop panel extract: `ToolsPanel`, `BackupsPanel`, `ChannelsPanel`.
+    - Soak matrix automated re-check; `v0.2.1` tag recipe in RELEASE-v0 (push only after hardware 1–6).
+    - Still parked: incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

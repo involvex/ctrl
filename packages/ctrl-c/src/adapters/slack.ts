@@ -139,7 +139,7 @@ function parseEnvelope(raw: string): SlackEnvelope | null {
       envelope.type = record['type'];
     }
     if (record['payload'] && typeof record['payload'] === 'object') {
-      envelope.payload = record['payload'] as SlackEnvelope['payload'];
+      envelope.payload = record['payload'];
     }
     return envelope;
   } catch {

@@ -61,6 +61,9 @@ import {
 } from '@involvex/ctrl-s';
 import { Markdown } from './markdown';
 import { PairQr } from './pair-qr';
+import { BackupsPanel } from './panels/BackupsPanel';
+import { ChannelsPanel } from './panels/ChannelsPanel';
+import { ToolsPanel } from './panels/ToolsPanel';
 
 type PendingApproval = {
   approvalId: string;
@@ -1833,378 +1836,113 @@ export function App() {
       ) : null}
 
       {toolsOpen ? (
-        <aside className="host-panel knowledge-panel host-panel-scroll">
-          <p className="host-title">tools / MCP / skills</p>
-          <div className="host-row">
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void refreshTools();
-              }}
-            >
-              refresh
-            </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void (async () => {
-                  try {
-                    await reloadMcp(gatewayUrl);
-                    await refreshTools();
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : String(err));
-                  }
-                })();
-              }}
-            >
-              reload MCP
-            </button>
-          </div>
-
-          <section className="host-section">
-            <p className="host-title">add / update MCP server</p>
-            <p className="meta">
-              stdio command + args (space-separated). empty command = stub.
-            </p>
-            <div className="host-row">
-              <input
-                className="host-input host-input-narrow"
-                value={mcpIdDraft}
-                onChange={(e) => setMcpIdDraft(e.target.value)}
-                placeholder="id"
-              />
-              <input
-                className="host-input"
-                value={mcpNameDraft}
-                onChange={(e) => setMcpNameDraft(e.target.value)}
-                placeholder="name"
-              />
-            </div>
-            <div className="host-row">
-              <input
-                className="host-input"
-                value={mcpCommandDraft}
-                onChange={(e) => setMcpCommandDraft(e.target.value)}
-                placeholder="command (e.g. npx)"
-              />
-            </div>
-            <div className="host-row">
-              <input
-                className="host-input"
-                value={mcpArgsDraft}
-                onChange={(e) => setMcpArgsDraft(e.target.value)}
-                placeholder="args (space-separated)"
-              />
-              <button
-                type="button"
-                className="ghost-btn"
-                onClick={() => {
-                  void (async () => {
-                    try {
-                      const args = mcpArgsDraft
-                        .trim()
-                        .split(/\s+/)
-                        .filter(Boolean);
-                      await upsertMcpServer(gatewayUrl, {
-                        id: mcpIdDraft.trim(),
-                        name: mcpNameDraft.trim() || mcpIdDraft.trim(),
-                        command: mcpCommandDraft.trim(),
-                        args,
-                      });
-                      await refreshTools();
-                    } catch (err) {
-                      setError(
-                        err instanceof Error ? err.message : String(err)
-                      );
-                    }
-                  })();
-                }}
-              >
-                save
-              </button>
-            </div>
-          </section>
-
-          <p className="host-title">MCP servers</p>
-          <ul className="knowledge-list">
-            {mcpServers.map((server) => (
-              <li key={server.id}>
-                <code>{server.id}</code> {server.name}
-                {server.command
-                  ? ` · ${server.command} ${(server.args ?? []).join(' ')}`
-                  : ' · stub'}{' '}
-                <button
-                  type="button"
-                  className="ghost-btn"
-                  onClick={() => {
-                    void (async () => {
-                      try {
-                        await deleteMcpServer(gatewayUrl, server.id);
-                        await refreshTools();
-                      } catch (err) {
-                        setError(
-                          err instanceof Error ? err.message : String(err)
-                        );
-                      }
-                    })();
-                  }}
-                >
-                  remove
-                </button>
-              </li>
-            ))}
-          </ul>
-          {mcpServers.length === 0 ? (
-            <p className="meta">no MCP servers</p>
-          ) : null}
-
-          <p className="host-title">skills</p>
-          <ul className="knowledge-list">
-            {skillItems.map((skill) => (
-              <li key={skill.id}>
-                <label className="host-row">
-                  <input
-                    type="checkbox"
-                    checked={skill.enabled}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      void (async () => {
-                        try {
-                          await updateSkill(gatewayUrl, skill.id, { enabled });
-                          await refreshTools();
-                        } catch (err) {
-                          setError(
-                            err instanceof Error ? err.message : String(err)
-                          );
-                        }
-                      })();
-                    }}
-                  />
-                  <span>
-                    <code>{skill.id}</code> {skill.name}
-                    {skill.builtin ? ' · builtin' : ''}
-                    {skill.description ? ` — ${skill.description}` : ''}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-          {skillItems.length === 0 ? <p className="meta">no skills</p> : null}
-
-          <p className="host-title">registered tools</p>
-          <ul className="knowledge-list">
-            {toolItems.map((tool) => (
-              <li key={tool.name}>
-                <code>{tool.name}</code> [{tool.risk}]
-                {tool.requiresApproval ? ' · approval' : ''} —{' '}
-                {tool.description}
-              </li>
-            ))}
-          </ul>
-        </aside>
+        <ToolsPanel
+          toolItems={toolItems}
+          mcpServers={mcpServers}
+          skillItems={skillItems}
+          mcpIdDraft={mcpIdDraft}
+          mcpNameDraft={mcpNameDraft}
+          mcpCommandDraft={mcpCommandDraft}
+          mcpArgsDraft={mcpArgsDraft}
+          setMcpIdDraft={setMcpIdDraft}
+          setMcpNameDraft={setMcpNameDraft}
+          setMcpCommandDraft={setMcpCommandDraft}
+          setMcpArgsDraft={setMcpArgsDraft}
+          onRefresh={() => {
+            void refreshTools();
+          }}
+          onReloadMcp={() => {
+            void (async () => {
+              try {
+                await reloadMcp(gatewayUrl);
+                await refreshTools();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            })();
+          }}
+          onUpsertMcp={() => {
+            void (async () => {
+              try {
+                const args = mcpArgsDraft.trim().split(/\s+/).filter(Boolean);
+                await upsertMcpServer(gatewayUrl, {
+                  id: mcpIdDraft.trim(),
+                  name: mcpNameDraft.trim() || mcpIdDraft.trim(),
+                  command: mcpCommandDraft.trim(),
+                  args,
+                });
+                await refreshTools();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            })();
+          }}
+          onDeleteMcp={(serverId) => {
+            void (async () => {
+              try {
+                await deleteMcpServer(gatewayUrl, serverId);
+                await refreshTools();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            })();
+          }}
+          onToggleSkill={(skillId, enabled) => {
+            void (async () => {
+              try {
+                await updateSkill(gatewayUrl, skillId, { enabled });
+                await refreshTools();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            })();
+          }}
+        />
       ) : null}
 
       {channelsOpen ? (
-        <aside className="host-panel knowledge-panel host-panel-scroll">
-          <section className="host-section">
-            <p className="host-title">add channel</p>
-            <p className="meta">
-              webhook · telegram long-poll · discord gateway · slack socket mode
-              · status running = inbound connected
-            </p>
-            <div className="host-row">
-              <select
-                className="host-input host-input-narrow"
-                value={channelKind}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  const next =
-                    value === 'telegram' ||
-                    value === 'discord' ||
-                    value === 'slack' ||
-                    value === 'webhook'
-                      ? value
-                      : 'webhook';
-                  setChannelKind(next);
-                  setChannelName(next);
-                }}
-              >
-                <option value="webhook">webhook</option>
-                <option value="telegram">telegram</option>
-                <option value="discord">discord</option>
-                <option value="slack">slack</option>
-              </select>
-              <input
-                className="host-input"
-                value={channelName}
-                onChange={(e) => setChannelName(e.target.value)}
-                placeholder="channel name"
-              />
-            </div>
-            {channelKind === 'telegram' ||
-            channelKind === 'discord' ||
-            channelKind === 'slack' ? (
-              <div className="host-row">
-                <input
-                  className="host-input"
-                  type="password"
-                  value={channelBotToken}
-                  onChange={(e) => setChannelBotToken(e.target.value)}
-                  placeholder="bot token"
-                  autoComplete="off"
-                />
-              </div>
-            ) : null}
-            {channelKind === 'slack' ? (
-              <div className="host-row">
-                <input
-                  className="host-input"
-                  type="password"
-                  value={channelAppToken}
-                  onChange={(e) => setChannelAppToken(e.target.value)}
-                  placeholder="app token (xapp-… Socket Mode)"
-                  autoComplete="off"
-                />
-              </div>
-            ) : null}
-            <div className="host-row">
-              <button
-                type="button"
-                className="demo-btn"
-                onClick={() => {
-                  void onCreateChannel();
-                }}
-                disabled={!workspace}
-              >
-                add {channelKind}
-              </button>
-            </div>
-          </section>
-
-          <section className="host-section">
-            <p className="host-title">configured</p>
-            <div className="host-row">
-              <input
-                className="host-input"
-                value={channelTestRecipient}
-                onChange={(e) => setChannelTestRecipient(e.target.value)}
-                placeholder="test recipient (chat / channel id)"
-              />
-            </div>
-            <p className="meta">
-              Test sends “ctrl channel test”. Webhook uses a desktop-test
-              identity; bots need a chat/channel id above. Status{' '}
-              <code>running</code> means inbound is connected.
-            </p>
-            <ul className="host-card-list">
-              {channelItems.map((ch) => (
-                <li key={ch.id} className="host-card">
-                  <div className="host-card-head">
-                    <span>
-                      <code>{ch.kind}</code> {ch.name}
-                    </span>
-                    <span className="meta">
-                      {ch.status}
-                      {ch.lastError ? ` · ${ch.lastError}` : ''}
-                    </span>
-                  </div>
-                  <div className="host-row">
-                    <button
-                      type="button"
-                      className="ghost-btn"
-                      onClick={() => {
-                        void onTestChannel(ch);
-                      }}
-                    >
-                      test
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-btn"
-                      onClick={() => {
-                        void onRemoveChannel(ch.id);
-                      }}
-                    >
-                      remove
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {channelItems.length === 0 ? (
-              <p className="meta">no channels yet</p>
-            ) : null}
-          </section>
-        </aside>
+        <ChannelsPanel
+          workspaceReady={Boolean(workspace)}
+          channelKind={channelKind}
+          channelName={channelName}
+          channelBotToken={channelBotToken}
+          channelAppToken={channelAppToken}
+          channelTestRecipient={channelTestRecipient}
+          channelItems={channelItems}
+          setChannelKind={setChannelKind}
+          setChannelName={setChannelName}
+          setChannelBotToken={setChannelBotToken}
+          setChannelAppToken={setChannelAppToken}
+          setChannelTestRecipient={setChannelTestRecipient}
+          onCreateChannel={() => {
+            void onCreateChannel();
+          }}
+          onTestChannel={(ch) => {
+            void onTestChannel(ch);
+          }}
+          onRemoveChannel={(id) => {
+            void onRemoveChannel(id);
+          }}
+        />
       ) : null}
 
       {backupsOpen ? (
-        <aside className="host-panel knowledge-panel">
-          <p className="host-title">host backups</p>
-          <p className="meta">
-            Snapshots on this machine (`data/backups`). Optional passphrase (≥8)
-            encrypts at rest (AES-256-GCM). Restore creates new workspaces.
-          </p>
-          <div className="host-row">
-            <input
-              className="host-input"
-              value={backupLabel}
-              onChange={(e) => setBackupLabel(e.target.value)}
-              placeholder="label"
-            />
-            <input
-              className="host-input"
-              type="password"
-              value={backupPassphrase}
-              onChange={(e) => setBackupPassphrase(e.target.value)}
-              placeholder="passphrase (optional)"
-              autoComplete="new-password"
-            />
-            <button
-              type="button"
-              className="demo-btn"
-              onClick={() => {
-                void onCreateBackup();
-              }}
-            >
-              snapshot
-            </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                void refreshBackups();
-              }}
-            >
-              refresh
-            </button>
-          </div>
-          <ul className="knowledge-list">
-            {backupItems.map((b) => (
-              <li key={b.id}>
-                <code>{b.label ?? b.id.slice(0, 8)}</code> · {b.workspaceCount}{' '}
-                ws · {b.encrypted ? 'encrypted · ' : ''}
-                {new Date(b.createdAt).toLocaleString()}
-                <div className="host-row">
-                  <button
-                    type="button"
-                    className="ghost-btn"
-                    onClick={() => {
-                      void onRestoreBackup(b.id, b.encrypted);
-                    }}
-                  >
-                    restore
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {backupItems.length === 0 ? (
-            <p className="meta">no backups yet</p>
-          ) : null}
-        </aside>
+        <BackupsPanel
+          backupLabel={backupLabel}
+          backupPassphrase={backupPassphrase}
+          backupItems={backupItems}
+          setBackupLabel={setBackupLabel}
+          setBackupPassphrase={setBackupPassphrase}
+          onCreateBackup={() => {
+            void onCreateBackup();
+          }}
+          onRefresh={() => {
+            void refreshBackups();
+          }}
+          onRestoreBackup={(id, encrypted) => {
+            void onRestoreBackup(id, encrypted);
+          }}
+        />
       ) : null}
 
       {knowledgeOpen ? (
