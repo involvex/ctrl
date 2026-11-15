@@ -63,7 +63,7 @@ function readUserSkill(dir: string, id: string): SkillManifest | null {
     const raw = readFileSync(manifestPath, 'utf8');
     base = skillManifestSchema
       .partial()
-      .parse(JSON.parse(raw) as unknown) as Partial<SkillManifest>;
+      .parse(JSON.parse(raw) as unknown);
   } catch {
     // optional manifest
   }

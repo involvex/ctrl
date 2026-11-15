@@ -137,10 +137,10 @@ function parsePayload(raw: string): GatewayPayload | null {
       payload.d = record['d'];
     }
     if (typeof record['s'] === 'number' || record['s'] === null) {
-      payload.s = record['s'] as number | null;
+      payload.s = record['s'];
     }
     if (typeof record['t'] === 'string' || record['t'] === null) {
-      payload.t = record['t'] as string | null;
+      payload.t = record['t'];
     }
     return payload;
   } catch {
