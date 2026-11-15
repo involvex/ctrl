@@ -272,7 +272,7 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
 11. Phase 6 On-Device Inference (Android) — **done**: LiteRT-LM Expo plugin (`react-native-litert-lm`), capability probe (ABI/RAM/battery), thermal/battery policy in `ctrl-s` (re-exported from `ctrl-r`), mobile `/on-device` UI with download retries + filesystem `.litertlm` import (CDN mid-stream failures), `expo-dev-client`, release ProGuard consumer-rules plugin, `native/android-litert` docs.
 12. Phase 7 Sync — **done** (MVP + 7b): host backups under `data/backups/` (`BackupStore`), `/api/v1/backups` create/list/get/restore, optional passphrase AES-256-GCM encryption, desktop panel + `ctrl-f5 backup`, contracts. No device↔device SQLite sync.
 13. Phase 8 Featured CLI (`ctrl-f5`) — **done**: LAN pair QR; gateway `0.0.0.0`; Metro host auto-fill; `start`/`stop`/`status`/`chat`/`backup`; `completion bash|powershell`.
-14. Phase 9 Rust `agentd` — optional. Provider selection persists in `data/provider.json` (non-secret); desktop/mobile/web provider + knowledge + tools + channels lockstep. Desktop nav panels are exclusive (one open at a time; Escape closes). Telegram Bot API real (poll + send); Discord/Slack **outbound** real (webhook / bot HTTP); inbound poll still Telegram-first.
+14. Phase 9 Rust `agentd` — optional. Provider selection persists in `data/provider.json` (non-secret); desktop/mobile/web provider + knowledge + tools + channels lockstep. Desktop nav panels are exclusive (one open at a time; Escape closes). Telegram Bot API real (poll + send); Discord/Slack outbound real (webhook / bot HTTP).
 15. Phase 10 — Local-first chat (done this slice):
     - One chat UI with generator picker `litert` | `gateway` | `zen`; `/on-device` is model setup only.
     - Local brain (`ctrl.mobile.brain.v1`) + append-only sync when gateway health succeeds.
@@ -290,4 +290,8 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - `@involvex/ctrl-slash` — builtin `knowledge-assistant`, `data/skills/` + `skills.json`, `applySkillsToProfile` on each run.
     - MCP persist `data/mcp.json`; gateway `POST/DELETE /api/v1/mcp/servers`, `POST /api/v1/mcp/reload`; skills `GET/POST/PATCH/DELETE /api/v1/skills`.
     - Desktop tools panel: add/remove MCP, reload, skill toggles; mobile/web skill enable.
-    - Still parked: Discord/Slack inbound, incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+19. Channels inbound lockstep (done this slice):
+    - Discord Bot Gateway WebSocket (`MESSAGE_CREATE`) → `onInbound`; Slack Socket Mode (`apps.connections.open` + Events API envelopes) → `onInbound`.
+    - Config: Discord `botToken`; Slack `botToken` + `appToken` (xapp). Without tokens, create/start/send stay no-op for contracts.
+    - Desktop/mobile/web channel create UI for all four kinds; `running` = inbound connected.
+    - Still parked: incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

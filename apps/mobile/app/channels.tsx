@@ -18,7 +18,14 @@ import {
 } from '@involvex/ctrl-i';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
 
-type ChannelKindChoice = 'webhook' | 'telegram';
+type ChannelKindChoice = 'webhook' | 'telegram' | 'discord' | 'slack';
+
+const KIND_OPTIONS: ChannelKindChoice[] = [
+  'webhook',
+  'telegram',
+  'discord',
+  'slack',
+];
 
 export default function ChannelsScreen() {
   const router = useRouter();
@@ -26,6 +33,7 @@ export default function ChannelsScreen() {
   const [kind, setKind] = useState<ChannelKindChoice>('webhook');
   const [name, setName] = useState('webhook');
   const [botToken, setBotToken] = useState('');
+  const [appToken, setAppToken] = useState('');
   const [status, setStatus] = useState('loading…');
   const [busy, setBusy] = useState(true);
   const [gatewayUrl, setGatewayUrl] = useState<string | null>(null);
@@ -95,21 +103,42 @@ export default function ChannelsScreen() {
     if (!gatewayUrl || !workspaceId || name.trim().length === 0) {
       return;
     }
-    if (kind === 'telegram' && botToken.trim().length === 0) {
-      setStatus('telegram bot token required');
+    if (
+      (kind === 'telegram' || kind === 'discord') &&
+      botToken.trim().length === 0
+    ) {
+      setStatus(`${kind} bot token required`);
       return;
+    }
+    if (kind === 'slack') {
+      if (botToken.trim().length === 0) {
+        setStatus('slack bot token required');
+        return;
+      }
+      if (appToken.trim().length === 0) {
+        setStatus('slack app token (xapp) required for Socket Mode inbound');
+        return;
+      }
     }
     setBusy(true);
     void (async () => {
       try {
+        const config =
+          kind === 'telegram' || kind === 'discord'
+            ? { botToken: botToken.trim() }
+            : kind === 'slack'
+              ? {
+                  botToken: botToken.trim(),
+                  appToken: appToken.trim(),
+                }
+              : undefined;
         await createChannel(gatewayUrl, workspaceId, {
           kind,
           name: name.trim(),
-          ...(kind === 'telegram'
-            ? { config: { botToken: botToken.trim() } }
-            : {}),
+          ...(config ? { config } : {}),
         });
         setBotToken('');
+        setAppToken('');
         setName(kind);
         await refresh();
       } catch (err) {
@@ -117,7 +146,7 @@ export default function ChannelsScreen() {
         setBusy(false);
       }
     })();
-  }, [botToken, gatewayUrl, kind, name, refresh, workspaceId]);
+  }, [appToken, botToken, gatewayUrl, kind, name, refresh, workspaceId]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -128,44 +157,33 @@ export default function ChannelsScreen() {
         </Pressable>
         <Text style={styles.title}>channels</Text>
         <Text style={styles.meta}>{status}</Text>
-        <Text style={styles.meta}>webhook · telegram (long-poll inbound)</Text>
+        <Text style={styles.meta}>
+          webhook · telegram · discord gateway · slack socket · running =
+          inbound connected
+        </Text>
         <Pressable onPress={() => void refresh()}>
           <Text style={styles.link}>{busy ? 'refreshing…' : 'refresh'}</Text>
         </Pressable>
 
         <Text style={styles.label}>kind</Text>
         <View style={styles.kindRow}>
-          <Pressable
-            style={[styles.kindBtn, kind === 'webhook' && styles.kindBtnActive]}
-            onPress={() => selectKind('webhook')}
-            disabled={busy}
-          >
-            <Text
-              style={[
-                styles.kindBtnText,
-                kind === 'webhook' && styles.kindBtnTextActive,
-              ]}
+          {KIND_OPTIONS.map((option) => (
+            <Pressable
+              key={option}
+              style={[styles.kindBtn, kind === option && styles.kindBtnActive]}
+              onPress={() => selectKind(option)}
+              disabled={busy}
             >
-              webhook
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.kindBtn,
-              kind === 'telegram' && styles.kindBtnActive,
-            ]}
-            onPress={() => selectKind('telegram')}
-            disabled={busy}
-          >
-            <Text
-              style={[
-                styles.kindBtnText,
-                kind === 'telegram' && styles.kindBtnTextActive,
-              ]}
-            >
-              telegram
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.kindBtnText,
+                  kind === option && styles.kindBtnTextActive,
+                ]}
+              >
+                {option}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
         <Text style={styles.label}>add {kind} channel</Text>
@@ -179,7 +197,7 @@ export default function ChannelsScreen() {
           placeholderTextColor="#6b7f72"
           placeholder="channel name"
         />
-        {kind === 'telegram' ? (
+        {kind === 'telegram' || kind === 'discord' || kind === 'slack' ? (
           <TextInput
             style={styles.input}
             value={botToken}
@@ -189,6 +207,19 @@ export default function ChannelsScreen() {
             editable={!busy}
             placeholderTextColor="#6b7f72"
             placeholder="bot token"
+            secureTextEntry
+          />
+        ) : null}
+        {kind === 'slack' ? (
+          <TextInput
+            style={styles.input}
+            value={appToken}
+            onChangeText={setAppToken}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!busy}
+            placeholderTextColor="#6b7f72"
+            placeholder="app token (xapp-…)"
             secureTextEntry
           />
         ) : null}
@@ -266,7 +297,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13,
   },
-  kindRow: { flexDirection: 'row', gap: 8 },
+  kindRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   kindBtn: {
     borderWidth: 1,
     borderColor: '#00ff66',

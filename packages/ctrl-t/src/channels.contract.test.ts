@@ -62,6 +62,40 @@ describe('contract: channels', () => {
     expect(job.status).toBe('sent');
   });
 
+  test('discord channel without token: create + mock outbound', async () => {
+    const ws = await createWorkspace(baseUrl(), 'channels-discord');
+    const channel = await createChannel(baseUrl(), ws.id, {
+      kind: 'discord',
+      name: 'discord-mock',
+    });
+    expect(channel.kind).toBe('discord');
+    expect(channel.status).toBe('running');
+    expect('config' in channel).toBe(false);
+
+    const job = await sendChannelMessage(baseUrl(), channel.id, {
+      externalUserId: 'c1001',
+      text: 'hello discord',
+    });
+    expect(job.status).toBe('sent');
+  });
+
+  test('slack channel without token: create + mock outbound', async () => {
+    const ws = await createWorkspace(baseUrl(), 'channels-slack');
+    const channel = await createChannel(baseUrl(), ws.id, {
+      kind: 'slack',
+      name: 'slack-mock',
+    });
+    expect(channel.kind).toBe('slack');
+    expect(channel.status).toBe('running');
+    expect('config' in channel).toBe(false);
+
+    const job = await sendChannelMessage(baseUrl(), channel.id, {
+      externalUserId: 'C1001',
+      text: 'hello slack',
+    });
+    expect(job.status).toBe('sent');
+  });
+
   test('channel delete removes channel from list', async () => {
     const ws = await createWorkspace(baseUrl(), 'channels-delete');
     const channel = await createChannel(baseUrl(), ws.id, {

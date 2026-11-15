@@ -86,11 +86,17 @@ Or use desktop **backups** panel: create → restore. Confirm a workspace/conver
 
 ## Parked (R4+)
 
-Operator soak rows 1–5 may still be pending on your hardware ([soak-v0.md](soak-v0.md)) — finish them when you can; they no longer block Skills/MCP work.
+Operator soak rows 1–5 may still be pending on your hardware ([soak-v0.md](soak-v0.md)) — finish them when you can; they no longer block Skills/MCP or channel-inbound work.
+
+### Channels (Discord / Slack inbound)
+
+- **Telegram** — bot token; long-poll `getUpdates`.
+- **Discord** — bot token; Gateway WebSocket (`MESSAGE_CREATE`). Enable Message Content Intent in the Discord developer portal.
+- **Slack** — bot token (`xoxb-…`) + app-level token (`xapp-…` with `connections:write`) for Socket Mode inbound; subscribe the bot to `message.im` / channel messages as needed.
+- Channel status `running` means the inbound loop/socket is up. Replies use the chat/channel id as the test recipient.
 
 Still parked:
 
-1. Discord / Slack **inbound** (outbound already works)
-2. Device↔host incremental sync beyond backups
-3. Rust `agentd` / monetization experiments
-4. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
+1. Device↔host incremental sync beyond backups
+2. Rust `agentd` / monetization experiments
+3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)

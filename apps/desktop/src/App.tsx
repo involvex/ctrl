@@ -190,11 +190,12 @@ export function App() {
     }
   });
   const [channelItems, setChannelItems] = useState<ChannelPublic[]>([]);
-  const [channelKind, setChannelKind] = useState<'webhook' | 'telegram'>(
-    'webhook'
-  );
+  const [channelKind, setChannelKind] = useState<
+    'webhook' | 'telegram' | 'discord' | 'slack'
+  >('webhook');
   const [channelName, setChannelName] = useState('webhook');
   const [channelBotToken, setChannelBotToken] = useState('');
+  const [channelAppToken, setChannelAppToken] = useState('');
   const [channelTestRecipient, setChannelTestRecipient] = useState('');
   const [binPathDrafts, setBinPathDrafts] = useState<Record<string, string>>(
     {}
@@ -743,27 +744,47 @@ export function App() {
     if (!workspace || !gatewayUrl.startsWith('http')) {
       return;
     }
-    if (channelKind === 'telegram' && channelBotToken.trim().length === 0) {
-      setError('telegram bot token required');
+    if (
+      (channelKind === 'telegram' || channelKind === 'discord') &&
+      channelBotToken.trim().length === 0
+    ) {
+      setError(`${channelKind} bot token required`);
       return;
     }
+    if (channelKind === 'slack') {
+      if (channelBotToken.trim().length === 0) {
+        setError('slack bot token required');
+        return;
+      }
+      if (channelAppToken.trim().length === 0) {
+        setError('slack app token (xapp) required for Socket Mode inbound');
+        return;
+      }
+    }
     try {
+      const config =
+        channelKind === 'telegram' || channelKind === 'discord'
+          ? { botToken: channelBotToken.trim() }
+          : channelKind === 'slack'
+            ? {
+                botToken: channelBotToken.trim(),
+                appToken: channelAppToken.trim(),
+              }
+            : undefined;
       await createChannel(gatewayUrl, workspace.id, {
         kind: channelKind,
-        name:
-          channelName.trim() ||
-          (channelKind === 'telegram' ? 'telegram' : 'webhook'),
-        ...(channelKind === 'telegram'
-          ? { config: { botToken: channelBotToken.trim() } }
-          : {}),
+        name: channelName.trim() || channelKind,
+        ...(config ? { config } : {}),
       });
       setChannelBotToken('');
+      setChannelAppToken('');
       await refreshChannels();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }, [
+    channelAppToken,
     channelBotToken,
     channelKind,
     channelName,
@@ -803,7 +824,9 @@ export function App() {
         } else {
           const recipient = channelTestRecipient.trim();
           if (!recipient) {
-            setError('enter a test recipient (Telegram chat id) first');
+            setError(
+              'enter a test recipient (Telegram chat id / Discord or Slack channel id) first'
+            );
             return;
           }
           await sendChannelMessage(gatewayUrl, ch.id, {
@@ -1723,21 +1746,30 @@ export function App() {
           <section className="host-section">
             <p className="host-title">add channel</p>
             <p className="meta">
-              webhook inbound · telegram long-poll · outbound send
+              webhook · telegram long-poll · discord gateway · slack socket
+              mode · status running = inbound connected
             </p>
             <div className="host-row">
               <select
                 className="host-input host-input-narrow"
                 value={channelKind}
                 onChange={(e) => {
+                  const value = e.target.value;
                   const next =
-                    e.target.value === 'telegram' ? 'telegram' : 'webhook';
+                    value === 'telegram' ||
+                    value === 'discord' ||
+                    value === 'slack' ||
+                    value === 'webhook'
+                      ? value
+                      : 'webhook';
                   setChannelKind(next);
                   setChannelName(next);
                 }}
               >
                 <option value="webhook">webhook</option>
                 <option value="telegram">telegram</option>
+                <option value="discord">discord</option>
+                <option value="slack">slack</option>
               </select>
               <input
                 className="host-input"
@@ -1746,7 +1778,9 @@ export function App() {
                 placeholder="channel name"
               />
             </div>
-            {channelKind === 'telegram' ? (
+            {channelKind === 'telegram' ||
+            channelKind === 'discord' ||
+            channelKind === 'slack' ? (
               <div className="host-row">
                 <input
                   className="host-input"
@@ -1754,6 +1788,18 @@ export function App() {
                   value={channelBotToken}
                   onChange={(e) => setChannelBotToken(e.target.value)}
                   placeholder="bot token"
+                  autoComplete="off"
+                />
+              </div>
+            ) : null}
+            {channelKind === 'slack' ? (
+              <div className="host-row">
+                <input
+                  className="host-input"
+                  type="password"
+                  value={channelAppToken}
+                  onChange={(e) => setChannelAppToken(e.target.value)}
+                  placeholder="app token (xapp-… Socket Mode)"
                   autoComplete="off"
                 />
               </div>
@@ -1779,12 +1825,13 @@ export function App() {
                 className="host-input"
                 value={channelTestRecipient}
                 onChange={(e) => setChannelTestRecipient(e.target.value)}
-                placeholder="test recipient (Telegram chat id)"
+                placeholder="test recipient (chat / channel id)"
               />
             </div>
             <p className="meta">
               Test sends “ctrl channel test”. Webhook uses a desktop-test
-              identity; Telegram needs a chat id above.
+              identity; bots need a chat/channel id above. Status{' '}
+              <code>running</code> means inbound is connected.
             </p>
             <ul className="host-card-list">
               {channelItems.map((ch) => (

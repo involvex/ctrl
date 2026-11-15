@@ -8,6 +8,6 @@ export { RateLimiter, createDefaultChannelRateLimiter } from './rate-limit';
 export { nextRetryDelayMs, shouldRetry, MAX_ATTEMPTS } from './retry';
 export { webhookAdapter } from './adapters/webhook';
 export { telegramAdapter } from './adapters/telegram';
-export { discordAdapter } from './adapters/discord';
-export { slackAdapter } from './adapters/slack';
+export { discordAdapter, discordMessageToDraft } from './adapters/discord';
+export { slackAdapter, slackEventToDraft } from './adapters/slack';
 export { ChannelManager, getAdapter } from './manager';

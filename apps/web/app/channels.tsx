@@ -16,10 +16,22 @@ import {
 } from '@involvex/ctrl-i';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
 
+type ChannelKindChoice = 'webhook' | 'telegram' | 'discord' | 'slack';
+
+const KIND_OPTIONS: ChannelKindChoice[] = [
+  'webhook',
+  'telegram',
+  'discord',
+  'slack',
+];
+
 export default function ChannelsScreen() {
   const router = useRouter();
   const [items, setItems] = useState<ChannelPublic[]>([]);
+  const [kind, setKind] = useState<ChannelKindChoice>('webhook');
   const [name, setName] = useState('webhook');
+  const [botToken, setBotToken] = useState('');
+  const [appToken, setAppToken] = useState('');
   const [status, setStatus] = useState('loading…');
   const [busy, setBusy] = useState(true);
   const [gatewayUrl, setGatewayUrl] = useState<string | null>(null);
@@ -80,25 +92,59 @@ export default function ChannelsScreen() {
     };
   }, []);
 
-  const onCreateWebhook = useCallback(() => {
+  const selectKind = useCallback((next: ChannelKindChoice) => {
+    setKind(next);
+    setName(next);
+  }, []);
+
+  const onCreateChannel = useCallback(() => {
     if (!gatewayUrl || !workspaceId || name.trim().length === 0) {
       return;
+    }
+    if (
+      (kind === 'telegram' || kind === 'discord') &&
+      botToken.trim().length === 0
+    ) {
+      setStatus(`${kind} bot token required`);
+      return;
+    }
+    if (kind === 'slack') {
+      if (botToken.trim().length === 0) {
+        setStatus('slack bot token required');
+        return;
+      }
+      if (appToken.trim().length === 0) {
+        setStatus('slack app token (xapp) required for Socket Mode inbound');
+        return;
+      }
     }
     setBusy(true);
     void (async () => {
       try {
+        const config =
+          kind === 'telegram' || kind === 'discord'
+            ? { botToken: botToken.trim() }
+            : kind === 'slack'
+              ? {
+                  botToken: botToken.trim(),
+                  appToken: appToken.trim(),
+                }
+              : undefined;
         await createChannel(gatewayUrl, workspaceId, {
-          kind: 'webhook',
+          kind,
           name: name.trim(),
+          ...(config ? { config } : {}),
         });
-        setName('webhook');
+        setBotToken('');
+        setAppToken('');
+        setName(kind);
         await refresh();
       } catch (err) {
         setStatus(err instanceof Error ? err.message : String(err));
         setBusy(false);
       }
     })();
-  }, [gatewayUrl, name, refresh, workspaceId]);
+  }, [appToken, botToken, gatewayUrl, kind, name, refresh, workspaceId]);
 
   return (
     <ScrollView contentContainerStyle={styles.root}>
@@ -108,7 +154,8 @@ export default function ChannelsScreen() {
       <Text style={styles.title}>channels</Text>
       <Text style={styles.meta}>{status}</Text>
       <Text style={styles.meta}>
-        webhook · telegram · discord · slack (gateway adapters)
+        webhook · telegram · discord gateway · slack socket · running = inbound
+        connected
       </Text>
       <Pressable style={styles.button} onPress={() => void refresh()}>
         {busy ? (
@@ -117,7 +164,27 @@ export default function ChannelsScreen() {
           <Text style={styles.buttonText}>refresh</Text>
         )}
       </Pressable>
-      <Text style={styles.label}>add webhook channel</Text>
+      <Text style={styles.label}>kind</Text>
+      <View style={styles.kindRow}>
+        {KIND_OPTIONS.map((option) => (
+          <Pressable
+            key={option}
+            style={[styles.kindBtn, kind === option && styles.kindBtnActive]}
+            onPress={() => selectKind(option)}
+            disabled={busy}
+          >
+            <Text
+              style={[
+                styles.kindBtnText,
+                kind === option && styles.kindBtnTextActive,
+              ]}
+            >
+              {option}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.label}>add {kind} channel</Text>
       <TextInput
         style={styles.input}
         value={name}
@@ -128,12 +195,38 @@ export default function ChannelsScreen() {
         placeholderTextColor="#6b7f72"
         placeholder="channel name"
       />
+      {kind === 'telegram' || kind === 'discord' || kind === 'slack' ? (
+        <TextInput
+          style={styles.input}
+          value={botToken}
+          onChangeText={setBotToken}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!busy}
+          placeholderTextColor="#6b7f72"
+          placeholder="bot token"
+          secureTextEntry
+        />
+      ) : null}
+      {kind === 'slack' ? (
+        <TextInput
+          style={styles.input}
+          value={appToken}
+          onChangeText={setAppToken}
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!busy}
+          placeholderTextColor="#6b7f72"
+          placeholder="app token (xapp-…)"
+          secureTextEntry
+        />
+      ) : null}
       <Pressable
         style={[styles.button, (busy || !workspaceId) && styles.buttonDisabled]}
-        onPress={onCreateWebhook}
+        onPress={onCreateChannel}
         disabled={busy || !workspaceId}
       >
-        <Text style={styles.buttonText}>add webhook</Text>
+        <Text style={styles.buttonText}>add {kind}</Text>
       </Pressable>
       <Text style={styles.label}>configured</Text>
       {items.length === 0 ? (
@@ -178,6 +271,16 @@ const styles = StyleSheet.create({
   label: { color: '#00ff66', fontFamily: 'monospace', fontSize: 12 },
   meta: { color: '#6b7f72', fontFamily: 'monospace', fontSize: 12 },
   body: { color: '#00ff66', fontFamily: 'monospace', fontSize: 13 },
+  kindRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  kindBtn: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  kindBtnActive: { backgroundColor: '#00ff66' },
+  kindBtnText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 12 },
+  kindBtnTextActive: { color: '#000', fontWeight: '700' },
   input: {
     borderWidth: 1,
     borderColor: '#00ff66',
@@ -197,6 +300,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f3328',
     padding: 12,
-    backgroundColor: '#0a0f0c',
   },
 });
