@@ -58,11 +58,22 @@ export const agentEventSchema = z.discriminatedUnion('type', [
     call: toolCallSchema,
     risk: z.enum(['low', 'high']),
     timeoutMs: z.number().int().positive(),
+    /** Present on workspace approval fan-out (chat + channel). */
+    source: z.enum(['chat', 'channel']).optional(),
+    workspaceId: z.string().optional(),
+    conversationId: z.string().optional(),
+    runId: z.string().optional(),
+    channelId: z.string().optional(),
   }),
   z.object({
     type: z.literal('approval.resolved'),
     approvalId: z.string(),
     decision: approvalDecisionSchema,
+    source: z.enum(['chat', 'channel']).optional(),
+    workspaceId: z.string().optional(),
+    conversationId: z.string().optional(),
+    runId: z.string().optional(),
+    channelId: z.string().optional(),
   }),
   z.object({
     type: z.literal('usage.updated'),

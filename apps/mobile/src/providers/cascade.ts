@@ -16,6 +16,8 @@ export type ApprovalRequest = {
   call: ToolCall;
   risk: 'low' | 'high';
   timeoutMs: number;
+  source?: 'chat' | 'channel';
+  channelId?: string;
 };
 
 export type CascadeCallbacks = {

@@ -91,6 +91,11 @@ import {
   Store,
 } from '@involvex/ctrl-z';
 import path from 'node:path';
+import {
+  channelApprovalFallbackFromEnv,
+  createApprovalBroker,
+  createBrokeredApprovalGate,
+} from './approval-broker';
 import { gatewayTokenFromEnv, isAuthorized, isPublicPath } from './auth';
 import { listLanGatewayUrls } from './lan';
 import { demoAgentEvents } from './mock-stream';
@@ -130,6 +135,11 @@ type SocketData =
       runId: string;
       abort: AbortController;
       approvals: ReturnType<typeof createApprovalGate>;
+    }
+  | {
+      kind: 'approvals';
+      workspaceId: string;
+      subscriberId: string;
     };
 
 function healthPayload(): HealthResponse {
@@ -310,6 +320,8 @@ export async function startServer(): Promise<StartedGateway> {
   };
 
   let lastPairingAck: PairingAck | null = null;
+  const approvalBroker = createApprovalBroker();
+  const channelApprovalFallback = channelApprovalFallbackFromEnv();
 
   const channels = new ChannelManager({
     store: new ChannelStore(db),
@@ -331,9 +343,26 @@ export async function startServer(): Promise<StartedGateway> {
           role: m.role,
           content: m.content,
         }));
-        const runId = crypto.randomUUID();
+        const runId = `run_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
         const abort = new AbortController();
-        const approvals = createApprovalGate();
+        const approvals = createBrokeredApprovalGate(
+          approvalBroker,
+          {
+            workspaceId: channel.workspaceId,
+            conversationId: conversation.id,
+            runId,
+            source: 'channel',
+            channelId: message.channelId,
+          },
+          { channelFallback: channelApprovalFallback }
+        );
+        store.appendAudit({
+          workspaceId: channel.workspaceId,
+          conversationId: conversation.id,
+          runId,
+          action: 'run.started',
+          detail: { source: 'channel', channelId: message.channelId },
+        });
         let assembled = '';
         for await (const event of runAgentLoop(
           {
@@ -352,6 +381,11 @@ export async function startServer(): Promise<StartedGateway> {
           if (event.type === 'message.delta') {
             assembled += event.text;
           }
+          auditFromEvent(store, event, {
+            workspaceId: channel.workspaceId,
+            conversationId: conversation.id,
+            runId,
+          });
         }
         if (assembled.trim().length > 0) {
           store.addMessage(conversation.id, 'assistant', assembled);
@@ -1124,6 +1158,31 @@ export async function startServer(): Promise<StartedGateway> {
           );
         }
 
+        const approvalsWs = /^\/ws\/v1\/workspaces\/([^/]+)\/approvals$/.exec(
+          url.pathname
+        );
+        if (approvalsWs && req.method === 'GET') {
+          const workspaceId = approvalsWs[1]!;
+          if (!store.getWorkspace(workspaceId)) {
+            return json(req, { error: 'workspace not found' }, 404);
+          }
+          const subscriberId = `aprsub_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
+          const upgraded = srv.upgrade(req, {
+            data: {
+              kind: 'approvals',
+              workspaceId,
+              subscriberId,
+            },
+          });
+          if (upgraded) {
+            return undefined;
+          }
+          return withCors(
+            req,
+            new Response('WebSocket upgrade failed', { status: 400 })
+          );
+        }
+
         const chatWs = /^\/ws\/v1\/conversations\/([^/]+)\/runs$/.exec(
           url.pathname
         );
@@ -1133,10 +1192,17 @@ export async function startServer(): Promise<StartedGateway> {
           if (!content) {
             return json(req, { error: 'content query required' }, 400);
           }
-          if (!store.getConversation(conversationId)) {
+          const conversation = store.getConversation(conversationId);
+          if (!conversation) {
             return json(req, { error: 'conversation not found' }, 404);
           }
           const runId = `run_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
+          const approvals = createBrokeredApprovalGate(approvalBroker, {
+            workspaceId: conversation.workspaceId,
+            conversationId,
+            runId,
+            source: 'chat',
+          });
           const upgraded = srv.upgrade(req, {
             data: {
               kind: 'chat',
@@ -1144,7 +1210,7 @@ export async function startServer(): Promise<StartedGateway> {
               content,
               runId,
               abort: new AbortController(),
-              approvals: createApprovalGate(),
+              approvals,
             },
           });
           if (upgraded) {
@@ -1357,6 +1423,20 @@ export async function startServer(): Promise<StartedGateway> {
             return;
           }
 
+          if (ws.data.kind === 'approvals') {
+            const { workspaceId, subscriberId } = ws.data;
+            approvalBroker.subscribe({
+              id: subscriberId,
+              workspaceId,
+              send: (payload) => {
+                if (ws.readyState === 1) {
+                  ws.send(payload);
+                }
+              },
+            });
+            return;
+          }
+
           if (ws.data.kind === 'chat') {
             const { conversationId, content, runId, abort, approvals } =
               ws.data;
@@ -1431,9 +1511,6 @@ export async function startServer(): Promise<StartedGateway> {
           }
         },
         message(ws, raw) {
-          if (ws.data.kind !== 'chat') {
-            return;
-          }
           let parsed: unknown;
           try {
             parsed =
@@ -1447,12 +1524,27 @@ export async function startServer(): Promise<StartedGateway> {
           if (!msg.success) {
             return;
           }
+          if (ws.data.kind === 'approvals') {
+            if (msg.data.type === 'approval.resolve') {
+              approvalBroker.resolve(msg.data.approvalId, msg.data.decision);
+            }
+            return;
+          }
+          if (ws.data.kind !== 'chat') {
+            return;
+          }
           if (msg.data.type === 'run.cancel') {
             ws.data.abort.abort(msg.data.reason ?? 'client cancel');
             return;
           }
           if (msg.data.type === 'approval.resolve') {
             ws.data.approvals.resolve(msg.data.approvalId, msg.data.decision);
+            approvalBroker.resolve(msg.data.approvalId, msg.data.decision);
+          }
+        },
+        close(ws) {
+          if (ws.data.kind === 'approvals') {
+            approvalBroker.unsubscribe(ws.data.subscriberId);
           }
         },
       },

@@ -13,16 +13,28 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   createMemory,
+  getEmbeddingStatus,
   inspectContext,
   listMemory,
   reindexKnowledge,
   searchKnowledge,
   updateMemory,
   uploadAttachmentText,
+  type EmbeddingStatus,
   type KnowledgeHit,
+  type KnowledgeSearchMode,
   type MemoryItem,
 } from '@involvex/ctrl-i';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
+
+const SEARCH_MODE_OPTIONS: KnowledgeSearchMode[] = ['hybrid', 'vector', 'fts'];
+
+function toKnowledgeSearchMode(value: string): KnowledgeSearchMode {
+  if (value === 'vector' || value === 'fts') {
+    return value;
+  }
+  return 'hybrid';
+}
 
 export default function KnowledgeScreen() {
   const router = useRouter();
@@ -38,6 +50,9 @@ export default function KnowledgeScreen() {
   const [memoryDraft, setMemoryDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('loading…');
+  const [searchMode, setSearchMode] = useState<KnowledgeSearchMode>('hybrid');
+  const [embeddingStatus, setEmbeddingStatus] =
+    useState<EmbeddingStatus | null>(null);
 
   const refresh = useCallback(async () => {
     if (!gatewayUrl || !workspaceId) {
@@ -45,9 +60,22 @@ export default function KnowledgeScreen() {
     }
     setBusy(true);
     try {
-      setMemory(await listMemory(gatewayUrl, workspaceId));
+      const [mem, embed] = await Promise.all([
+        listMemory(gatewayUrl, workspaceId),
+        getEmbeddingStatus(gatewayUrl, workspaceId).catch(() => null),
+      ]);
+      setMemory(mem);
+      setEmbeddingStatus(embed);
       if (query.trim()) {
-        setHits(await searchKnowledge(gatewayUrl, workspaceId, query.trim()));
+        setHits(
+          await searchKnowledge(
+            gatewayUrl,
+            workspaceId,
+            query.trim(),
+            undefined,
+            searchMode
+          )
+        );
       } else {
         setHits([]);
       }
@@ -62,7 +90,7 @@ export default function KnowledgeScreen() {
     } finally {
       setBusy(false);
     }
-  }, [conversationId, gatewayUrl, query, workspaceId]);
+  }, [conversationId, gatewayUrl, query, searchMode, workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,9 +105,18 @@ export default function KnowledgeScreen() {
         setConversationId(connected.conversationId);
         setStatus(`workspace · ${connected.workspace.name}`);
         setBusy(true);
-        setMemory(
-          await listMemory(connected.gatewayUrl, connected.workspace.id)
-        );
+        const [mem, embed] = await Promise.all([
+          listMemory(connected.gatewayUrl, connected.workspace.id),
+          getEmbeddingStatus(
+            connected.gatewayUrl,
+            connected.workspace.id
+          ).catch(() => null),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setMemory(mem);
+        setEmbeddingStatus(embed);
         const ctx = await inspectContext(
           connected.gatewayUrl,
           connected.workspace.id,
@@ -119,6 +156,13 @@ export default function KnowledgeScreen() {
         </Pressable>
         <Text style={styles.title}>knowledge</Text>
         <Text style={styles.meta}>{status}</Text>
+        <Text style={styles.meta}>
+          {embeddingStatus
+            ? embeddingStatus.enabled
+              ? `embeddings · ${embeddingStatus.provider}/${embeddingStatus.model} · ${embeddingStatus.indexedChunks}/${embeddingStatus.totalChunks} indexed`
+              : 'embeddings off (fts only)'
+            : 'embeddings unknown'}
+        </Text>
 
         <Text style={styles.label}>ingest note</Text>
         <TextInput
@@ -190,7 +234,29 @@ export default function KnowledgeScreen() {
           </Text>
         </Pressable>
 
-        <Text style={styles.label}>FTS search / context</Text>
+        <Text style={styles.label}>search / context</Text>
+        <View style={styles.modeRow}>
+          {SEARCH_MODE_OPTIONS.map((mode) => (
+            <Pressable
+              key={mode}
+              style={[
+                styles.modeBtn,
+                searchMode === mode && styles.modeBtnActive,
+              ]}
+              onPress={() => setSearchMode(toKnowledgeSearchMode(mode))}
+              disabled={busy}
+            >
+              <Text
+                style={[
+                  styles.modeBtnText,
+                  searchMode === mode && styles.modeBtnTextActive,
+                ]}
+              >
+                {mode}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         <TextInput
           style={styles.input}
           value={query}
@@ -212,8 +278,11 @@ export default function KnowledgeScreen() {
         {hits.map((hit) => (
           <View key={hit.chunkId} style={styles.panel}>
             <Text style={styles.meta}>
-              <Text style={styles.emphasis}>{hit.filename}</Text> —{' '}
-              {hit.snippet}
+              <Text style={styles.emphasis}>{hit.filename}</Text>
+              {hit.score !== undefined
+                ? ` [${hit.source ?? 'hit'} ${hit.score.toFixed(3)}]`
+                : ''}{' '}
+              — {hit.snippet}
             </Text>
           </View>
         ))}
@@ -374,4 +443,14 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   row: { flexDirection: 'row', gap: 16 },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  modeBtn: {
+    borderWidth: 1,
+    borderColor: '#00ff66',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modeBtnActive: { backgroundColor: '#00ff66' },
+  modeBtnText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 12 },
+  modeBtnTextActive: { color: '#000', fontWeight: '700' },
 });
