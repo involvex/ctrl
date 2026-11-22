@@ -148,7 +148,8 @@ export function searchLocalChunks(
     });
   }
 
-  return scored.toSorted((a, b) => b.score - a.score).slice(0, limit);
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit);
 }
 
 export function listPinnedLocalMemory(

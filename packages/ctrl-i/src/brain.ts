@@ -447,9 +447,8 @@ export function mergeGatewayKnowledge<T extends ClientBrainState>(
   const incomingChunks: ClientBrainChunk[] = [];
 
   for (const att of hostAttachments) {
-    const attChunks = (chunksByAttachment.get(att.id) ?? [])
-      .slice()
-      .toSorted((a, b) => a.chunkIndex - b.chunkIndex);
+    const attChunks = (chunksByAttachment.get(att.id) ?? []).slice();
+    attChunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
     if (attChunks.length === 0) {
       continue;
     }
