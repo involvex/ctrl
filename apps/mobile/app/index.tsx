@@ -206,9 +206,7 @@ export default function ChatHomeScreen() {
   const ensureGatewayConversation = useCallback(
     async (baseUrl: string): Promise<string> => {
       const current = brainRef.current;
-      const localConv = current
-        ? activeConversation(current)
-        : undefined;
+      const localConv = current ? activeConversation(current) : undefined;
       const pinnedWs = current?.gatewayWorkspaceId;
       const pinnedConv = localConv?.gatewayConversationId;
 
@@ -223,9 +221,7 @@ export default function ChatHomeScreen() {
 
       const workspaces = await listWorkspaces(baseUrl);
       let ws =
-        (pinnedWs
-          ? workspaces.find((w) => w.id === pinnedWs)
-          : undefined) ??
+        (pinnedWs ? workspaces.find((w) => w.id === pinnedWs) : undefined) ??
         workspaces.find((w) => w.name === 'Mobile') ??
         workspaces[0] ??
         null;
@@ -539,10 +535,7 @@ export default function ChatHomeScreen() {
           litertUnavailable: litertStatus?.unavailableReason ?? null,
           ensureConversation: async (baseUrl) => {
             const id = await ensureGatewayConversation(baseUrl);
-            let mapped = setGatewayConversationId(
-              brainRef.current ?? next,
-              id
-            );
+            let mapped = setGatewayConversationId(brainRef.current ?? next, id);
             if (gatewayWorkspaceIdRef.current) {
               mapped = setGatewayWorkspaceId(
                 mapped,

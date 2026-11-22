@@ -129,9 +129,7 @@ export default function ChatScreen() {
 
       const workspaces = await listWorkspaces(baseUrl);
       let ws =
-        (pinnedWs
-          ? workspaces.find((w) => w.id === pinnedWs)
-          : undefined) ??
+        (pinnedWs ? workspaces.find((w) => w.id === pinnedWs) : undefined) ??
         workspaces.find((w) => w.name === 'Web') ??
         workspaces[0] ??
         null;
@@ -378,10 +376,7 @@ export default function ChatScreen() {
           conversationId
         );
         if (gatewayWorkspaceIdRef.current) {
-          mapped = setGatewayWorkspaceId(
-            mapped,
-            gatewayWorkspaceIdRef.current
-          );
+          mapped = setGatewayWorkspaceId(mapped, gatewayWorkspaceIdRef.current);
         }
         next = mapped;
         await persist(next);

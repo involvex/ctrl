@@ -48,9 +48,9 @@ describe('brain merge', () => {
   test('keeps local message when gateway is absent', () => {
     const brain = emptyBrain();
     const merged = mergeGatewayMessages(brain, 'conv_a', []);
-    expect(merged.messages.filter((m) => m.conversationId === 'conv_a')).toHaveLength(
-      1
-    );
+    expect(
+      merged.messages.filter((m) => m.conversationId === 'conv_a')
+    ).toHaveLength(1);
     expect(merged.messages[0]!.origin).toBe('local');
   });
 
@@ -231,9 +231,7 @@ describe('syncClientBrain multi-thread', () => {
     expect(result.brain.gatewayWorkspaceId).toBe('ws_1');
     expect(result.pushed).toBe(2);
     expect(upserts).toHaveLength(2);
-    expect(upserts.every((u) => u.conversationId !== 'gw_existing')).toBe(
-      true
-    );
+    expect(upserts.every((u) => u.conversationId !== 'gw_existing')).toBe(true);
   });
 
   test('pins workspace and reuses it without creating Mobile/Web again', async () => {

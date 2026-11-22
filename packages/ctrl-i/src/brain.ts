@@ -209,8 +209,7 @@ export type BrainSyncFail<T extends ClientBrainState> = {
 };
 
 export type BrainSyncResult<T extends ClientBrainState> =
-  | BrainSyncOk<T>
-  | BrainSyncFail<T>;
+  BrainSyncOk<T> | BrainSyncFail<T>;
 
 /**
  * Multi-conversation append-only sync.

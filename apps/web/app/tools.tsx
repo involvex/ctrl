@@ -193,15 +193,11 @@ export default function ToolsScreen() {
       <Pressable
         style={[
           styles.button,
-          (!gatewayUrl ||
-            busy ||
-            (!skillEditingId && !skillIdDraft.trim())) &&
+          (!gatewayUrl || busy || (!skillEditingId && !skillIdDraft.trim())) &&
             styles.buttonDisabled,
         ]}
         disabled={
-          !gatewayUrl ||
-          busy ||
-          (!skillEditingId && !skillIdDraft.trim())
+          !gatewayUrl || busy || (!skillEditingId && !skillIdDraft.trim())
         }
         onPress={() => {
           if (!gatewayUrl) {
