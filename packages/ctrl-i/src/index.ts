@@ -65,6 +65,7 @@ import {
 } from '@involvex/ctrl-s';
 import { z } from 'zod';
 import { authHeaders, withAuthSearch } from './auth';
+import type { BrainSyncApi } from './brain';
 
 export {
   authHeaders,
@@ -74,6 +75,20 @@ export {
   withAuthSearch,
   type ClientAuth,
 } from './auth';
+
+export {
+  addHostConversation,
+  localMessagesToPush,
+  mergeGatewayMessages,
+  setConversationGatewayId,
+  setGatewayWorkspaceId,
+  syncClientBrain,
+  type BrainSyncApi,
+  type BrainSyncResult,
+  type ClientBrainConversation,
+  type ClientBrainMessage,
+  type ClientBrainState,
+} from './brain';
 
 export type {
   AgentProfile,
@@ -1200,3 +1215,17 @@ export type {
   Workspace,
   WorkspaceExport,
 };
+
+/** Build the BrainSyncApi surface against a live gateway base URL. */
+export function createBrainSyncApi(baseUrl: string): BrainSyncApi {
+  return {
+    listWorkspaces: () => listWorkspaces(baseUrl),
+    createWorkspace: (name) => createWorkspace(baseUrl, name),
+    listConversations: (workspaceId) => listConversations(baseUrl, workspaceId),
+    createConversation: (workspaceId, title) =>
+      createConversation(baseUrl, workspaceId, title),
+    listMessages: (conversationId) => listMessages(baseUrl, conversationId),
+    upsertMessages: (conversationId, items) =>
+      upsertMessages(baseUrl, conversationId, items),
+  };
+}

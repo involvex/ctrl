@@ -316,3 +316,9 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Desktop panel extract: `ToolsPanel`, `BackupsPanel`, `ChannelsPanel`.
     - Soak matrix automated re-check; `v0.2.1` tag recipe in RELEASE-v0 (push only after hardware 1–6).
     - Still parked: incremental device sync, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+24. Conversation continuity — multi-conversation append-only sync (done this slice):
+    - Shared merge + `syncClientBrain` in `@involvex/ctrl-i` (mobile/web thin wrappers).
+    - Every local thread maps to its own host conversation (no `conversations[0]` fallback).
+    - Pull unseen host threads into the local brain; pin `gatewayWorkspaceId` after first success.
+    - Live chat `ensureGatewayConversation` uses the pinned workspace + active thread mapping.
+    - Still parked: knowledge/memory replication, conflict resolution, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

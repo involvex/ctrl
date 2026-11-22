@@ -99,8 +99,12 @@ Operator soak rows 1–6 may still be pending on your hardware ([soak-v0.md](soa
 
 Desktop / mobile / web subscribe to `GET /ws/v1/workspaces/:id/approvals` while connected. Channel runs that need tool approval fan out there; Approve/Deny from the chat UI. With no listener, the gateway **denies immediately** (default). Set `CTRL_CHANNEL_APPROVAL_FALLBACK=timeout` to wait on the gate timer instead.
 
+### Conversation continuity (multi-thread sync)
+
+Phone and web brains sync **every** local conversation to its own gateway chat (append-only). Unseen host threads are pulled into the conversation list. The paired workspace id is pinned after the first successful sync.
+
 Still parked:
 
-1. Device↔host incremental sync beyond backups
+1. Knowledge / memory / attachment replication onto the device; edit/delete conflict resolution
 2. Rust `agentd` / monetization experiments
 3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)

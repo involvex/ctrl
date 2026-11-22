@@ -74,8 +74,8 @@ export default function ConversationsScreen() {
         />
         <Text style={styles.title}>conversations</Text>
         <Text style={styles.meta}>
-          Local threads on this phone. Sync still maps the active one to the PC
-          when online.
+          Local and host threads. Sync maps every conversation to its own PC
+          chat when online.
         </Text>
 
         <PrimaryButton

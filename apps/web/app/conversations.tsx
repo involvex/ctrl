@@ -65,8 +65,8 @@ export default function ConversationsScreen() {
       </Pressable>
       <Text style={styles.title}>conversations</Text>
       <Text style={styles.meta}>
-        Local threads in this browser. Sync maps the active one to the gateway
-        when online.
+        Local and host threads. Sync maps every conversation to its own gateway
+        chat when online.
       </Text>
 
       <Pressable

@@ -31,6 +31,8 @@ export type BrainState = {
   activeConversationId: string;
   conversations: BrainConversation[];
   messages: BrainMessage[];
+  /** Pinned paired workspace after first successful sync. */
+  gatewayWorkspaceId?: string;
 };
 
 function newId(prefix: string): string {
@@ -149,10 +151,12 @@ export function setBrainGenerator(
 
 export function setGatewayConversationId(
   state: BrainState,
-  gatewayConversationId: string
+  gatewayConversationId: string,
+  localConversationId?: string
 ): BrainState {
+  const targetId = localConversationId ?? state.activeConversationId;
   const conversations = state.conversations.map((c) => {
-    if (c.id !== state.activeConversationId) {
+    if (c.id !== targetId) {
       return c;
     }
     return Object.assign({}, c, {
@@ -161,6 +165,16 @@ export function setGatewayConversationId(
     });
   });
   return { ...state, conversations };
+}
+
+export function setGatewayWorkspaceId(
+  state: BrainState,
+  gatewayWorkspaceId: string
+): BrainState {
+  if (state.gatewayWorkspaceId === gatewayWorkspaceId) {
+    return state;
+  }
+  return { ...state, gatewayWorkspaceId };
 }
 
 export function activeConversation(

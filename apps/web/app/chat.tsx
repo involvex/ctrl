@@ -40,6 +40,7 @@ import {
   saveBrain,
   setBrainGenerator,
   setGatewayConversationId,
+  setGatewayWorkspaceId,
   type BrainMessage,
   type BrainState,
 } from '../src/brain/store';
@@ -112,20 +113,48 @@ export default function ChatScreen() {
 
   const ensureGatewayConversation = useCallback(
     async (baseUrl: string): Promise<string> => {
-      if (gatewayConversationIdRef.current && gatewayWorkspaceIdRef.current) {
-        return gatewayConversationIdRef.current;
+      const current = brainRef.current;
+      const localConv = current ? activeConversation(current) : undefined;
+      const pinnedWs = current?.gatewayWorkspaceId;
+      const pinnedConv = localConv?.gatewayConversationId;
+
+      if (
+        pinnedConv &&
+        pinnedWs &&
+        gatewayConversationIdRef.current === pinnedConv &&
+        gatewayWorkspaceIdRef.current === pinnedWs
+      ) {
+        return pinnedConv;
       }
+
       const workspaces = await listWorkspaces(baseUrl);
-      let ws = workspaces[0] ?? null;
+      let ws =
+        (pinnedWs
+          ? workspaces.find((w) => w.id === pinnedWs)
+          : undefined) ??
+        workspaces.find((w) => w.name === 'Web') ??
+        workspaces[0] ??
+        null;
       if (!ws) {
         ws = await createWorkspace(baseUrl, 'Web');
       }
       gatewayWorkspaceIdRef.current = ws.id;
-      const conversations = await listConversations(baseUrl, ws.id);
-      let cv = conversations[0] ?? null;
-      if (!cv) {
-        cv = await createConversation(baseUrl, ws.id, 'Chat');
+
+      if (pinnedConv) {
+        const conversations = await listConversations(baseUrl, ws.id);
+        const existing = conversations.find((c) => c.id === pinnedConv);
+        if (existing) {
+          gatewayConversationIdRef.current = existing.id;
+          return existing.id;
+        }
       }
+
+      // Never fall back to conversations[0] — bind this local thread to its own host chat.
+      const cv = await createConversation(
+        baseUrl,
+        ws.id,
+        localConv?.title?.trim() || 'Chat'
+      );
       gatewayConversationIdRef.current = cv.id;
       return cv.id;
     },
@@ -191,6 +220,9 @@ export default function ChatScreen() {
       if (result.ok) {
         brainRef.current = result.brain;
         setBrain(result.brain);
+        if (result.brain.gatewayWorkspaceId) {
+          gatewayWorkspaceIdRef.current = result.brain.gatewayWorkspaceId;
+        }
         const conv = result.brain.conversations.find(
           (c) => c.id === result.brain.activeConversationId
         );
@@ -341,10 +373,17 @@ export default function ChatScreen() {
         const conversationId = await ensureGatewayConversation(
           saved.gatewayUrl
         );
-        next = setGatewayConversationId(
+        let mapped = setGatewayConversationId(
           brainRef.current ?? next,
           conversationId
         );
+        if (gatewayWorkspaceIdRef.current) {
+          mapped = setGatewayWorkspaceId(
+            mapped,
+            gatewayWorkspaceIdRef.current
+          );
+        }
+        next = mapped;
         await persist(next);
 
         let assembled = '';
