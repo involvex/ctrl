@@ -13,11 +13,26 @@ export type ToolsPanelProps = {
   setMcpNameDraft: (value: string) => void;
   setMcpCommandDraft: (value: string) => void;
   setMcpArgsDraft: (value: string) => void;
+  skillIdDraft: string;
+  skillNameDraft: string;
+  skillDescriptionDraft: string;
+  skillInstructionsDraft: string;
+  skillToolsDraft: string;
+  skillEditingId: string | null;
+  setSkillIdDraft: (value: string) => void;
+  setSkillNameDraft: (value: string) => void;
+  setSkillDescriptionDraft: (value: string) => void;
+  setSkillInstructionsDraft: (value: string) => void;
+  setSkillToolsDraft: (value: string) => void;
   onRefresh: () => void;
   onReloadMcp: () => void;
   onUpsertMcp: () => void;
   onDeleteMcp: (serverId: string) => void;
   onToggleSkill: (skillId: string, enabled: boolean) => void;
+  onSaveSkill: () => void;
+  onEditSkill: (skill: SkillManifest) => void;
+  onCancelSkillEdit: () => void;
+  onDeleteSkill: (skillId: string) => void;
 };
 
 export function ToolsPanel(props: ToolsPanelProps) {
@@ -33,12 +48,29 @@ export function ToolsPanel(props: ToolsPanelProps) {
     setMcpNameDraft,
     setMcpCommandDraft,
     setMcpArgsDraft,
+    skillIdDraft,
+    skillNameDraft,
+    skillDescriptionDraft,
+    skillInstructionsDraft,
+    skillToolsDraft,
+    skillEditingId,
+    setSkillIdDraft,
+    setSkillNameDraft,
+    setSkillDescriptionDraft,
+    setSkillInstructionsDraft,
+    setSkillToolsDraft,
     onRefresh,
     onReloadMcp,
     onUpsertMcp,
     onDeleteMcp,
     onToggleSkill,
+    onSaveSkill,
+    onEditSkill,
+    onCancelSkillEdit,
+    onDeleteSkill,
   } = props;
+
+  const editing = skillEditingId != null;
 
   return (
     <aside className="host-panel knowledge-panel host-panel-scroll">
@@ -51,6 +83,106 @@ export function ToolsPanel(props: ToolsPanelProps) {
           reload MCP
         </button>
       </div>
+
+      <section className="host-section">
+        <p className="host-title">
+          {editing ? `edit skill · ${skillEditingId}` : 'add skill'}
+        </p>
+        <p className="meta">
+          user skills live under data/skills/. builtins are toggle-only.
+        </p>
+        <div className="host-row">
+          <input
+            className="host-input host-input-narrow"
+            value={skillIdDraft}
+            onChange={(e) => setSkillIdDraft(e.target.value)}
+            placeholder="id"
+            disabled={editing}
+          />
+          <input
+            className="host-input"
+            value={skillNameDraft}
+            onChange={(e) => setSkillNameDraft(e.target.value)}
+            placeholder="name"
+          />
+        </div>
+        <div className="host-row">
+          <input
+            className="host-input"
+            value={skillDescriptionDraft}
+            onChange={(e) => setSkillDescriptionDraft(e.target.value)}
+            placeholder="description"
+          />
+        </div>
+        <div className="host-row">
+          <textarea
+            className="knowledge-draft"
+            value={skillInstructionsDraft}
+            onChange={(e) => setSkillInstructionsDraft(e.target.value)}
+            placeholder="instructions (SKILL.md body)"
+            rows={5}
+          />
+        </div>
+        <div className="host-row">
+          <input
+            className="host-input"
+            value={skillToolsDraft}
+            onChange={(e) => setSkillToolsDraft(e.target.value)}
+            placeholder="tool names (space-separated, optional)"
+          />
+          <button type="button" className="ghost-btn" onClick={onSaveSkill}>
+            {editing ? 'update' : 'create'}
+          </button>
+          {editing ? (
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={onCancelSkillEdit}
+            >
+              cancel
+            </button>
+          ) : null}
+        </div>
+      </section>
+
+      <p className="host-title">skills</p>
+      <ul className="knowledge-list">
+        {skillItems.map((skill) => (
+          <li key={skill.id}>
+            <label className="host-row">
+              <input
+                type="checkbox"
+                checked={skill.enabled}
+                onChange={(e) => onToggleSkill(skill.id, e.target.checked)}
+              />
+              <span>
+                <code>{skill.id}</code> {skill.name}
+                {skill.builtin ? ' · builtin' : ''}
+                {skill.description ? ` — ${skill.description}` : ''}
+              </span>
+            </label>
+            {!skill.builtin ? (
+              <div className="host-row">
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => onEditSkill(skill)}
+                >
+                  edit
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => onDeleteSkill(skill.id)}
+                >
+                  remove
+                </button>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {skillItems.length === 0 ? <p className="meta">no skills</p> : null}
 
       <section className="host-section">
         <p className="host-title">add / update MCP server</p>
@@ -111,27 +243,6 @@ export function ToolsPanel(props: ToolsPanelProps) {
         ))}
       </ul>
       {mcpServers.length === 0 ? <p className="meta">no MCP servers</p> : null}
-
-      <p className="host-title">skills</p>
-      <ul className="knowledge-list">
-        {skillItems.map((skill) => (
-          <li key={skill.id}>
-            <label className="host-row">
-              <input
-                type="checkbox"
-                checked={skill.enabled}
-                onChange={(e) => onToggleSkill(skill.id, e.target.checked)}
-              />
-              <span>
-                <code>{skill.id}</code> {skill.name}
-                {skill.builtin ? ' · builtin' : ''}
-                {skill.description ? ` — ${skill.description}` : ''}
-              </span>
-            </label>
-          </li>
-        ))}
-      </ul>
-      {skillItems.length === 0 ? <p className="meta">no skills</p> : null}
 
       <p className="host-title">registered tools</p>
       <ul className="knowledge-list">

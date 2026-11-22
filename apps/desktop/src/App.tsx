@@ -15,7 +15,9 @@ import {
   listChannels,
   listConversations,
   listHfModelCatalog,
+  createSkill,
   deleteMcpServer,
+  deleteSkill,
   listMcpServers,
   listMemory,
   listMessages,
@@ -253,6 +255,12 @@ export function App() {
   const [mcpNameDraft, setMcpNameDraft] = useState('Demo MCP');
   const [mcpCommandDraft, setMcpCommandDraft] = useState('');
   const [mcpArgsDraft, setMcpArgsDraft] = useState('');
+  const [skillIdDraft, setSkillIdDraft] = useState('');
+  const [skillNameDraft, setSkillNameDraft] = useState('');
+  const [skillDescriptionDraft, setSkillDescriptionDraft] = useState('');
+  const [skillInstructionsDraft, setSkillInstructionsDraft] = useState('');
+  const [skillToolsDraft, setSkillToolsDraft] = useState('');
+  const [skillEditingId, setSkillEditingId] = useState<string | null>(null);
   const hostOpen = openPanel === 'host';
   const conversationsOpen = openPanel === 'conversations';
   const knowledgeOpen = openPanel === 'knowledge';
@@ -1848,6 +1856,17 @@ export function App() {
           setMcpNameDraft={setMcpNameDraft}
           setMcpCommandDraft={setMcpCommandDraft}
           setMcpArgsDraft={setMcpArgsDraft}
+          skillIdDraft={skillIdDraft}
+          skillNameDraft={skillNameDraft}
+          skillDescriptionDraft={skillDescriptionDraft}
+          skillInstructionsDraft={skillInstructionsDraft}
+          skillToolsDraft={skillToolsDraft}
+          skillEditingId={skillEditingId}
+          setSkillIdDraft={setSkillIdDraft}
+          setSkillNameDraft={setSkillNameDraft}
+          setSkillDescriptionDraft={setSkillDescriptionDraft}
+          setSkillInstructionsDraft={setSkillInstructionsDraft}
+          setSkillToolsDraft={setSkillToolsDraft}
           onRefresh={() => {
             void refreshTools();
           }}
@@ -1891,6 +1910,81 @@ export function App() {
             void (async () => {
               try {
                 await updateSkill(gatewayUrl, skillId, { enabled });
+                await refreshTools();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            })();
+          }}
+          onSaveSkill={() => {
+            void (async () => {
+              try {
+                const toolNames = skillToolsDraft
+                  .trim()
+                  .split(/\s+/)
+                  .filter(Boolean);
+                if (skillEditingId) {
+                  await updateSkill(gatewayUrl, skillEditingId, {
+                    name: skillNameDraft.trim() || skillEditingId,
+                    description: skillDescriptionDraft,
+                    instructions: skillInstructionsDraft,
+                    toolNames,
+                  });
+                } else {
+                  const id = skillIdDraft.trim();
+                  if (!id) {
+                    setError('skill id required');
+                    return;
+                  }
+                  await createSkill(gatewayUrl, {
+                    id,
+                    name: skillNameDraft.trim() || id,
+                    description: skillDescriptionDraft || undefined,
+                    instructions: skillInstructionsDraft || undefined,
+                    toolNames: toolNames.length > 0 ? toolNames : undefined,
+                    enabled: false,
+                  });
+                }
+                setSkillIdDraft('');
+                setSkillNameDraft('');
+                setSkillDescriptionDraft('');
+                setSkillInstructionsDraft('');
+                setSkillToolsDraft('');
+                setSkillEditingId(null);
+                await refreshTools();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            })();
+          }}
+          onEditSkill={(skill) => {
+            setSkillEditingId(skill.id);
+            setSkillIdDraft(skill.id);
+            setSkillNameDraft(skill.name);
+            setSkillDescriptionDraft(skill.description);
+            setSkillInstructionsDraft(skill.instructions);
+            setSkillToolsDraft(skill.toolNames.join(' '));
+          }}
+          onCancelSkillEdit={() => {
+            setSkillEditingId(null);
+            setSkillIdDraft('');
+            setSkillNameDraft('');
+            setSkillDescriptionDraft('');
+            setSkillInstructionsDraft('');
+            setSkillToolsDraft('');
+          }}
+          onDeleteSkill={(skillId) => {
+            void (async () => {
+              try {
+                await deleteSkill(gatewayUrl, skillId);
+                if (skillEditingId === skillId) {
+                  setSkillEditingId(null);
+                  setSkillIdDraft('');
+                  setSkillNameDraft('');
+                  setSkillDescriptionDraft('');
+                  setSkillInstructionsDraft('');
+                  setSkillToolsDraft('');
+                }
                 await refreshTools();
               } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));

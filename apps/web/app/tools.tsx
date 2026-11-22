@@ -10,7 +10,9 @@ import {
   View,
 } from 'react-native';
 import {
+  createSkill,
   deleteMcpServer,
+  deleteSkill,
   listMcpServers,
   listSkills,
   listTools,
@@ -22,6 +24,22 @@ import {
 } from '@involvex/ctrl-i';
 import type { ToolDefinition } from '@involvex/ctrl-s';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
+
+function clearSkillDraft(setters: {
+  setId: (v: string) => void;
+  setName: (v: string) => void;
+  setDescription: (v: string) => void;
+  setInstructions: (v: string) => void;
+  setTools: (v: string) => void;
+  setEditingId: (v: string | null) => void;
+}): void {
+  setters.setId('');
+  setters.setName('');
+  setters.setDescription('');
+  setters.setInstructions('');
+  setters.setTools('');
+  setters.setEditingId(null);
+}
 
 export default function ToolsScreen() {
   const router = useRouter();
@@ -35,6 +53,21 @@ export default function ToolsScreen() {
   const [mcpName, setMcpName] = useState('');
   const [mcpCommand, setMcpCommand] = useState('');
   const [mcpArgs, setMcpArgs] = useState('');
+  const [skillIdDraft, setSkillIdDraft] = useState('');
+  const [skillNameDraft, setSkillNameDraft] = useState('');
+  const [skillDescriptionDraft, setSkillDescriptionDraft] = useState('');
+  const [skillInstructionsDraft, setSkillInstructionsDraft] = useState('');
+  const [skillToolsDraft, setSkillToolsDraft] = useState('');
+  const [skillEditingId, setSkillEditingId] = useState<string | null>(null);
+
+  const skillDraftSetters = {
+    setId: setSkillIdDraft,
+    setName: setSkillNameDraft,
+    setDescription: setSkillDescriptionDraft,
+    setInstructions: setSkillInstructionsDraft,
+    setTools: setSkillToolsDraft,
+    setEditingId: setSkillEditingId,
+  };
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -112,36 +145,189 @@ export default function ToolsScreen() {
           <Text style={styles.buttonText}>refresh</Text>
         )}
       </Pressable>
+      <Text style={styles.label}>
+        {skillEditingId ? `edit skill · ${skillEditingId}` : 'add skill'}
+      </Text>
+      <Text style={styles.meta}>
+        user skills under data/skills/. builtins are toggle-only.
+      </Text>
+      <TextInput
+        style={styles.input}
+        value={skillIdDraft}
+        onChangeText={setSkillIdDraft}
+        placeholder="id"
+        placeholderTextColor="#6b7f72"
+        autoCapitalize="none"
+        editable={!skillEditingId}
+      />
+      <TextInput
+        style={styles.input}
+        value={skillNameDraft}
+        onChangeText={setSkillNameDraft}
+        placeholder="name"
+        placeholderTextColor="#6b7f72"
+      />
+      <TextInput
+        style={styles.input}
+        value={skillDescriptionDraft}
+        onChangeText={setSkillDescriptionDraft}
+        placeholder="description"
+        placeholderTextColor="#6b7f72"
+      />
+      <TextInput
+        style={[styles.input, styles.multiline]}
+        value={skillInstructionsDraft}
+        onChangeText={setSkillInstructionsDraft}
+        placeholder="instructions (SKILL.md body)"
+        placeholderTextColor="#6b7f72"
+        multiline
+      />
+      <TextInput
+        style={styles.input}
+        value={skillToolsDraft}
+        onChangeText={setSkillToolsDraft}
+        placeholder="tool names (space-separated)"
+        placeholderTextColor="#6b7f72"
+        autoCapitalize="none"
+      />
+      <Pressable
+        style={[
+          styles.button,
+          (!gatewayUrl ||
+            busy ||
+            (!skillEditingId && !skillIdDraft.trim())) &&
+            styles.buttonDisabled,
+        ]}
+        disabled={
+          !gatewayUrl ||
+          busy ||
+          (!skillEditingId && !skillIdDraft.trim())
+        }
+        onPress={() => {
+          if (!gatewayUrl) {
+            return;
+          }
+          void (async () => {
+            setBusy(true);
+            try {
+              const toolNames = skillToolsDraft
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+              if (skillEditingId) {
+                await updateSkill(gatewayUrl, skillEditingId, {
+                  name: skillNameDraft.trim() || skillEditingId,
+                  description: skillDescriptionDraft,
+                  instructions: skillInstructionsDraft,
+                  toolNames,
+                });
+              } else {
+                const id = skillIdDraft.trim();
+                await createSkill(gatewayUrl, {
+                  id,
+                  name: skillNameDraft.trim() || id,
+                  description: skillDescriptionDraft || undefined,
+                  instructions: skillInstructionsDraft || undefined,
+                  toolNames: toolNames.length > 0 ? toolNames : undefined,
+                  enabled: false,
+                });
+              }
+              clearSkillDraft(skillDraftSetters);
+              await refresh();
+            } catch (err) {
+              setStatus(err instanceof Error ? err.message : String(err));
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+      >
+        <Text style={styles.buttonText}>
+          {skillEditingId ? 'update skill' : 'create skill'}
+        </Text>
+      </Pressable>
+      {skillEditingId ? (
+        <Pressable
+          style={styles.ghostBtn}
+          onPress={() => {
+            clearSkillDraft(skillDraftSetters);
+          }}
+        >
+          <Text style={styles.ghostText}>cancel edit</Text>
+        </Pressable>
+      ) : null}
+
       <Text style={styles.label}>skills</Text>
       {skills.length === 0 ? (
         <Text style={styles.meta}>no skills</Text>
       ) : (
         skills.map((skill) => (
-          <Pressable
-            key={skill.id}
-            style={styles.panel}
-            onPress={() => {
-              if (!gatewayUrl) {
-                return;
-              }
-              void (async () => {
-                try {
-                  await updateSkill(gatewayUrl, skill.id, {
-                    enabled: !skill.enabled,
-                  });
-                  await refresh();
-                } catch (err) {
-                  setStatus(err instanceof Error ? err.message : String(err));
+          <View key={skill.id} style={styles.panel}>
+            <Pressable
+              onPress={() => {
+                if (!gatewayUrl) {
+                  return;
                 }
-              })();
-            }}
-          >
-            <Text style={styles.body}>
-              [{skill.enabled ? 'on' : 'off'}] {skill.id} · {skill.name}
-              {skill.builtin ? ' · builtin' : ''}
-              {skill.description ? ` — ${skill.description}` : ''}
-            </Text>
-          </Pressable>
+                void (async () => {
+                  try {
+                    await updateSkill(gatewayUrl, skill.id, {
+                      enabled: !skill.enabled,
+                    });
+                    await refresh();
+                  } catch (err) {
+                    setStatus(err instanceof Error ? err.message : String(err));
+                  }
+                })();
+              }}
+            >
+              <Text style={styles.body}>
+                [{skill.enabled ? 'on' : 'off'}] {skill.id} · {skill.name}
+                {skill.builtin ? ' · builtin' : ''}
+                {skill.description ? ` — ${skill.description}` : ''}
+              </Text>
+            </Pressable>
+            {!skill.builtin ? (
+              <View style={styles.row}>
+                <Pressable
+                  style={styles.ghostBtn}
+                  onPress={() => {
+                    setSkillEditingId(skill.id);
+                    setSkillIdDraft(skill.id);
+                    setSkillNameDraft(skill.name);
+                    setSkillDescriptionDraft(skill.description);
+                    setSkillInstructionsDraft(skill.instructions);
+                    setSkillToolsDraft(skill.toolNames.join(' '));
+                  }}
+                >
+                  <Text style={styles.ghostText}>edit</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.ghostBtn}
+                  disabled={!gatewayUrl || busy}
+                  onPress={() => {
+                    if (!gatewayUrl) {
+                      return;
+                    }
+                    void (async () => {
+                      try {
+                        await deleteSkill(gatewayUrl, skill.id);
+                        if (skillEditingId === skill.id) {
+                          clearSkillDraft(skillDraftSetters);
+                        }
+                        await refresh();
+                      } catch (err) {
+                        setStatus(
+                          err instanceof Error ? err.message : String(err)
+                        );
+                      }
+                    })();
+                  }}
+                >
+                  <Text style={styles.ghostText}>remove</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
         ))
       )}
       <Text style={styles.label}>MCP servers</Text>
@@ -327,4 +513,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   ghostText: { color: '#00ff66', fontFamily: 'monospace', fontSize: 11 },
+  multiline: { minHeight: 96, textAlignVertical: 'top' },
+  row: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
 });

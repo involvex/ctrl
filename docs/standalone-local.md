@@ -48,9 +48,9 @@ Desktop Host can also set a binary path, pick a file, or download from a URL whe
 ## Skills + MCP (Host tools panel)
 
 1. Open desktop **tools** (exclusive panel).
-2. **Skills** — toggle `knowledge-assistant` (or a user skill under `data/skills/`). Enabled skills append instructions to the agent profile on the next chat turn.
+2. **Skills** — toggle `knowledge-assistant`, or **create / edit / delete** user skills (id, name, description, instructions, optional tool names). Builtins are toggle-only. Enabled skills append instructions to the agent profile on the next chat turn. Same authoring UI on mobile/web when paired.
 3. **MCP** — enter id / name / command / args → **save**. Gateway writes `data/mcp.json`, reloads stdio servers, and remounts `mcp__*` tools. Empty command keeps the in-process demo echo stub.
-4. **reload MCP** forces reconnect without changing config. Mobile/web can toggle skills; add MCP from the Host (it owns the daemon).
+4. **reload MCP** forces reconnect without changing config.
 
 Env overrides still work: `CTRL_MCP_SERVERS` (JSON array) or `CTRL_MCP_STDIO=1` for the bundled stdio demo. File config wins when `data/mcp.json` has servers.
 

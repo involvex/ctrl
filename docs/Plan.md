@@ -322,3 +322,7 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Pull unseen host threads into the local brain; pin `gatewayWorkspaceId` after first success.
     - Live chat `ensureGatewayConversation` uses the pinned workspace + active thread mapping.
     - Still parked: knowledge/memory replication, conflict resolution, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+25. Skills authoring UI (done this slice):
+    - Desktop / mobile / web tools: create user skills (id, name, description, instructions, tool names).
+    - Edit + delete for non-builtin skills; builtins remain toggle-only via existing PATCH enabled.
+    - Uses existing `POST/PATCH/DELETE /api/v1/skills` (`createSkill` / `updateSkill` / `deleteSkill` in ctrl-i).
