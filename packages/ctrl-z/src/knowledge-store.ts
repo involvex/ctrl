@@ -390,10 +390,7 @@ export class KnowledgeStore {
   ): Array<KnowledgeChunk & { filename: string }> {
     const limit = opts.limit ?? 5000;
     const rows = this.db
-      .query<
-        ChunkRow & { filename: string },
-        [string, number]
-      >(
+      .query<ChunkRow & { filename: string }, [string, number]>(
         `SELECT c.id, c.attachment_id, c.workspace_id, c.chunk_index,
                 c.content, c.created_at, a.filename
          FROM knowledge_chunks c

@@ -463,15 +463,12 @@ export function mergeGatewayKnowledge<T extends ClientBrainState>(
       const fp = noteFingerprint(att.filename, text);
       const matched = notes.find(
         (n) =>
-          !n.gatewayAttachmentId &&
-          noteFingerprint(n.filename, n.text) === fp
+          !n.gatewayAttachmentId && noteFingerprint(n.filename, n.text) === fp
       );
       if (matched) {
         noteId = matched.id;
         notes = notes.map((n) =>
-          n.id === matched.id
-            ? { ...n, gatewayAttachmentId: att.id }
-            : n
+          n.id === matched.id ? { ...n, gatewayAttachmentId: att.id } : n
         );
         notesMutated = true;
         noteByAttachment.set(att.id, noteId);
@@ -652,8 +649,7 @@ export type BrainSyncFail<T extends ClientBrainState> = {
 };
 
 export type BrainSyncResult<T extends ClientBrainState> =
-  | BrainSyncOk<T>
-  | BrainSyncFail<T>;
+  BrainSyncOk<T> | BrainSyncFail<T>;
 
 /**
  * Multi-conversation + knowledge append-only sync.
@@ -778,9 +774,7 @@ export async function syncClientBrain<T extends ClientBrainState>(
     const chunksBefore = next.chunks.length;
     next = mergeGatewayKnowledge(next, hostAttachments, hostChunks);
     pulled +=
-      next.notes.length -
-      notesBefore +
-      (next.chunks.length - chunksBefore);
+      next.notes.length - notesBefore + (next.chunks.length - chunksBefore);
 
     const notesPush = localNotesToPush(next, hostAttachments);
     for (const note of notesPush) {

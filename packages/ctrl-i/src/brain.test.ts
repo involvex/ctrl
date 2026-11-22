@@ -64,9 +64,7 @@ function emptyBrain(): ClientBrainState {
   };
 }
 
-function stubKnowledgeApi(
-  overrides: Partial<BrainSyncApi> = {}
-): BrainSyncApi {
+function stubKnowledgeApi(overrides: Partial<BrainSyncApi> = {}): BrainSyncApi {
   return {
     listWorkspaces: async () => [{ id: 'ws_1', name: 'Mobile' }],
     createWorkspace: async (name) => ({ id: 'ws_new', name }),
