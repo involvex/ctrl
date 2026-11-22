@@ -625,12 +625,12 @@ export async function startServer(): Promise<StartedGateway> {
           }
           const limitRaw = url.searchParams.get('limit');
           const limit = limitRaw ? Number(limitRaw) : undefined;
+          const chunkOpts =
+            Number.isFinite(limit) && limit && limit > 0
+              ? { limit: Math.min(limit, 5000) }
+              : undefined;
           return json(req, {
-            items: knowledge.listChunks(workspaceId, {
-              ...(Number.isFinite(limit) && limit && limit > 0
-                ? { limit: Math.min(limit, 5000) }
-                : {}),
-            }),
+            items: knowledge.listChunks(workspaceId, chunkOpts),
           });
         }
 
