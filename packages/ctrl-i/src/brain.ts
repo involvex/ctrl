@@ -1,4 +1,15 @@
-import type { Conversation, Message } from '@involvex/ctrl-s';
+import type {
+  Attachment,
+  Conversation,
+  KnowledgeChunkExport,
+  MemoryItem,
+  Message,
+} from '@involvex/ctrl-s';
+import {
+  chunkNoteText,
+  clampMemoryContent,
+  clampNoteText,
+} from './local-knowledge';
 
 /** Message row shared by mobile/web local-first brains. */
 export type ClientBrainMessage = {
@@ -20,17 +31,59 @@ export type ClientBrainConversation = {
   updatedAt: number;
 };
 
+/** Local / replicated text note (attachment body without blob). */
+export type ClientBrainNote = {
+  id: string;
+  filename: string;
+  text: string;
+  createdAt: number;
+  origin: 'local' | 'gateway';
+  /** Host attachment id after push or when pulled. */
+  gatewayAttachmentId?: string;
+};
+
+/** Local / replicated memory item. */
+export type ClientBrainMemory = {
+  id: string;
+  kind: 'note' | 'fact' | 'preference';
+  content: string;
+  pinned: boolean;
+  status: 'active' | 'archived' | 'pending_review';
+  createdAt: number;
+  updatedAt: number;
+  origin: 'local' | 'gateway';
+  gatewayMemoryId?: string;
+  sourceAttachmentId?: string | null;
+};
+
+/** Local / replicated knowledge chunk for offline keyword search. */
+export type ClientBrainChunk = {
+  id: string;
+  noteId: string;
+  filename: string;
+  content: string;
+  chunkIndex: number;
+  createdAt: number;
+  origin: 'local' | 'gateway';
+  gatewayChunkId?: string;
+  gatewayAttachmentId?: string;
+};
+
 /**
  * Minimal brain shape for append-only sync.
  * Clients may carry extra fields (generator union, etc.).
+ * version 2 adds notes / memory / chunks (device knowledge).
  */
 export type ClientBrainState = {
-  version: 1;
+  version: 2;
   persona: string;
   generator: string;
   activeConversationId: string;
   conversations: ClientBrainConversation[];
   messages: ClientBrainMessage[];
+  notes: ClientBrainNote[];
+  memory: ClientBrainMemory[];
+  chunks: ClientBrainChunk[];
   /** Pinned paired workspace — set after first successful sync. */
   gatewayWorkspaceId?: string;
 };
@@ -39,8 +92,35 @@ function fingerprint(role: string, content: string): string {
   return `${role}\n${content}`;
 }
 
+function noteFingerprint(filename: string, text: string): string {
+  return `${filename}\n${text}`;
+}
+
+function memoryFingerprint(kind: string, content: string): string {
+  return `${kind}\n${content}`;
+}
+
 function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Migrate a persisted brain (v1 or partial) to version 2 with knowledge arrays.
+ */
+export function migrateClientBrainState<T extends Record<string, unknown>>(
+  raw: T
+): T & ClientBrainState {
+  const base = raw as T & Partial<ClientBrainState>;
+  const notes = Array.isArray(base.notes) ? base.notes : [];
+  const memory = Array.isArray(base.memory) ? base.memory : [];
+  const chunks = Array.isArray(base.chunks) ? base.chunks : [];
+  return {
+    ...base,
+    version: 2,
+    notes,
+    memory,
+    chunks,
+  } as T & ClientBrainState;
 }
 
 /**
@@ -175,6 +255,354 @@ export function addHostConversation<T extends ClientBrainState>(
   };
 }
 
+/** Create a local note + keyword chunks (offline knowledge). */
+export function addLocalNote<T extends ClientBrainState>(
+  state: T,
+  input: { filename: string; text: string }
+): T {
+  const now = Date.now();
+  const text = clampNoteText(input.text.trim());
+  const filename = input.filename.trim() || 'notes.md';
+  if (!text) {
+    return state;
+  }
+  const noteId = newId('note');
+  const note: ClientBrainNote = {
+    id: noteId,
+    filename,
+    text,
+    createdAt: now,
+    origin: 'local',
+  };
+  const pieces = chunkNoteText(text);
+  const chunks: ClientBrainChunk[] = pieces.map((content, chunkIndex) => ({
+    id: newId('chk'),
+    noteId,
+    filename,
+    content,
+    chunkIndex,
+    createdAt: now,
+    origin: 'local',
+  }));
+  return {
+    ...state,
+    notes: [note, ...state.notes],
+    chunks: [...chunks, ...state.chunks],
+  };
+}
+
+/** Create a local memory item (offline). */
+export function addLocalMemory<T extends ClientBrainState>(
+  state: T,
+  input: {
+    content: string;
+    kind?: ClientBrainMemory['kind'];
+    pinned?: boolean;
+    status?: ClientBrainMemory['status'];
+  }
+): T {
+  const content = clampMemoryContent(input.content.trim());
+  if (!content) {
+    return state;
+  }
+  const now = Date.now();
+  const item: ClientBrainMemory = {
+    id: newId('mem'),
+    kind: input.kind ?? 'note',
+    content,
+    pinned: input.pinned ?? true,
+    status: input.status ?? 'active',
+    createdAt: now,
+    updatedAt: now,
+    origin: 'local',
+  };
+  return {
+    ...state,
+    memory: [item, ...state.memory],
+  };
+}
+
+/** Append-only pull of host memory items. */
+export function mergeGatewayMemory<T extends ClientBrainState>(
+  state: T,
+  hostItems: readonly MemoryItem[]
+): T {
+  const existingIds = new Set(state.memory.map((m) => m.id));
+  for (const m of state.memory) {
+    if (m.gatewayMemoryId) {
+      existingIds.add(m.gatewayMemoryId);
+    }
+  }
+  const existingFingerprints = new Set(
+    state.memory.map((m) => memoryFingerprint(m.kind, m.content))
+  );
+
+  const incoming: ClientBrainMemory[] = [];
+  for (const hm of hostItems) {
+    if (existingIds.has(hm.id)) {
+      continue;
+    }
+    const content = clampMemoryContent(hm.content);
+    const fp = memoryFingerprint(hm.kind, content);
+    if (existingFingerprints.has(fp)) {
+      continue;
+    }
+    existingIds.add(hm.id);
+    existingFingerprints.add(fp);
+    incoming.push({
+      id: hm.id,
+      kind: hm.kind,
+      content,
+      pinned: hm.pinned,
+      status: hm.status,
+      createdAt: hm.createdAt,
+      updatedAt: hm.updatedAt,
+      origin: 'gateway',
+      gatewayMemoryId: hm.id,
+      sourceAttachmentId: hm.sourceAttachmentId,
+    });
+  }
+
+  if (incoming.length === 0) {
+    return state;
+  }
+  return {
+    ...state,
+    memory: [...state.memory, ...incoming],
+  };
+}
+
+/** Local-origin memory not yet on the host. */
+export function localMemoryToPush(
+  state: ClientBrainState,
+  hostItems: readonly MemoryItem[]
+): ClientBrainMemory[] {
+  const hostIds = new Set(hostItems.map((m) => m.id));
+  const hostFingerprints = new Set(
+    hostItems.map((m) => memoryFingerprint(m.kind, m.content))
+  );
+  return state.memory.filter((m) => {
+    if (m.origin !== 'local') {
+      return false;
+    }
+    if (m.gatewayMemoryId) {
+      return false;
+    }
+    if (hostIds.has(m.id)) {
+      return false;
+    }
+    if (hostFingerprints.has(memoryFingerprint(m.kind, m.content))) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function markMemoryPushed<T extends ClientBrainState>(
+  state: T,
+  localId: string,
+  gatewayMemoryId: string
+): T {
+  return {
+    ...state,
+    memory: state.memory.map((m) => {
+      if (m.id !== localId) {
+        return m;
+      }
+      return { ...m, gatewayMemoryId };
+    }),
+  };
+}
+
+/**
+ * Pull host attachments + chunks into notes/chunks (append-only).
+ * Binary blobs stay on the host; only chunk text is replicated.
+ */
+export function mergeGatewayKnowledge<T extends ClientBrainState>(
+  state: T,
+  hostAttachments: readonly Attachment[],
+  hostChunks: readonly KnowledgeChunkExport[]
+): T {
+  const noteByAttachment = new Map<string, string>();
+  const existingNoteIds = new Set(state.notes.map((n) => n.id));
+  const existingNoteFingerprints = new Set(
+    state.notes.map((n) => noteFingerprint(n.filename, n.text))
+  );
+  for (const n of state.notes) {
+    if (n.gatewayAttachmentId) {
+      noteByAttachment.set(n.gatewayAttachmentId, n.id);
+      existingNoteIds.add(n.gatewayAttachmentId);
+    }
+  }
+
+  const chunksByAttachment = new Map<string, KnowledgeChunkExport[]>();
+  for (const c of hostChunks) {
+    const list = chunksByAttachment.get(c.attachmentId) ?? [];
+    list.push(c);
+    chunksByAttachment.set(c.attachmentId, list);
+  }
+
+  let notes = state.notes;
+  let notesMutated = false;
+  const incomingChunks: ClientBrainChunk[] = [];
+
+  for (const att of hostAttachments) {
+    const attChunks = (chunksByAttachment.get(att.id) ?? [])
+      .slice()
+      .toSorted((a, b) => a.chunkIndex - b.chunkIndex);
+    if (attChunks.length === 0) {
+      continue;
+    }
+    const text = clampNoteText(attChunks.map((c) => c.content).join('\n\n'));
+    if (!text) {
+      continue;
+    }
+
+    let noteId = noteByAttachment.get(att.id);
+    if (!noteId) {
+      // Fingerprint match: local note already pushed but not yet marked.
+      const fp = noteFingerprint(att.filename, text);
+      const matched = notes.find(
+        (n) =>
+          !n.gatewayAttachmentId &&
+          noteFingerprint(n.filename, n.text) === fp
+      );
+      if (matched) {
+        noteId = matched.id;
+        notes = notes.map((n) =>
+          n.id === matched.id
+            ? { ...n, gatewayAttachmentId: att.id }
+            : n
+        );
+        notesMutated = true;
+        noteByAttachment.set(att.id, noteId);
+      } else if (
+        !existingNoteIds.has(att.id) &&
+        !existingNoteFingerprints.has(fp)
+      ) {
+        noteId = att.id;
+        if (!notesMutated) {
+          notes = notes.slice();
+          notesMutated = true;
+        }
+        notes.push({
+          id: att.id,
+          filename: att.filename,
+          text,
+          createdAt: att.createdAt,
+          origin: 'gateway',
+          gatewayAttachmentId: att.id,
+        });
+        existingNoteIds.add(att.id);
+        existingNoteFingerprints.add(fp);
+        noteByAttachment.set(att.id, noteId);
+      }
+    }
+  }
+
+  const existingChunkIds = new Set(state.chunks.map((c) => c.id));
+  for (const c of state.chunks) {
+    if (c.gatewayChunkId) {
+      existingChunkIds.add(c.gatewayChunkId);
+    }
+  }
+  const existingChunkFingerprints = new Set(
+    state.chunks.map(
+      (c) => `${c.gatewayAttachmentId ?? c.noteId}\n${c.content}`
+    )
+  );
+
+  for (const hc of hostChunks) {
+    if (existingChunkIds.has(hc.id)) {
+      continue;
+    }
+    const noteId = noteByAttachment.get(hc.attachmentId);
+    if (!noteId) {
+      continue;
+    }
+    const content = clampNoteText(hc.content);
+    const fp = `${hc.attachmentId}\n${content}`;
+    if (existingChunkFingerprints.has(fp)) {
+      continue;
+    }
+    // Also skip if local chunks for this note already hold the same text.
+    const localFp = `${noteId}\n${content}`;
+    if (existingChunkFingerprints.has(localFp)) {
+      continue;
+    }
+    existingChunkIds.add(hc.id);
+    existingChunkFingerprints.add(fp);
+    incomingChunks.push({
+      id: hc.id,
+      noteId,
+      filename: hc.filename,
+      content,
+      chunkIndex: hc.chunkIndex,
+      createdAt: hc.createdAt,
+      origin: 'gateway',
+      gatewayChunkId: hc.id,
+      gatewayAttachmentId: hc.attachmentId,
+    });
+  }
+
+  if (!notesMutated && incomingChunks.length === 0) {
+    return state;
+  }
+
+  return {
+    ...state,
+    notes,
+    chunks:
+      incomingChunks.length === 0
+        ? state.chunks
+        : [...state.chunks, ...incomingChunks],
+  };
+}
+
+/** Local-origin notes not yet uploaded to the host. */
+export function localNotesToPush(
+  state: ClientBrainState,
+  hostAttachments: readonly Attachment[]
+): ClientBrainNote[] {
+  const hostIds = new Set(hostAttachments.map((a) => a.id));
+  // Reconstruct host texts roughly from filenames only when id unknown —
+  // fingerprint against uploaded filenames + we rely on post-push merge.
+  return state.notes.filter((n) => {
+    if (n.origin !== 'local') {
+      return false;
+    }
+    if (n.gatewayAttachmentId) {
+      return false;
+    }
+    if (hostIds.has(n.id)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function markNotePushed<T extends ClientBrainState>(
+  state: T,
+  localNoteId: string,
+  gatewayAttachmentId: string
+): T {
+  return {
+    ...state,
+    notes: state.notes.map((n) => {
+      if (n.id !== localNoteId) {
+        return n;
+      }
+      return { ...n, gatewayAttachmentId };
+    }),
+    chunks: state.chunks.map((c) => {
+      if (c.noteId !== localNoteId) {
+        return c;
+      }
+      return { ...c, gatewayAttachmentId };
+    }),
+  };
+}
+
 export type BrainSyncApi = {
   listWorkspaces: () => Promise<Array<{ id: string; name: string }>>;
   createWorkspace: (name: string) => Promise<{ id: string; name: string }>;
@@ -193,6 +621,22 @@ export type BrainSyncApi = {
       createdAt: number;
     }>
   ) => Promise<Message[]>;
+  listAttachments: (workspaceId: string) => Promise<Attachment[]>;
+  listChunks: (workspaceId: string) => Promise<KnowledgeChunkExport[]>;
+  uploadAttachmentText: (
+    workspaceId: string,
+    input: { filename: string; text: string; mimeType?: string }
+  ) => Promise<Attachment>;
+  listMemory: (workspaceId: string) => Promise<MemoryItem[]>;
+  createMemory: (
+    workspaceId: string,
+    input: {
+      content: string;
+      kind?: MemoryItem['kind'];
+      status?: MemoryItem['status'];
+      pinned?: boolean;
+    }
+  ) => Promise<MemoryItem>;
 };
 
 export type BrainSyncOk<T extends ClientBrainState> = {
@@ -209,13 +653,15 @@ export type BrainSyncFail<T extends ClientBrainState> = {
 };
 
 export type BrainSyncResult<T extends ClientBrainState> =
-  BrainSyncOk<T> | BrainSyncFail<T>;
+  | BrainSyncOk<T>
+  | BrainSyncFail<T>;
 
 /**
- * Multi-conversation append-only sync.
+ * Multi-conversation + knowledge append-only sync.
  * - Pins workspace id (no `workspaces[0]` after first success).
  * - Each local thread maps to its own host conversation (never `conversations[0]` fallback).
  * - Host threads unknown locally are pulled into the brain.
+ * - Notes / memory / chunks replicate append-only (no edit/delete sync).
  */
 export async function syncClientBrain<T extends ClientBrainState>(
   brain: T,
@@ -223,7 +669,7 @@ export async function syncClientBrain<T extends ClientBrainState>(
   opts: { workspaceName: string }
 ): Promise<BrainSyncResult<T>> {
   try {
-    let next = brain;
+    let next = migrateClientBrainState(brain as T & Record<string, unknown>);
     let pushed = 0;
     let pulled = 0;
 
@@ -306,6 +752,56 @@ export async function syncClientBrain<T extends ClientBrainState>(
         );
         pushed += toPush.length;
       }
+    }
+
+    // --- Memory sync ---
+    const hostMemory = await api.listMemory(workspaceId);
+    const memBefore = next.memory.length;
+    next = mergeGatewayMemory(next, hostMemory);
+    pulled += next.memory.length - memBefore;
+
+    const memoryPush = localMemoryToPush(next, hostMemory);
+    for (const item of memoryPush) {
+      const created = await api.createMemory(workspaceId, {
+        content: item.content,
+        kind: item.kind,
+        status: item.status,
+        pinned: item.pinned,
+      });
+      next = markMemoryPushed(next, item.id, created.id);
+      pushed += 1;
+    }
+
+    // --- Notes / chunks sync ---
+    let hostAttachments = await api.listAttachments(workspaceId);
+    let hostChunks = await api.listChunks(workspaceId);
+    const notesBefore = next.notes.length;
+    const chunksBefore = next.chunks.length;
+    next = mergeGatewayKnowledge(next, hostAttachments, hostChunks);
+    pulled +=
+      next.notes.length -
+      notesBefore +
+      (next.chunks.length - chunksBefore);
+
+    const notesPush = localNotesToPush(next, hostAttachments);
+    for (const note of notesPush) {
+      const created = await api.uploadAttachmentText(workspaceId, {
+        filename: note.filename,
+        text: note.text,
+        mimeType: 'text/markdown',
+      });
+      next = markNotePushed(next, note.id, created.id);
+      pushed += 1;
+    }
+
+    if (notesPush.length > 0 || memoryPush.length > 0) {
+      // Refresh host knowledge so newly uploaded chunks land locally.
+      hostAttachments = await api.listAttachments(workspaceId);
+      hostChunks = await api.listChunks(workspaceId);
+      const n2 = next.notes.length;
+      const c2 = next.chunks.length;
+      next = mergeGatewayKnowledge(next, hostAttachments, hostChunks);
+      pulled += next.notes.length - n2 + (next.chunks.length - c2);
     }
 
     return { ok: true, brain: next, pushed, pulled };

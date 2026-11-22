@@ -10,24 +10,51 @@ import {
   View,
 } from 'react-native';
 import {
-  createMemory,
+  addLocalMemory,
+  addLocalNote,
+  assembleLocalContextPrefix,
   getEmbeddingStatus,
   inspectContext,
-  listMemory,
   reindexKnowledge,
   searchKnowledge,
+  searchLocalChunks,
   updateMemory,
-  uploadAttachmentText,
   type KnowledgeHit,
-  type MemoryItem,
 } from '@involvex/ctrl-i';
 import type { KnowledgeSearchMode } from '@involvex/ctrl-s';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
+import { syncBrainWithGateway } from '../src/brain/sync';
+import {
+  loadBrain,
+  saveBrain,
+  type BrainMemory,
+  type BrainState,
+} from '../src/brain/store';
 
 const SEARCH_MODES: KnowledgeSearchMode[] = ['hybrid', 'vector', 'fts'];
 
+function hitFromLocal(hit: {
+  chunkId: string;
+  filename: string;
+  snippet: string;
+  score: number;
+  source: 'fts';
+}): KnowledgeHit {
+  return {
+    chunkId: hit.chunkId,
+    attachmentId: hit.chunkId,
+    workspaceId: 'local',
+    filename: hit.filename,
+    snippet: hit.snippet,
+    rank: -hit.score,
+    score: hit.score,
+    source: 'fts',
+  };
+}
+
 export default function KnowledgeScreen() {
   const router = useRouter();
+  const [brain, setBrain] = useState<BrainState | null>(null);
   const [gatewayUrl, setGatewayUrl] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -35,62 +62,100 @@ export default function KnowledgeScreen() {
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<KnowledgeHit[]>([]);
-  const [memory, setMemory] = useState<MemoryItem[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [memoryDraft, setMemoryDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('loading…');
-  const [searchMode, setSearchMode] = useState<KnowledgeSearchMode>('hybrid');
+  const [searchMode, setSearchMode] = useState<KnowledgeSearchMode>('fts');
   const [embeddingLine, setEmbeddingLine] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!gatewayUrl || !workspaceId) {
-      return;
+  const paired = Boolean(gatewayUrl && workspaceId);
+  const memory: BrainMemory[] = brain?.memory ?? [];
+
+  const persistBrain = useCallback(async (next: BrainState) => {
+    setBrain(next);
+    await saveBrain(next);
+  }, []);
+
+  const refreshLocal = useCallback((state: BrainState, q: string) => {
+    if (q.trim()) {
+      setHits(searchLocalChunks(state.chunks, q.trim()).map(hitFromLocal));
+    } else {
+      setHits([]);
     }
+    const assembled = assembleLocalContextPrefix(state, q.trim() || ' ');
+    setPreview(assembled || null);
+    setStatus(
+      `local brain · ${state.notes.length} notes · ${state.memory.length} memory`
+    );
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const state = brain ?? (await loadBrain());
     setBusy(true);
     try {
-      const embed = await getEmbeddingStatus(gatewayUrl, workspaceId).catch(
-        () => null
-      );
-      if (embed) {
-        setEmbeddingLine(
-          embed.enabled
-            ? `embeddings · ${embed.provider} · ${embed.indexedChunks}/${embed.totalChunks} indexed · dim ${embed.dims}`
-            : 'embeddings · off'
+      if (paired && gatewayUrl && workspaceId) {
+        if (searchMode === 'fts') {
+          refreshLocal(state, query);
+        } else if (query.trim()) {
+          setHits(
+            await searchKnowledge(
+              gatewayUrl,
+              workspaceId,
+              query.trim(),
+              undefined,
+              searchMode
+            )
+          );
+        } else {
+          setHits([]);
+        }
+        const embed = await getEmbeddingStatus(gatewayUrl, workspaceId).catch(
+          () => null
         );
+        if (embed) {
+          setEmbeddingLine(
+            embed.enabled
+              ? `embeddings · ${embed.provider} · ${embed.indexedChunks}/${embed.totalChunks} indexed · dim ${embed.dims}`
+              : 'embeddings · off'
+          );
+        }
+        if (searchMode !== 'fts') {
+          const ctx = await inspectContext(gatewayUrl, workspaceId, {
+            conversationId: conversationId ?? undefined,
+            q: query.trim() || undefined,
+          });
+          setPreview(ctx.assembledPreview);
+          setStatus(`host · ${searchMode}`);
+        }
       } else {
-        setEmbeddingLine('embeddings · unknown');
+        refreshLocal(state, query);
       }
-      setMemory(await listMemory(gatewayUrl, workspaceId));
-      if (query.trim()) {
-        setHits(
-          await searchKnowledge(
-            gatewayUrl,
-            workspaceId,
-            query.trim(),
-            undefined,
-            searchMode
-          )
-        );
-      } else {
-        setHits([]);
-      }
-      const ctx = await inspectContext(gatewayUrl, workspaceId, {
-        conversationId: conversationId ?? undefined,
-        q: query.trim() || undefined,
-      });
-      setPreview(ctx.assembledPreview);
-      setStatus('ok');
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [conversationId, gatewayUrl, query, searchMode, workspaceId]);
+  }, [
+    brain,
+    conversationId,
+    gatewayUrl,
+    paired,
+    query,
+    refreshLocal,
+    searchMode,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const loaded = await loadBrain();
+      if (cancelled) {
+        return;
+      }
+      setBrain(loaded);
+      refreshLocal(loaded, '');
       try {
         const connected = await resolveConnectedWorkspace();
         if (cancelled) {
@@ -99,37 +164,36 @@ export default function KnowledgeScreen() {
         setGatewayUrl(connected.gatewayUrl);
         setWorkspaceId(connected.workspace.id);
         setConversationId(connected.conversationId);
-        setStatus(`ok · ${connected.workspace.name}`);
-        setBusy(true);
-        try {
-          setMemory(
-            await listMemory(connected.gatewayUrl, connected.workspace.id)
-          );
-          const ctx = await inspectContext(
-            connected.gatewayUrl,
-            connected.workspace.id,
-            {
-              conversationId: connected.conversationId ?? undefined,
-            }
-          );
-          if (!cancelled) {
-            setPreview(ctx.assembledPreview);
-          }
-        } finally {
-          if (!cancelled) {
-            setBusy(false);
-          }
+        const synced = await syncBrainWithGateway(loaded);
+        if (!cancelled && synced.ok) {
+          setBrain(synced.brain);
+          refreshLocal(synced.brain, '');
         }
-      } catch (err) {
+        const embed = await getEmbeddingStatus(
+          connected.gatewayUrl,
+          connected.workspace.id
+        ).catch(() => null);
+        if (!cancelled && embed) {
+          setEmbeddingLine(
+            embed.enabled
+              ? `embeddings · ${embed.provider} · ${embed.indexedChunks}/${embed.totalChunks} indexed · dim ${embed.dims}`
+              : 'embeddings · off'
+          );
+          setSearchMode('hybrid');
+        }
+      } catch {
         if (!cancelled) {
-          setStatus(err instanceof Error ? err.message : String(err));
+          setGatewayUrl(null);
+          setWorkspaceId(null);
+          setSearchMode('fts');
+          setEmbeddingLine('offline · local fts only');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshLocal]);
 
   return (
     <ScrollView contentContainerStyle={styles.root}>
@@ -138,6 +202,7 @@ export default function KnowledgeScreen() {
       </Pressable>
       <Text style={styles.title}>knowledge</Text>
       <Text style={styles.meta}>{status}</Text>
+      {embeddingLine ? <Text style={styles.meta}>{embeddingLine}</Text> : null}
       <Text style={styles.label}>ingest note</Text>
       <TextInput
         style={styles.input}
@@ -156,22 +221,29 @@ export default function KnowledgeScreen() {
       />
       <Pressable
         style={styles.button}
-        disabled={busy || !draft.trim()}
+        disabled={busy || !draft.trim() || !brain}
         onPress={() => {
-          if (!gatewayUrl || !workspaceId || !draft.trim()) {
+          if (!brain || !draft.trim()) {
             return;
           }
           void (async () => {
             setBusy(true);
             try {
-              await uploadAttachmentText(gatewayUrl, workspaceId, {
+              let next = addLocalNote(brain, {
                 filename: filename.trim() || 'notes.md',
-                mimeType: 'text/markdown',
                 text: draft,
-                conversationId: conversationId ?? undefined,
               });
+              await persistBrain(next);
               setDraft('');
-              await refresh();
+              if (paired) {
+                const synced = await syncBrainWithGateway(next);
+                if (synced.ok) {
+                  next = synced.brain;
+                  await persistBrain(next);
+                }
+              }
+              refreshLocal(next, query);
+              setStatus('note saved');
             } catch (err) {
               setStatus(err instanceof Error ? err.message : String(err));
             } finally {
@@ -180,12 +252,11 @@ export default function KnowledgeScreen() {
           })();
         }}
       >
-        <Text style={styles.buttonText}>upload</Text>
+        <Text style={styles.buttonText}>ingest</Text>
       </Pressable>
-      {embeddingLine ? <Text style={styles.meta}>{embeddingLine}</Text> : null}
       <Text style={styles.label}>search mode</Text>
       <View style={styles.modeRow}>
-        {SEARCH_MODES.map((mode) => (
+        {(paired ? SEARCH_MODES : (['fts'] as const)).map((mode) => (
           <Pressable
             key={mode}
             style={[
@@ -224,33 +295,35 @@ export default function KnowledgeScreen() {
           <Text style={styles.buttonText}>refresh</Text>
         )}
       </Pressable>
-      <Pressable
-        style={styles.button}
-        disabled={busy || !gatewayUrl || !workspaceId}
-        onPress={() => {
-          if (!gatewayUrl || !workspaceId) {
-            return;
-          }
-          void (async () => {
-            setBusy(true);
-            try {
-              const result = await reindexKnowledge(gatewayUrl, workspaceId, {
-                force: true,
-              });
-              setStatus(
-                `reindex · indexed ${result.indexed}/${result.totalChunks} · skipped ${result.skipped}`
-              );
-              await refresh();
-            } catch (err) {
-              setStatus(err instanceof Error ? err.message : String(err));
-            } finally {
-              setBusy(false);
+      {paired ? (
+        <Pressable
+          style={styles.button}
+          disabled={busy || !gatewayUrl || !workspaceId}
+          onPress={() => {
+            if (!gatewayUrl || !workspaceId) {
+              return;
             }
-          })();
-        }}
-      >
-        <Text style={styles.buttonText}>reindex embeddings</Text>
-      </Pressable>
+            void (async () => {
+              setBusy(true);
+              try {
+                const result = await reindexKnowledge(gatewayUrl, workspaceId, {
+                  force: true,
+                });
+                setStatus(
+                  `reindex · indexed ${result.indexed}/${result.totalChunks} · skipped ${result.skipped}`
+                );
+                await refresh();
+              } catch (err) {
+                setStatus(err instanceof Error ? err.message : String(err));
+              } finally {
+                setBusy(false);
+              }
+            })();
+          }}
+        >
+          <Text style={styles.buttonText}>reindex embeddings</Text>
+        </Pressable>
+      ) : null}
       {hits.map((hit) => (
         <View key={hit.chunkId} style={styles.panel}>
           <Text style={styles.meta}>
@@ -272,17 +345,35 @@ export default function KnowledgeScreen() {
       />
       <Pressable
         style={styles.button}
-        disabled={!memoryDraft.trim() || !gatewayUrl || !workspaceId}
+        disabled={!memoryDraft.trim() || !brain}
         onPress={() => {
-          if (!gatewayUrl || !workspaceId || !memoryDraft.trim()) {
+          if (!brain || !memoryDraft.trim()) {
             return;
           }
           void (async () => {
-            await createMemory(gatewayUrl, workspaceId, {
-              content: memoryDraft.trim(),
-            });
-            setMemoryDraft('');
-            await refresh();
+            setBusy(true);
+            try {
+              let next = addLocalMemory(brain, {
+                content: memoryDraft.trim(),
+                pinned: true,
+                status: 'active',
+              });
+              await persistBrain(next);
+              setMemoryDraft('');
+              if (paired) {
+                const synced = await syncBrainWithGateway(next);
+                if (synced.ok) {
+                  next = synced.brain;
+                  await persistBrain(next);
+                }
+              }
+              refreshLocal(next, query);
+              setStatus('memory saved');
+            } catch (err) {
+              setStatus(err instanceof Error ? err.message : String(err));
+            } finally {
+              setBusy(false);
+            }
           })();
         }}
       >
@@ -293,47 +384,49 @@ export default function KnowledgeScreen() {
           <Text style={styles.meta}>
             [{item.status}] {item.kind}
             {item.pinned ? ' ★' : ''}
+            {item.origin === 'local' ? ' · local' : ''}
           </Text>
           <Text style={styles.body}>{item.content}</Text>
-          <View style={styles.memActions}>
-            {item.status === 'pending_review' ? (
+          {item.status === 'pending_review' &&
+          paired &&
+          gatewayUrl &&
+          item.gatewayMemoryId ? (
+            <View style={styles.memActions}>
               <Pressable
                 style={styles.ghostBtn}
                 onPress={() => {
-                  if (!gatewayUrl || !workspaceId) {
-                    return;
-                  }
                   void (async () => {
-                    await updateMemory(gatewayUrl, item.id, {
+                    await updateMemory(gatewayUrl, item.gatewayMemoryId!, {
                       status: 'active',
                       pinned: true,
                     });
-                    await refresh();
+                    const synced = await syncBrainWithGateway(
+                      brain ?? (await loadBrain())
+                    );
+                    if (synced.ok) {
+                      await persistBrain(synced.brain);
+                      refreshLocal(synced.brain, query);
+                    }
                   })();
                 }}
               >
                 <Text style={styles.ghostText}>approve + pin</Text>
               </Pressable>
-            ) : null}
-            <Pressable
-              style={styles.ghostBtn}
-              onPress={() => {
-                if (!gatewayUrl || !workspaceId) {
-                  return;
-                }
-                void (async () => {
-                  await updateMemory(gatewayUrl, item.id, {
-                    status: 'archived',
-                  });
-                  await refresh();
-                })();
-              }}
-            >
-              <Text style={styles.ghostText}>archive</Text>
-            </Pressable>
-          </View>
+            </View>
+          ) : null}
         </View>
       ))}
+      {brain && brain.notes.length > 0
+        ? brain.notes.slice(0, 12).map((note) => (
+            <View key={note.id} style={styles.panel}>
+              <Text style={styles.meta}>
+                {note.filename}
+                {note.origin === 'local' ? ' · local' : ' · synced'}
+              </Text>
+              <Text style={styles.body}>{note.text.slice(0, 160)}</Text>
+            </View>
+          ))
+        : null}
       {preview ? (
         <View style={styles.panel}>
           <Text style={styles.label}>context preview</Text>

@@ -380,6 +380,45 @@ export class KnowledgeStore {
     return row?.count ?? 0;
   }
 
+  /**
+   * List chunks with source filename for client append-only sync.
+   * Caps content length to the attachment text schema limit.
+   */
+  listChunks(
+    workspaceId: string,
+    opts: { limit?: number } = {}
+  ): Array<KnowledgeChunk & { filename: string }> {
+    const limit = opts.limit ?? 5000;
+    const rows = this.db
+      .query<
+        ChunkRow & { filename: string },
+        [string, number]
+      >(
+        `SELECT c.id, c.attachment_id, c.workspace_id, c.chunk_index,
+                c.content, c.created_at, a.filename
+         FROM knowledge_chunks c
+         JOIN attachments a ON a.id = c.attachment_id
+         WHERE c.workspace_id = ?
+         ORDER BY a.created_at ASC, c.chunk_index ASC
+         LIMIT ?`
+      )
+      .all(workspaceId, limit);
+
+    const maxChars = 2_000_000;
+    return rows.map((row) => ({
+      id: row.id,
+      attachmentId: row.attachment_id,
+      workspaceId: row.workspace_id,
+      chunkIndex: row.chunk_index,
+      content:
+        row.content.length > maxChars
+          ? row.content.slice(0, maxChars)
+          : row.content,
+      createdAt: row.created_at,
+      filename: row.filename,
+    }));
+  }
+
   countVectors(workspaceId: string, model?: string): number {
     const row = model
       ? this.db

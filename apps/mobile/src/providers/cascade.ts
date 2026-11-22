@@ -30,6 +30,11 @@ export type CascadeCallbacks = {
   gatewayUrl: string | null;
   /** Prefixed onto host/cloud turns (LiteRT uses engine systemPrompt). */
   systemPrefix?: string;
+  /**
+   * Prefixed onto on-device LiteRT turns (pinned memory + local FTS hits).
+   * Host turns keep using the gateway context inspector instead.
+   */
+  knowledgePrefix?: string;
   isCancelled?: () => boolean;
   /**
    * When the gateway agent needs tool approval, resolve with approve/deny.
@@ -241,7 +246,11 @@ export async function runProviderCascade(
             'On-device engine starting — wait a moment, then send again.'
           );
         }
-        const text = await cb.litertGenerate(content);
+        const litertPrompt =
+          cb.knowledgePrefix && cb.knowledgePrefix.trim()
+            ? `${cb.knowledgePrefix.trim()}\n\n---\n\n${content}`
+            : content;
+        const text = await cb.litertGenerate(litertPrompt);
         throwIfCancelled(cb.isCancelled);
         return {
           text,

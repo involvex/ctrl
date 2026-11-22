@@ -12,20 +12,27 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  createMemory,
+  addLocalMemory,
+  addLocalNote,
+  assembleLocalContextPrefix,
   getEmbeddingStatus,
   inspectContext,
-  listMemory,
   reindexKnowledge,
   searchKnowledge,
+  searchLocalChunks,
   updateMemory,
-  uploadAttachmentText,
   type EmbeddingStatus,
   type KnowledgeHit,
   type KnowledgeSearchMode,
-  type MemoryItem,
 } from '@involvex/ctrl-i';
 import { resolveConnectedWorkspace } from '../src/connection/workspace';
+import { syncBrainWithGateway } from '../src/brain/sync';
+import {
+  loadBrain,
+  saveBrain,
+  type BrainMemory,
+  type BrainState,
+} from '../src/brain/store';
 
 const SEARCH_MODE_OPTIONS: KnowledgeSearchMode[] = ['hybrid', 'vector', 'fts'];
 
@@ -36,8 +43,28 @@ function toKnowledgeSearchMode(value: string): KnowledgeSearchMode {
   return 'hybrid';
 }
 
+function hitFromLocal(hit: {
+  chunkId: string;
+  filename: string;
+  snippet: string;
+  score: number;
+  source: 'fts';
+}): KnowledgeHit {
+  return {
+    chunkId: hit.chunkId,
+    attachmentId: hit.chunkId,
+    workspaceId: 'local',
+    filename: hit.filename,
+    snippet: hit.snippet,
+    rank: -hit.score,
+    score: hit.score,
+    source: 'fts',
+  };
+}
+
 export default function KnowledgeScreen() {
   const router = useRouter();
+  const [brain, setBrain] = useState<BrainState | null>(null);
   const [gatewayUrl, setGatewayUrl] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -45,56 +72,101 @@ export default function KnowledgeScreen() {
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<KnowledgeHit[]>([]);
-  const [memory, setMemory] = useState<MemoryItem[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [memoryDraft, setMemoryDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('loading…');
-  const [searchMode, setSearchMode] = useState<KnowledgeSearchMode>('hybrid');
+  const [searchMode, setSearchMode] = useState<KnowledgeSearchMode>('fts');
   const [embeddingStatus, setEmbeddingStatus] =
     useState<EmbeddingStatus | null>(null);
 
-  const refresh = useCallback(async () => {
-    if (!gatewayUrl || !workspaceId) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const [mem, embed] = await Promise.all([
-        listMemory(gatewayUrl, workspaceId),
-        getEmbeddingStatus(gatewayUrl, workspaceId).catch(() => null),
-      ]);
-      setMemory(mem);
-      setEmbeddingStatus(embed);
-      if (query.trim()) {
-        setHits(
-          await searchKnowledge(
-            gatewayUrl,
-            workspaceId,
-            query.trim(),
-            undefined,
-            searchMode
-          )
-        );
+  const paired = Boolean(gatewayUrl && workspaceId);
+  const memory: BrainMemory[] = brain?.memory ?? [];
+
+  const persistBrain = useCallback(async (next: BrainState) => {
+    setBrain(next);
+    await saveBrain(next);
+  }, []);
+
+  const refreshLocal = useCallback(
+    (state: BrainState, q: string) => {
+      if (q.trim()) {
+        setHits(searchLocalChunks(state.chunks, q.trim()).map(hitFromLocal));
       } else {
         setHits([]);
       }
-      const ctx = await inspectContext(gatewayUrl, workspaceId, {
-        conversationId: conversationId ?? undefined,
-        q: query.trim() || undefined,
-      });
-      setPreview(ctx.assembledPreview);
-      setStatus('ok');
+      const assembled = assembleLocalContextPrefix(state, q.trim() || ' ');
+      setPreview(assembled || null);
+      setStatus(
+        paired
+          ? `local + host · ${state.notes.length} notes · ${state.memory.length} memory`
+          : `local brain · ${state.notes.length} notes · ${state.memory.length} memory`
+      );
+    },
+    [paired]
+  );
+
+  const refresh = useCallback(async () => {
+    const state = brain ?? (await loadBrain());
+    setBusy(true);
+    try {
+      if (paired && gatewayUrl && workspaceId) {
+        if (searchMode === 'fts') {
+          refreshLocal(state, query);
+        } else if (query.trim()) {
+          setHits(
+            await searchKnowledge(
+              gatewayUrl,
+              workspaceId,
+              query.trim(),
+              undefined,
+              searchMode
+            )
+          );
+        } else {
+          setHits([]);
+        }
+        const embed = await getEmbeddingStatus(gatewayUrl, workspaceId).catch(
+          () => null
+        );
+        setEmbeddingStatus(embed);
+        if (searchMode !== 'fts') {
+          const ctx = await inspectContext(gatewayUrl, workspaceId, {
+            conversationId: conversationId ?? undefined,
+            q: query.trim() || undefined,
+          });
+          setPreview(ctx.assembledPreview);
+          setStatus(`host · ${searchMode}`);
+        }
+      } else {
+        setEmbeddingStatus(null);
+        refreshLocal(state, query);
+      }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
-  }, [conversationId, gatewayUrl, query, searchMode, workspaceId]);
+  }, [
+    brain,
+    conversationId,
+    gatewayUrl,
+    paired,
+    query,
+    refreshLocal,
+    searchMode,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const loaded = await loadBrain();
+      if (cancelled) {
+        return;
+      }
+      setBrain(loaded);
+      refreshLocal(loaded, '');
       try {
         const connected = await resolveConnectedWorkspace();
         if (cancelled) {
@@ -103,46 +175,31 @@ export default function KnowledgeScreen() {
         setGatewayUrl(connected.gatewayUrl);
         setWorkspaceId(connected.workspace.id);
         setConversationId(connected.conversationId);
-        setStatus(`workspace · ${connected.workspace.name}`);
-        setBusy(true);
-        const [mem, embed] = await Promise.all([
-          listMemory(connected.gatewayUrl, connected.workspace.id),
-          getEmbeddingStatus(
-            connected.gatewayUrl,
-            connected.workspace.id
-          ).catch(() => null),
-        ]);
-        if (cancelled) {
-          return;
+        const synced = await syncBrainWithGateway(loaded);
+        if (!cancelled && synced.ok) {
+          setBrain(synced.brain);
+          refreshLocal(synced.brain, '');
         }
-        setMemory(mem);
-        setEmbeddingStatus(embed);
-        const ctx = await inspectContext(
+        const embed = await getEmbeddingStatus(
           connected.gatewayUrl,
-          connected.workspace.id,
-          {
-            conversationId: connected.conversationId ?? undefined,
-          }
-        );
-        if (cancelled) {
-          return;
-        }
-        setPreview(ctx.assembledPreview);
-        setStatus('ok');
-      } catch (err) {
+          connected.workspace.id
+        ).catch(() => null);
         if (!cancelled) {
-          setStatus(err instanceof Error ? err.message : String(err));
+          setEmbeddingStatus(embed);
+          setSearchMode('hybrid');
         }
-      } finally {
+      } catch {
         if (!cancelled) {
-          setBusy(false);
+          setGatewayUrl(null);
+          setWorkspaceId(null);
+          setSearchMode('fts');
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshLocal]);
 
   return (
     <SafeAreaView style={styles.root}>
@@ -157,11 +214,13 @@ export default function KnowledgeScreen() {
         <Text style={styles.title}>knowledge</Text>
         <Text style={styles.meta}>{status}</Text>
         <Text style={styles.meta}>
-          {embeddingStatus
-            ? embeddingStatus.enabled
-              ? `embeddings · ${embeddingStatus.provider}/${embeddingStatus.model} · ${embeddingStatus.indexedChunks}/${embeddingStatus.totalChunks} indexed`
-              : 'embeddings off (fts only)'
-            : 'embeddings unknown'}
+          {paired
+            ? embeddingStatus
+              ? embeddingStatus.enabled
+                ? `embeddings · ${embeddingStatus.provider}/${embeddingStatus.model} · ${embeddingStatus.indexedChunks}/${embeddingStatus.totalChunks} indexed`
+                : 'embeddings off (fts only)'
+              : 'embeddings unknown'
+            : 'offline · local fts only (pair for vector/hybrid)'}
         </Text>
 
         <Text style={styles.label}>ingest note</Text>
@@ -183,60 +242,71 @@ export default function KnowledgeScreen() {
         />
         <Pressable
           style={[styles.button, busy && styles.buttonDisabled]}
-          disabled={busy || !gatewayUrl || !workspaceId || !draft.trim()}
+          disabled={busy || !draft.trim() || !brain}
           onPress={() => {
-            if (!gatewayUrl || !workspaceId) {
+            if (!brain || !draft.trim()) {
               return;
             }
             setBusy(true);
-            void uploadAttachmentText(gatewayUrl, workspaceId, {
-              filename: filename.trim() || 'notes.md',
-              mimeType: 'text/markdown',
-              text: draft,
-              conversationId: conversationId ?? undefined,
-            })
-              .then(() => {
+            void (async () => {
+              try {
+                let next = addLocalNote(brain, {
+                  filename: filename.trim() || 'notes.md',
+                  text: draft,
+                });
+                await persistBrain(next);
                 setDraft('');
-                return refresh();
-              })
-              .catch((err: unknown) => {
+                if (paired) {
+                  const synced = await syncBrainWithGateway(next);
+                  if (synced.ok) {
+                    next = synced.brain;
+                    await persistBrain(next);
+                  }
+                }
+                refreshLocal(next, query);
+                setStatus('note saved');
+              } catch (err) {
                 setStatus(err instanceof Error ? err.message : String(err));
+              } finally {
                 setBusy(false);
-              });
+              }
+            })();
           }}
         >
           <Text style={styles.buttonText}>ingest</Text>
         </Pressable>
 
-        <Pressable
-          style={[styles.ghost, busy && styles.buttonDisabled]}
-          disabled={busy || !gatewayUrl || !workspaceId}
-          onPress={() => {
-            if (!gatewayUrl || !workspaceId) {
-              return;
-            }
-            setBusy(true);
-            void reindexKnowledge(gatewayUrl, workspaceId, { force: true })
-              .then((result) => {
-                setStatus(
-                  `reindex · indexed ${result.indexed}/${result.totalChunks} · skipped ${result.skipped}`
-                );
-                return refresh();
-              })
-              .catch((err: unknown) => {
-                setStatus(err instanceof Error ? err.message : String(err));
-                setBusy(false);
-              });
-          }}
-        >
-          <Text style={styles.link}>
-            {busy ? '…' : 'reindex embeddings (force)'}
-          </Text>
-        </Pressable>
+        {paired ? (
+          <Pressable
+            style={[styles.ghost, busy && styles.buttonDisabled]}
+            disabled={busy || !gatewayUrl || !workspaceId}
+            onPress={() => {
+              if (!gatewayUrl || !workspaceId) {
+                return;
+              }
+              setBusy(true);
+              void reindexKnowledge(gatewayUrl, workspaceId, { force: true })
+                .then((result) => {
+                  setStatus(
+                    `reindex · indexed ${result.indexed}/${result.totalChunks} · skipped ${result.skipped}`
+                  );
+                  return refresh();
+                })
+                .catch((err: unknown) => {
+                  setStatus(err instanceof Error ? err.message : String(err));
+                  setBusy(false);
+                });
+            }}
+          >
+            <Text style={styles.link}>
+              {busy ? '…' : 'reindex embeddings (force)'}
+            </Text>
+          </Pressable>
+        ) : null}
 
         <Text style={styles.label}>search / context</Text>
         <View style={styles.modeRow}>
-          {SEARCH_MODE_OPTIONS.map((mode) => (
+          {(paired ? SEARCH_MODE_OPTIONS : (['fts'] as const)).map((mode) => (
             <Pressable
               key={mode}
               style={[
@@ -304,24 +374,36 @@ export default function KnowledgeScreen() {
         />
         <Pressable
           style={[styles.button, busy && styles.buttonDisabled]}
-          disabled={busy || !gatewayUrl || !workspaceId || !memoryDraft.trim()}
+          disabled={busy || !brain || !memoryDraft.trim()}
           onPress={() => {
-            if (!gatewayUrl || !workspaceId) {
+            if (!brain || !memoryDraft.trim()) {
               return;
             }
             setBusy(true);
-            void createMemory(gatewayUrl, workspaceId, {
-              content: memoryDraft.trim(),
-              status: 'pending_review',
-            })
-              .then(() => {
+            void (async () => {
+              try {
+                let next = addLocalMemory(brain, {
+                  content: memoryDraft.trim(),
+                  pinned: true,
+                  status: 'active',
+                });
+                await persistBrain(next);
                 setMemoryDraft('');
-                return refresh();
-              })
-              .catch((err: unknown) => {
+                if (paired) {
+                  const synced = await syncBrainWithGateway(next);
+                  if (synced.ok) {
+                    next = synced.brain;
+                    await persistBrain(next);
+                  }
+                }
+                refreshLocal(next, query);
+                setStatus('memory saved');
+              } catch (err) {
                 setStatus(err instanceof Error ? err.message : String(err));
+              } finally {
                 setBusy(false);
-              });
+              }
+            })();
           }}
         >
           <Text style={styles.buttonText}>save memory</Text>
@@ -336,41 +418,54 @@ export default function KnowledgeScreen() {
             <Text style={styles.meta}>
               [{item.status}] {item.kind}
               {item.pinned ? ' ★' : ''}
+              {item.origin === 'local' ? ' · local' : ''}
             </Text>
             <Text style={styles.bubbleText}>{item.content.slice(0, 240)}</Text>
             <View style={styles.row}>
-              {item.status === 'pending_review' ? (
+              {item.status === 'pending_review' &&
+              paired &&
+              gatewayUrl &&
+              item.gatewayMemoryId ? (
                 <Pressable
                   onPress={() => {
-                    if (!gatewayUrl) {
-                      return;
-                    }
-                    void updateMemory(gatewayUrl, item.id, {
+                    void updateMemory(gatewayUrl, item.gatewayMemoryId!, {
                       status: 'active',
                       pinned: true,
-                    }).then(() => refresh());
+                    }).then(async () => {
+                      const synced = await syncBrainWithGateway(
+                        brain ?? (await loadBrain())
+                      );
+                      if (synced.ok) {
+                        await persistBrain(synced.brain);
+                        refreshLocal(synced.brain, query);
+                      }
+                      return undefined;
+                    });
                   }}
                 >
                   <Text style={styles.link}>approve + pin</Text>
                 </Pressable>
               ) : null}
-              <Pressable
-                onPress={() => {
-                  if (!gatewayUrl) {
-                    return;
-                  }
-                  void updateMemory(gatewayUrl, item.id, {
-                    status: 'archived',
-                  }).then(() => refresh());
-                }}
-              >
-                <Text style={styles.link}>archive</Text>
-              </Pressable>
             </View>
           </View>
         ))}
         {memory.length === 0 ? (
           <Text style={styles.meta}>no memory items yet</Text>
+        ) : null}
+
+        {brain && brain.notes.length > 0 ? (
+          <>
+            <Text style={styles.label}>local notes</Text>
+            {brain.notes.slice(0, 12).map((note) => (
+              <View key={note.id} style={styles.panel}>
+                <Text style={styles.meta}>
+                  <Text style={styles.emphasis}>{note.filename}</Text>
+                  {note.origin === 'local' ? ' · local' : ' · synced'}
+                </Text>
+                <Text style={styles.bubbleText}>{note.text.slice(0, 160)}</Text>
+              </View>
+            ))}
+          </>
         ) : null}
 
         <Pressable onPress={() => router.push('/tools')}>
