@@ -614,6 +614,26 @@ export async function startServer(): Promise<StartedGateway> {
           }
         }
 
+        const workspaceKnowledgeChunks =
+          /^\/api\/v1\/workspaces\/([^/]+)\/knowledge\/chunks$/.exec(
+            url.pathname
+          );
+        if (workspaceKnowledgeChunks && req.method === 'GET') {
+          const workspaceId = workspaceKnowledgeChunks[1]!;
+          if (!store.getWorkspace(workspaceId)) {
+            return json(req, { error: 'workspace not found' }, 404);
+          }
+          const limitRaw = url.searchParams.get('limit');
+          const limit = limitRaw ? Number(limitRaw) : undefined;
+          const chunkOpts =
+            Number.isFinite(limit) && limit && limit > 0
+              ? { limit: Math.min(limit, 5000) }
+              : undefined;
+          return json(req, {
+            items: knowledge.listChunks(workspaceId, chunkOpts),
+          });
+        }
+
         const workspaceKnowledgeReindex =
           /^\/api\/v1\/workspaces\/([^/]+)\/knowledge\/reindex$/.exec(
             url.pathname

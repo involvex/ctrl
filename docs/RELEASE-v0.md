@@ -32,3 +32,17 @@ git push origin v0.2.1
 ```
 
 GitHub Actions `Release` workflow then builds Windows artifacts + Android APK and attaches them to the Release.
+
+## Tag recipe — `v0.3.0` (device knowledge)
+
+Feature release after `v0.2.1` (or from `main` once device-knowledge lands). Hardware soak for 0.2.1 does **not** block cutting `v0.3.0`.
+
+```bash
+# on main, clean tree, after validate + contracts green:
+git checkout main
+git pull origin main
+git tag -a v0.3.0 -m "ctrl v0.3.0 — device knowledge + local memory sync"
+git push origin v0.3.0
+```
+
+Ship story: unpaired phone/web notes + pinned memory + local FTS in LiteRT prompts; paired append-only sync of notes/memory/chunks with the host.

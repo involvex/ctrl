@@ -326,3 +326,9 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Desktop / mobile / web tools: create user skills (id, name, description, instructions, tool names).
     - Edit + delete for non-builtin skills; builtins remain toggle-only via existing PATCH enabled.
     - Uses existing `POST/PATCH/DELETE /api/v1/skills` (`createSkill` / `updateSkill` / `deleteSkill` in ctrl-i).
+26. Device knowledge (v0.3.0 — done this slice):
+    - Client brain v2: `notes` / `memory` / `chunks` with `migrateClientBrainState` from v1.
+    - Append-only push/pull in `syncClientBrain` (upload notes, create memory, `GET …/knowledge/chunks`).
+    - Mobile/web knowledge screens work unpaired (local FTS); vector/hybrid stays paired-gateway.
+    - LiteRT turns prepend `assembleLocalContextPrefix` (pinned memory + local hits).
+    - Still parked: edit/delete conflict resolution, binary blob download, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

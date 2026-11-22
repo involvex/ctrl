@@ -15,6 +15,7 @@ import {
   healthResponseSchema,
   hostBackupManifestSchema,
   hostBackupSnapshotSchema,
+  knowledgeChunkExportSchema,
   knowledgeHitSchema,
   knowledgeReindexResultSchema,
   mcpServerConfigSchema,
@@ -46,6 +47,7 @@ import {
   type HealthResponse,
   type HostBackupManifest,
   type HostBackupSnapshot,
+  type KnowledgeChunkExport,
   type KnowledgeHit,
   type KnowledgeReindexResult,
   type KnowledgeSearchMode,
@@ -78,17 +80,39 @@ export {
 
 export {
   addHostConversation,
+  addLocalMemory,
+  addLocalNote,
+  localMemoryToPush,
   localMessagesToPush,
+  localNotesToPush,
+  markMemoryPushed,
+  markNotePushed,
+  mergeGatewayKnowledge,
+  mergeGatewayMemory,
   mergeGatewayMessages,
+  migrateClientBrainState,
   setConversationGatewayId,
   setGatewayWorkspaceId,
   syncClientBrain,
   type BrainSyncApi,
   type BrainSyncResult,
+  type ClientBrainChunk,
   type ClientBrainConversation,
+  type ClientBrainMemory,
   type ClientBrainMessage,
+  type ClientBrainNote,
   type ClientBrainState,
 } from './brain';
+
+export {
+  assembleLocalContextPrefix,
+  chunkNoteText,
+  clampMemoryContent,
+  clampNoteText,
+  listPinnedLocalMemory,
+  searchLocalChunks,
+  type LocalKnowledgeHit,
+} from './local-knowledge';
 
 export type {
   AgentProfile,
@@ -823,6 +847,25 @@ export async function listAttachments(
     .parse(await readJson(res)).items;
 }
 
+export async function listKnowledgeChunks(
+  baseUrl: string,
+  workspaceId: string,
+  limit?: number
+): Promise<KnowledgeChunkExport[]> {
+  const qs =
+    limit !== undefined ? `?limit=${encodeURIComponent(String(limit))}` : '';
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/workspaces/${workspaceId}/knowledge/chunks${qs}`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`listKnowledgeChunks failed: ${res.status}`);
+  }
+  return z
+    .object({ items: z.array(knowledgeChunkExportSchema) })
+    .parse(await readJson(res)).items;
+}
+
 export async function uploadAttachmentText(
   baseUrl: string,
   workspaceId: string,
@@ -1227,5 +1270,12 @@ export function createBrainSyncApi(baseUrl: string): BrainSyncApi {
     listMessages: (conversationId) => listMessages(baseUrl, conversationId),
     upsertMessages: (conversationId, items) =>
       upsertMessages(baseUrl, conversationId, items),
+    listAttachments: (workspaceId) => listAttachments(baseUrl, workspaceId),
+    listChunks: (workspaceId) => listKnowledgeChunks(baseUrl, workspaceId),
+    uploadAttachmentText: (workspaceId, input) =>
+      uploadAttachmentText(baseUrl, workspaceId, input),
+    listMemory: (workspaceId) => listMemory(baseUrl, workspaceId),
+    createMemory: (workspaceId, input) =>
+      createMemory(baseUrl, workspaceId, input),
   };
 }

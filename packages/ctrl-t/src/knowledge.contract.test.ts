@@ -4,6 +4,7 @@ import {
   createWorkspace,
   getEmbeddingStatus,
   inspectContext,
+  listKnowledgeChunks,
   listMemory,
   reindexKnowledge,
   searchKnowledge,
@@ -13,6 +14,30 @@ import {
 import { baseUrl } from './env';
 
 describe('contract: knowledge + memory', () => {
+  test('upload text attachment → listable chunks for client pull', async () => {
+    const ws = await createWorkspace(baseUrl(), 'knowledge-pull-ws');
+    const attachment = await uploadAttachmentText(baseUrl(), ws.id, {
+      filename: 'device-sync.md',
+      mimeType: 'text/markdown',
+      text: [
+        '# Device knowledge',
+        '',
+        'Phone notes replicate append-only via knowledge chunks.',
+        'Neon moss accents stay #00ff66 on every client.',
+      ].join('\n'),
+    });
+    expect(attachment.status).toBe('ready');
+    expect(attachment.chunkCount).toBeGreaterThan(0);
+
+    const chunks = await listKnowledgeChunks(baseUrl(), ws.id);
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(chunks.some((c) => c.attachmentId === attachment.id)).toBe(true);
+    expect(chunks.some((c) => c.filename === 'device-sync.md')).toBe(true);
+    expect(
+      chunks.some((c) => c.content.toLowerCase().includes('append-only'))
+    ).toBe(true);
+  });
+
   test('upload text attachment → FTS hit → memory review', async () => {
     const ws = await createWorkspace(baseUrl(), 'knowledge-ws');
     const attachment = await uploadAttachmentText(baseUrl(), ws.id, {

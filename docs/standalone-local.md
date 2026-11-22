@@ -103,8 +103,12 @@ Desktop / mobile / web subscribe to `GET /ws/v1/workspaces/:id/approvals` while 
 
 Phone and web brains sync **every** local conversation to its own gateway chat (append-only). Unseen host threads are pulled into the conversation list. The paired workspace id is pinned after the first successful sync.
 
+### Device knowledge (local notes + memory)
+
+Phone and web brains store notes, memory, and text chunks offline. Unpaired: create notes/memory and keyword-search them; LiteRT prompts include pinned memory + local hits. Paired: append-only sync pushes new notes/memory and pulls host chunks (`GET /api/v1/workspaces/:id/knowledge/chunks`). Vector/hybrid search still needs the gateway.
+
 Still parked:
 
-1. Knowledge / memory / attachment replication onto the device; edit/delete conflict resolution
+1. Edit/delete conflict resolution; binary attachment blob download onto the device
 2. Rust `agentd` / monetization experiments
 3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)

@@ -19,6 +19,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  assembleLocalContextPrefix,
   checkHealth,
   createConversation,
   createWorkspace,
@@ -549,6 +550,10 @@ export default function ChatHomeScreen() {
           sessionRef,
           gatewayUrl: saved?.gatewayUrl ?? null,
           systemPrefix: buildSystemPrompt(agentCfg),
+          knowledgePrefix: assembleLocalContextPrefix(
+            brainRef.current ?? next,
+            content
+          ),
           isCancelled: () => cancelCascadeRef.current,
           onApprovalRequested: (req) =>
             new Promise<'approved' | 'denied'>((resolve) => {

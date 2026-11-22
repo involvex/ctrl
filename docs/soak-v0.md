@@ -34,7 +34,7 @@ Operator checklist for the standalone ship story. Automated proxies ran in-repo;
 5. Row 6: reboot PC/phone; chat still works local or reconnects.
 6. Mark each Status `pass` (or fail note). Tag only after **1–6** green.
 
-Tag / GitHub Release after rows **1–6** pass on your hardware. See [RELEASE-v0.md](RELEASE-v0.md) for the **`v0.2.1`** tag recipe (do not push the tag until soak is green).
+Tag / GitHub Release after rows **1–6** pass on your hardware. See [RELEASE-v0.md](RELEASE-v0.md) for the **`v0.2.1`** tag recipe (do not push the tag until soak is green). Device knowledge ships as **`v0.3.0`** and is not gated on these soak rows.
 
 Hardware Status remains **pending you** — agents cannot complete phone/PC soak from this environment.
 

@@ -43,6 +43,13 @@ export const knowledgeChunkSchema = z.object({
 
 export type KnowledgeChunk = z.infer<typeof knowledgeChunkSchema>;
 
+/** Chunk row with source filename — used for client pull/sync. */
+export const knowledgeChunkExportSchema = knowledgeChunkSchema.extend({
+  filename: z.string().min(1),
+});
+
+export type KnowledgeChunkExport = z.infer<typeof knowledgeChunkExportSchema>;
+
 /** How a knowledge hit was retrieved. */
 export const knowledgeSearchModeSchema = z.enum(['fts', 'vector', 'hybrid']);
 

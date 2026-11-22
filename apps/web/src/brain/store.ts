@@ -1,3 +1,9 @@
+import {
+  migrateClientBrainState,
+  type ClientBrainChunk,
+  type ClientBrainMemory,
+  type ClientBrainNote,
+} from '@involvex/ctrl-i';
 import type { WebGeneratorMode } from './generator';
 
 export const BRAIN_STORAGE_KEY = 'ctrl.web.brain.v1';
@@ -24,13 +30,20 @@ export type BrainConversation = {
   updatedAt: number;
 };
 
+export type BrainNote = ClientBrainNote;
+export type BrainMemory = ClientBrainMemory;
+export type BrainChunk = ClientBrainChunk;
+
 export type BrainState = {
-  version: 1;
+  version: 2;
   persona: string;
   generator: WebGeneratorMode;
   activeConversationId: string;
   conversations: BrainConversation[];
   messages: BrainMessage[];
+  notes: BrainNote[];
+  memory: BrainMemory[];
+  chunks: BrainChunk[];
   /** Pinned paired workspace after first successful sync. */
   gatewayWorkspaceId?: string;
 };
@@ -45,7 +58,7 @@ export function createEmptyBrain(
   const conversationId = newId('conv');
   const now = Date.now();
   return {
-    version: 1,
+    version: 2,
     persona: DEFAULT_PERSONA,
     generator,
     activeConversationId: conversationId,
@@ -57,16 +70,19 @@ export function createEmptyBrain(
       },
     ],
     messages: [],
+    notes: [],
+    memory: [],
+    chunks: [],
   };
 }
 
-function isBrainState(value: unknown): value is BrainState {
+function isPersistedBrain(value: unknown): value is Record<string, unknown> {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  const v = value as BrainState;
+  const v = value as Record<string, unknown>;
   return (
-    v.version === 1 &&
+    (v.version === 1 || v.version === 2) &&
     typeof v.persona === 'string' &&
     Array.isArray(v.conversations) &&
     Array.isArray(v.messages) &&
@@ -84,8 +100,12 @@ export function loadBrain(): Promise<BrainState> {
       return Promise.resolve(createEmptyBrain());
     }
     const parsed: unknown = JSON.parse(raw);
-    if (isBrainState(parsed)) {
-      return Promise.resolve(parsed);
+    if (isPersistedBrain(parsed)) {
+      const migrated = migrateClientBrainState(parsed);
+      return Promise.resolve({
+        ...migrated,
+        generator: migrated.generator as WebGeneratorMode,
+      });
     }
   } catch {
     // fall through
