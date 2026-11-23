@@ -16,6 +16,8 @@ export type LocalBackendSnapshot = {
   modelsPreview: string[];
   binFound: boolean;
   binPath: string | null;
+  /** Absolute path to the selected GGUF (llama only). */
+  modelPath: string | null;
   installHint: string;
   error?: string;
 };
@@ -147,6 +149,7 @@ async function probeModels(
 export class LocalBackendsManager {
   private readonly children = new Map<LocalBackendId, ChildProcess>();
   private readonly binOverrides: Record<string, string> = {};
+  private llamaModelPath: string | null = null;
 
   setBinPath(id: LocalBackendId, binPath: string): void {
     this.binOverrides[id] = binPath;
@@ -154,6 +157,18 @@ export class LocalBackendsManager {
 
   getBinPath(id: LocalBackendId): string | null {
     return this.binOverrides[id] ?? null;
+  }
+
+  setLlamaModelPath(modelPath: string | null): void {
+    this.llamaModelPath =
+      modelPath && fs.existsSync(modelPath) ? modelPath : null;
+  }
+
+  getLlamaModelPath(): string | null {
+    if (this.llamaModelPath && fs.existsSync(this.llamaModelPath)) {
+      return this.llamaModelPath;
+    }
+    return null;
   }
 
   async snapshot(): Promise<LocalBackendSnapshot[]> {
@@ -174,6 +189,7 @@ export class LocalBackendsManager {
         modelsPreview: probe.models.slice(0, 8),
         binFound: Boolean(binPath),
         binPath,
+        modelPath: def.id === 'llama' ? this.getLlamaModelPath() : null,
         installHint: def.installHint,
       });
     }
@@ -200,11 +216,23 @@ export class LocalBackendsManager {
 
     const extra = process.env[def.envArgs]?.trim();
     const baseArgs = extra ? extra.split(/\s+/).filter(Boolean) : [];
-    // litert-lm rejects `--host`; llama.cpp expects host+port.
+    const hasModelFlag =
+      baseArgs.includes('-m') || baseArgs.includes('--model');
+    const modelPath = def.id === 'llama' ? this.getLlamaModelPath() : null;
+    const modelArgs =
+      def.id === 'llama' && modelPath && !hasModelFlag ? ['-m', modelPath] : [];
+    // litert-lm rejects `--host`; llama.cpp expects host+port (+ optional -m).
     const args =
       def.id === 'litert-lm'
         ? baseArgs
-        : [...baseArgs, '--host', '127.0.0.1', '--port', String(def.port)];
+        : [
+            ...baseArgs,
+            ...modelArgs,
+            '--host',
+            '127.0.0.1',
+            '--port',
+            String(def.port),
+          ];
 
     const child = spawn(binPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],

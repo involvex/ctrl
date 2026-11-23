@@ -46,3 +46,17 @@ git push origin v0.3.0
 ```
 
 Ship story: unpaired phone/web notes + pinned memory + local FTS in LiteRT prompts; paired append-only sync of notes/memory/chunks with the host.
+
+## Tag recipe — `v0.4.0` (local model install)
+
+Feature release after `v0.3.0`. Pins curated Hugging Face GGUF URLs in the catalog, desktop download into `userData/models/`, and `-m` when starting `llama-server`.
+
+```bash
+# on main, clean tree, after validate + contracts green:
+git checkout main
+git pull origin main
+git tag -a v0.4.0 -m "ctrl v0.4.0 — local GGUF download + llama -m"
+git push origin v0.4.0
+```
+
+Ship story: desktop HF catalog Download → `userData/models/*.gguf` → Start llama with `-m` → use → chat. `llama-server` binary still installed separately; phone stays `.litertlm`.

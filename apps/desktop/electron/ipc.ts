@@ -1,13 +1,25 @@
 import { app, dialog, ipcMain } from 'electron';
-import { mkdirSync } from 'node:fs';
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+} from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
 import type { AutostartSettings } from './autostart';
 import type { GatewayManager, GatewayStatus } from './gateway-manager';
 import { listLanAddresses } from './lan';
+import { modelsDir, saveLlamaModelPath } from './llama-model-state';
 import type { LocalBackendId, LocalBackendsManager } from './local-backends';
 import type { SecretVault } from './secrets';
 import type { UpdateManager, UpdateStatus } from './updater';
+
+const ggufFilenameSchema = z
+  .string()
+  .min(1)
+  .regex(/^[^\\/]+\.gguf$/i);
 
 const gatewayStatusSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('stopped') }),
@@ -168,7 +180,6 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
     const ext = process.platform === 'win32' ? '.exe' : '';
     const target = path.join(dir, `${input.id}${ext}`);
 
-    const { createWriteStream, existsSync, statSync } = await import('node:fs');
     let start = 0;
     if (existsSync(target)) {
       try {
@@ -241,5 +252,120 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
       done: true,
     });
     return { ok: true, path: target };
+  });
+
+  ipcMain.handle('localModels:list', () => {
+    const dir = modelsDir();
+    mkdirSync(dir, { recursive: true });
+    const files = readdirSync(dir).filter((name) =>
+      name.toLowerCase().endsWith('.gguf')
+    );
+    const selectedPath = deps.localBackends.getLlamaModelPath();
+    return {
+      dir,
+      files,
+      selectedPath,
+      selectedFilename: selectedPath ? path.basename(selectedPath) : null,
+    };
+  });
+
+  ipcMain.handle('localModels:select', (_e, raw: unknown) => {
+    const input = z
+      .object({
+        filename: ggufFilenameSchema,
+      })
+      .parse(raw);
+    const target = path.join(modelsDir(), input.filename);
+    if (!existsSync(target)) {
+      throw new Error(`model not found: ${input.filename}`);
+    }
+    deps.localBackends.setLlamaModelPath(target);
+    saveLlamaModelPath(target);
+    return { ok: true as const, path: target };
+  });
+
+  ipcMain.handle('localModels:download', async (event, raw: unknown) => {
+    const input = z
+      .object({
+        id: z.string().min(1),
+        url: z.string().url(),
+        filename: ggufFilenameSchema,
+      })
+      .parse(raw);
+
+    if (!input.url.startsWith('https://huggingface.co/')) {
+      throw new Error('downloadUrl must be a huggingface.co URL');
+    }
+
+    const dir = modelsDir();
+    mkdirSync(dir, { recursive: true });
+    const target = path.join(dir, input.filename);
+    const webContents = event.sender;
+
+    if (existsSync(target) && statSync(target).size > 0) {
+      deps.localBackends.setLlamaModelPath(target);
+      saveLlamaModelPath(target);
+      webContents.send('localBackends:downloadProgress', {
+        id: input.id,
+        downloaded: statSync(target).size,
+        total: statSync(target).size,
+        percent: 100,
+        done: true,
+      });
+      return { ok: true as const, path: target, skipped: true as const };
+    }
+
+    const res = await fetch(input.url);
+    if (!res.ok) {
+      throw new Error(`download failed: ${res.status}`);
+    }
+
+    const contentLength = res.headers.get('content-length');
+    const total = contentLength ? Number(contentLength) : undefined;
+
+    const fileStream = createWriteStream(target, { flags: 'w' });
+    if (!res.body) {
+      throw new Error('download failed: no response body');
+    }
+
+    let downloaded = 0;
+    const reader = res.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          fileStream.write(Buffer.from(value));
+          downloaded += value.byteLength;
+          if (total) {
+            webContents.send('localBackends:downloadProgress', {
+              id: input.id,
+              downloaded,
+              total,
+              percent: Math.round((downloaded / total) * 100),
+            });
+          } else {
+            webContents.send('localBackends:downloadProgress', {
+              id: input.id,
+              downloaded,
+            });
+          }
+        }
+      }
+    } finally {
+      fileStream.end();
+      await new Promise<void>((resolve) => fileStream.on('finish', resolve));
+    }
+
+    deps.localBackends.setLlamaModelPath(target);
+    saveLlamaModelPath(target);
+    webContents.send('localBackends:downloadProgress', {
+      id: input.id,
+      downloaded,
+      total,
+      percent: total ? 100 : undefined,
+      done: true,
+    });
+    return { ok: true as const, path: target, skipped: false as const };
   });
 }

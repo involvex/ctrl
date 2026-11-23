@@ -43,6 +43,22 @@ contextBridge.exposeInMainWorld('ctrlDesktop', {
     url: string
   ): Promise<{ ok: boolean; path: string }> =>
     ipcRenderer.invoke('localBackends:downloadBin', { id, url }),
+  listLocalModels: (): Promise<{
+    dir: string;
+    files: string[];
+    selectedPath: string | null;
+    selectedFilename: string | null;
+  }> => ipcRenderer.invoke('localModels:list'),
+  selectLocalModel: (
+    filename: string
+  ): Promise<{ ok: boolean; path: string }> =>
+    ipcRenderer.invoke('localModels:select', { filename }),
+  downloadLocalModel: (
+    id: string,
+    url: string,
+    filename: string
+  ): Promise<{ ok: boolean; path: string; skipped: boolean }> =>
+    ipcRenderer.invoke('localModels:download', { id, url, filename }),
   onDownloadProgress: (
     callback: (info: {
       id: string;
