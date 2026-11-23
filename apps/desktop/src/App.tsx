@@ -132,6 +132,20 @@ type DesktopApi = {
     id: string,
     url: string
   ) => Promise<{ ok: boolean; path: string }>;
+  listLocalModels: () => Promise<{
+    dir: string;
+    files: string[];
+    selectedPath: string | null;
+    selectedFilename: string | null;
+  }>;
+  selectLocalModel: (
+    filename: string
+  ) => Promise<{ ok: boolean; path: string }>;
+  downloadLocalModel: (
+    id: string,
+    url: string,
+    filename: string
+  ) => Promise<{ ok: boolean; path: string; skipped: boolean }>;
   onDownloadProgress?: (
     callback: (info: {
       id: string;
@@ -151,6 +165,7 @@ type LocalBackendRow = {
   modelsPreview: string[];
   binFound: boolean;
   binPath: string | null;
+  modelPath: string | null;
   installHint: string;
   error?: string;
 };
@@ -246,6 +261,10 @@ export function App() {
     Array<{ id: string; displayName?: string }>
   >([]);
   const [hfModels, setHfModels] = useState<HfModelCatalogEntry[]>([]);
+  const [localModelFiles, setLocalModelFiles] = useState<string[]>([]);
+  const [selectedModelFilename, setSelectedModelFilename] = useState<
+    string | null
+  >(null);
   const [providerKeyDraft, setProviderKeyDraft] = useState('');
   const [providerModelDraft, setProviderModelDraft] = useState('');
   const [toolItems, setToolItems] = useState<ToolDefinition[]>([]);
@@ -310,6 +329,20 @@ export function App() {
     }
   }, []);
 
+  const refreshLocalModels = useCallback(async () => {
+    const api = window.ctrlDesktop;
+    if (!api?.listLocalModels) {
+      return;
+    }
+    try {
+      const listed = await api.listLocalModels();
+      setLocalModelFiles(listed.files);
+      setSelectedModelFilename(listed.selectedFilename);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -356,13 +389,14 @@ export function App() {
       setDownloadProgress(info);
       if (info.done) {
         void refreshLocalBackends();
+        void refreshLocalModels();
         setTimeout(() => setDownloadProgress(null), 3000);
       }
     });
     return () => {
       unsub();
     };
-  }, [refreshLocalBackends]);
+  }, [refreshLocalBackends, refreshLocalModels]);
 
   useEffect(() => {
     const api = window.ctrlDesktop;
@@ -599,12 +633,19 @@ export function App() {
       setProviderStatus(provider);
       setProviderModelDraft(provider.model ?? '');
       await refreshLocalBackends();
+      await refreshLocalModels();
       await refreshModels();
       await refreshHfModels();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [gatewayUrl, refreshLocalBackends, refreshModels, refreshHfModels]);
+  }, [
+    gatewayUrl,
+    refreshLocalBackends,
+    refreshLocalModels,
+    refreshModels,
+    refreshHfModels,
+  ]);
 
   const refreshTools = useCallback(async () => {
     if (!gatewayUrl.startsWith('http')) {
@@ -1542,6 +1583,9 @@ export function App() {
                         : ''}
                     </span>
                   </div>
+                  {b.id === 'llama' && b.modelPath ? (
+                    <p className="meta">GGUF -m: {b.modelPath}</p>
+                  ) : null}
                   <div className="host-row">
                     <input
                       className="host-input"
@@ -1804,7 +1848,8 @@ export function App() {
 
           <p className="host-title">HF model catalog</p>
           <p className="meta">
-            Browse curated HuggingFace GGUF models for local use.
+            Download a pinned GGUF into userData/models/, then Host → local
+            models → Start llama. Selected file is passed as -m.
           </p>
           <div className="host-row">
             <button
@@ -1812,6 +1857,7 @@ export function App() {
               className="ghost-btn"
               onClick={() => {
                 void refreshHfModels();
+                void refreshLocalModels();
               }}
             >
               refresh catalog
@@ -1821,23 +1867,120 @@ export function App() {
             {hfModels.length === 0 ? (
               <li className="meta">no catalog entries</li>
             ) : (
-              hfModels.map((m: HfModelCatalogEntry) => (
-                <li key={m.id}>
-                  <div>
-                    <strong>{m.name}</strong>
-                    <br />
-                    <span className="meta">
-                      {m.id}
-                      {m.sizeGb ? ` · ${m.sizeGb} GB` : ''}
-                      {(m.tags?.length ?? 0) > 0
-                        ? ` · ${(m.tags ?? []).join(', ')}`
-                        : ''}
-                    </span>
-                    <br />
-                    <span className="meta">{m.description}</span>
-                  </div>
-                </li>
-              ))
+              hfModels.map((m: HfModelCatalogEntry) => {
+                const filename = m.filename;
+                const downloadUrl = m.downloadUrl;
+                const onDisk =
+                  Boolean(filename) && localModelFiles.includes(filename!);
+                const selected =
+                  Boolean(filename) && selectedModelFilename === filename;
+                const progressForRow =
+                  downloadProgress && downloadProgress.id === m.id
+                    ? downloadProgress
+                    : null;
+                return (
+                  <li key={m.id}>
+                    <div>
+                      <strong>{m.name}</strong>
+                      <br />
+                      <span className="meta">
+                        {m.id}
+                        {m.sizeGb ? ` · ${m.sizeGb} GB` : ''}
+                        {(m.tags?.length ?? 0) > 0
+                          ? ` · ${(m.tags ?? []).join(', ')}`
+                          : ''}
+                        {onDisk ? ' · on disk' : ''}
+                        {selected ? ' · selected' : ''}
+                      </span>
+                      <br />
+                      <span className="meta">{m.description}</span>
+                      {filename ? (
+                        <>
+                          <br />
+                          <span className="meta">{filename}</span>
+                        </>
+                      ) : null}
+                      {progressForRow ? (
+                        <>
+                          <br />
+                          <span className="meta">
+                            {progressForRow.done
+                              ? 'download complete'
+                              : progressForRow.percent !== undefined
+                                ? `${progressForRow.percent}% (${Math.round(progressForRow.downloaded / 1024 / 1024)} MB)`
+                                : `${Math.round(progressForRow.downloaded / 1024 / 1024)} MB downloaded`}
+                          </span>
+                        </>
+                      ) : null}
+                      <div className="host-row">
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled={
+                            !downloadUrl ||
+                            !filename ||
+                            Boolean(progressForRow && !progressForRow.done)
+                          }
+                          onClick={() => {
+                            void (async () => {
+                              if (!downloadUrl || !filename) {
+                                return;
+                              }
+                              try {
+                                setError(null);
+                                await window.ctrlDesktop?.downloadLocalModel(
+                                  m.id,
+                                  downloadUrl,
+                                  filename
+                                );
+                                await refreshLocalModels();
+                                await refreshLocalBackends();
+                              } catch (err) {
+                                setError(
+                                  err instanceof Error
+                                    ? err.message
+                                    : String(err)
+                                );
+                              }
+                            })();
+                          }}
+                        >
+                          {onDisk ? 'use / re-check' : 'download'}
+                        </button>
+                        {onDisk && !selected ? (
+                          <button
+                            type="button"
+                            className="ghost-btn"
+                            onClick={() => {
+                              void (async () => {
+                                if (!filename) {
+                                  return;
+                                }
+                                try {
+                                  await window.ctrlDesktop?.selectLocalModel(
+                                    filename
+                                  );
+                                  await refreshLocalModels();
+                                  await refreshLocalBackends();
+                                  setError(null);
+                                } catch (err) {
+                                  setError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : String(err)
+                                  );
+                                }
+                              })();
+                            }}
+                          >
+                            select
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })
             )}
           </ul>
         </aside>

@@ -332,3 +332,8 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Mobile/web knowledge screens work unpaired (local FTS); vector/hybrid stays paired-gateway.
     - LiteRT turns prepend `assembleLocalContextPrefix` (pinned memory + local hits).
     - Still parked: edit/delete conflict resolution, binary blob download, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+27. Local model install (v0.4.0 — done this slice):
+    - Pin one Hugging Face GGUF `downloadUrl` + `filename` on each `HfModelEntry` (Q4_K_M); unit-test URL/filename shape.
+    - Desktop Providers HF catalog: Download into `userData/models/`, progress via existing download channel; skip re-fetch when the file is already on disk.
+    - Persist selected GGUF path in `userData/local-llama-model.json`; `LocalBackendsManager.start('llama')` appends `-m <path>` unless `CTRL_LLAMA_ARGS` already has `-m`/`--model`.
+    - Still parked: edit/delete conflict resolution, phone GGUF, quantization picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

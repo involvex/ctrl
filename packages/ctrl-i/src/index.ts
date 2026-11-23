@@ -241,7 +241,10 @@ export type HfModelCatalogEntry = {
   description: string;
   sizeGb?: number;
   tags: string[];
+  /** Pinned Hugging Face resolve URL for one GGUF file. */
   downloadUrl?: string;
+  /** Local filename under userData/models/. */
+  filename?: string;
   quantizations?: string[];
 };
 

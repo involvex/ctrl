@@ -3,6 +3,7 @@ import path from 'node:path';
 import { getAutostart, setAutostart } from './autostart';
 import { GatewayManager } from './gateway-manager';
 import { registerDesktopIpc } from './ipc';
+import { loadLlamaModelPath } from './llama-model-state';
 import { LocalBackendsManager } from './local-backends';
 import { SecretVault } from './secrets';
 import { createAppTray } from './tray';
@@ -120,6 +121,11 @@ async function bootstrap(): Promise<void> {
     process.stderr.write(
       `[ctrl-desktop] safeStorage unavailable: ${err instanceof Error ? err.message : String(err)}\n`
     );
+  }
+
+  const modelPath = loadLlamaModelPath();
+  if (modelPath) {
+    localBackends.setLlamaModelPath(modelPath);
   }
 
   Object.assign(envExtra, await localBackends.envExtras());

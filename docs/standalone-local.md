@@ -5,9 +5,9 @@ Each device can chat without the other. Pairing is optional for sync / cloud.
 **v0 try path** (5 bullets):
 
 1. **Phone alone** — install APK → Menu → Model setup → download/import `.litertlm` → Load → Chat with cascade **On this phone**.
-2. **PC alone** — run desktop → Host → local models → detect → start llama or litert-lm → use → chat (no cloud key required).
+2. **PC alone** — run desktop → Host → local models → detect / set `llama-server` path → Providers → HF catalog → Download a GGUF → Start llama → use → chat (no cloud key required).
 3. **Pair (optional)** — same Wi‑Fi → Host QR (or `ctrl-f5 pair`) → phone Scan → CLI exits after ack.
-4. **Model pick** — desktop Providers → model browser → select id for next turn.
+4. **Model pick** — desktop Providers → model browser → select id for next turn (after Start, refresh so the local id appears).
 5. **Stuck?** — see firewall / soak notes below and [soak-v0.md](soak-v0.md).
 
 ## Matrix
@@ -32,7 +32,17 @@ Each device can chat without the other. Pairing is optional for sync / cloud.
 | llama-server | `http://127.0.0.1:8080/v1` | `CTRL_LLAMA_BIN`, `CTRL_LLAMA_PORT`         |
 | litert-lm    | `http://127.0.0.1:9379/v1` | `CTRL_LITERT_LM_BIN`, `CTRL_LITERT_LM_PORT` |
 
-Desktop **Host → local models**: detect binaries / running `/models`, Start / Stop, then **use** to switch the gateway provider. Providers panel includes a **model browser** (`GET /api/v1/models`).
+Desktop **Host → local models**: detect binaries / running `/models`, Start / Stop, then **use** to switch the gateway provider. Providers panel includes a **model browser** (`GET /api/v1/models`) and an **HF model catalog** for pinned GGUF downloads.
+
+### PC GGUF install (desktop)
+
+1. Install `llama-server` (C++ binary) and point Host at it (`CTRL_LLAMA_BIN`, browse, or download-bin URL).
+2. Open **Providers → HF model catalog** → **download** on a row (writes under Electron `userData/models/`). A second click skips the network when that `.gguf` is already present.
+3. The downloaded file becomes the selected model (`userData/local-llama-model.json`). Host → local models shows `GGUF -m: …`.
+4. **Start** llama — desktop passes `-m <path>` (unless `CTRL_LLAMA_ARGS` already includes `-m` / `--model`).
+5. **use** → refresh models → pick the local id → chat.
+
+Phone stays on `.litertlm` (Model setup); this flow is desktop-only.
 
 Install examples (Windows PowerShell):
 
@@ -43,7 +53,7 @@ setx CTRL_LITERT_LM_BIN "C:\path\to\litert-lm.exe"
 # Restart desktop so the gateway child inherits env.
 ```
 
-Desktop Host can also set a binary path, pick a file, or download from a URL when you have one.
+Desktop Host can also set a binary path, pick a file, or download a backend binary from a URL when you have one.
 
 ## Skills + MCP (Host tools panel)
 
@@ -110,5 +120,6 @@ Phone and web brains store notes, memory, and text chunks offline. Unpaired: cre
 Still parked:
 
 1. Edit/delete conflict resolution; binary attachment blob download onto the device
-2. Rust `agentd` / monetization experiments
-3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
+2. Phone GGUF / quantization picker; auto-download of `llama-server` / `litert-lm` binaries
+3. Rust `agentd` / monetization experiments
+4. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)

@@ -13,18 +13,24 @@ export type HfModelEntry = {
   description: string;
   sizeGb?: number;
   tags: string[];
-  downloadUrl?: string;
+  /** Pinned Hugging Face resolve URL for one GGUF file. */
+  downloadUrl: string;
+  /** Local filename under userData/models/. */
+  filename: string;
   quantizations?: string[];
 };
 
 const HF_MODEL_CATALOG: HfModelEntry[] = [
   {
-    id: 'microsoft/Phi-3.1-mini-4k-instruct-gguf',
+    id: 'bartowski/Phi-3.1-mini-4k-instruct-GGUF',
     name: 'Phi-3.1 Mini (GGUF)',
     description: 'Small efficient model, good for general chat',
-    sizeGb: 2.3,
+    sizeGb: 2.4,
     tags: ['chat', 'small', 'gguf'],
-    quantizations: ['GGUF'],
+    quantizations: ['Q4_K_M'],
+    filename: 'Phi-3.1-mini-4k-instruct-Q4_K_M.gguf',
+    downloadUrl:
+      'https://huggingface.co/bartowski/Phi-3.1-mini-4k-instruct-GGUF/resolve/main/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf',
   },
   {
     id: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
@@ -32,31 +38,43 @@ const HF_MODEL_CATALOG: HfModelEntry[] = [
     description: 'Meta Llama 3.2, instruction tuned',
     sizeGb: 2.0,
     tags: ['chat', 'llama', 'gguf'],
-    quantizations: ['GGUF'],
+    quantizations: ['Q4_K_M'],
+    filename: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+    downloadUrl:
+      'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
   },
   {
-    id: 'lmstudio-community/SmolLM2-3.2B-Instruct-GGUF',
-    name: 'SmolLM2 3.2B Instruct (GGUF)',
+    id: 'lmstudio-community/SmolLM2-1.7B-Instruct-GGUF',
+    name: 'SmolLM2 1.7B Instruct (GGUF)',
     description: 'Very compact, great for local use',
-    sizeGb: 2.0,
+    sizeGb: 1.1,
     tags: ['chat', 'small', 'gguf'],
-    quantizations: ['GGUF'],
+    quantizations: ['Q4_K_M'],
+    filename: 'SmolLM2-1.7B-Instruct-Q4_K_M.gguf',
+    downloadUrl:
+      'https://huggingface.co/lmstudio-community/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf',
   },
   {
     id: 'QuantFactory/Meta-Llama-3-8B-Instruct-GGUF',
     name: 'Llama 3 8B Instruct (GGUF)',
     description: 'Larger model with better quality',
-    sizeGb: 4.7,
+    sizeGb: 4.9,
     tags: ['chat', 'llama', 'gguf'],
-    quantizations: ['GGUF'],
+    quantizations: ['Q4_K_M'],
+    filename: 'Meta-Llama-3-8B-Instruct.Q4_K_M.gguf',
+    downloadUrl:
+      'https://huggingface.co/QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q4_K_M.gguf',
   },
   {
-    id: 'google/gemma-2-2b-it-GGUF',
+    id: 'bartowski/gemma-2-2b-it-GGUF',
     name: 'Gemma 2 2B IT (GGUF)',
     description: 'Google Gemma, efficient and capable',
-    sizeGb: 1.6,
+    sizeGb: 1.7,
     tags: ['chat', 'gemma', 'gguf'],
-    quantizations: ['GGUF'],
+    quantizations: ['Q4_K_M'],
+    filename: 'gemma-2-2b-it-Q4_K_M.gguf',
+    downloadUrl:
+      'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
   },
 ];
 
@@ -69,7 +87,7 @@ const CATALOG: Record<
     label: 'Mock',
     kind: 'local-mock',
     description: 'Deterministic local echo for offline / contract tests.',
-    surfaces: ['gateway', 'desktop', 'mobile'],
+    surfaces: ['gateway', 'desktop'],
     requiresApiKey: false,
     defaultModel: 'mock',
   },
