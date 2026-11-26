@@ -341,3 +341,24 @@ export async function gatewayStop(
         : 'nothing to stop',
   };
 }
+
+/** Stop then start, preserving last managed port/host when flags omit them. */
+export async function gatewayRestart(opts: LifecycleOpts = {}): Promise<{
+  stop: Awaited<ReturnType<typeof gatewayStop>>;
+  start: Awaited<ReturnType<typeof gatewayStart>>;
+}> {
+  const dataDir = resolveDataDir();
+  const meta = readMeta(gatewayMetaPath(dataDir));
+  const port =
+    opts.port ??
+    meta?.port ??
+    Number(process.env['PORT'] ?? DEFAULT_GATEWAY_PORT);
+  const host =
+    opts.host ?? meta?.host ?? process.env['CTRL_A_HOST'] ?? '0.0.0.0';
+
+  const stop = await gatewayStop({ port });
+  // Give the OS a beat to release the listen socket after stop.
+  await Bun.sleep(200);
+  const start = await gatewayStart({ port, host });
+  return { stop, start };
+}

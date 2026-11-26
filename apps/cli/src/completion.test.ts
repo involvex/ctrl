@@ -12,12 +12,18 @@ describe('ctrl-f5 completion', () => {
       expect(script).toContain(cmd);
     }
     expect(script).toContain('complete -F _ctrl_f5 ctrl-f5');
+    expect(script).toContain('telegram webhook discord slack');
+    expect(script).toContain('search reindex status');
   });
 
   test('powershell script registers native completer', () => {
     const script = completionScript('powershell');
     expect(script).toContain('Register-ArgumentCompleter');
     expect(script).toContain('ctrl-f5');
+    expect(script).toContain("'restart'");
+    expect(script).toContain("'knowledge'");
+    expect(script).toContain("'discord'");
+    expect(script).toContain("'slack'");
   });
 
   test('parseCompletionShell rejects unknown shells', () => {

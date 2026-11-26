@@ -13,34 +13,41 @@ import { doctorCommand } from './doctor';
 import { completionScript, parseCompletionShell } from './completion';
 import {
   DEFAULT_GATEWAY_PORT,
+  gatewayRestart,
   gatewayStart,
   gatewayStatus,
   gatewayStop,
 } from './gateway-lifecycle';
+import { knowledgeCommand } from './knowledge';
 import { listLanAddresses, pickLanUrl } from './lan';
 
 function usage(): never {
   process.stderr.write(`Usage:
-  ctrl-f5 start  [--port <port>] [--host <bindHost>]
-  ctrl-f5 stop   [--port <port>]
-  ctrl-f5 status [--port <port>] [--url <baseUrl>]
+  ctrl-f5 start   [--port <port>] [--host <bindHost>]
+  ctrl-f5 stop    [--port <port>]
+  ctrl-f5 restart [--port <port>] [--host <bindHost>]
+  ctrl-f5 status  [--port <port>] [--url <baseUrl>]
   ctrl-f5 health  [--url <baseUrl>]
   ctrl-f5 doctor  [--url <baseUrl>]
   ctrl-f5 demo    [--url <baseUrl>]
   ctrl-f5 chat   [--url <baseUrl>] [--token <token>] [message...]
   ctrl-f5 backup list|create|restore […] [--url <baseUrl>] [--token <token>]
+  ctrl-f5 knowledge search|reindex|status […] [--url <baseUrl>] [--token <token>]
   ctrl-f5 channel list|add|start|stop […] [--url <baseUrl>]
   ctrl-f5 pair   [--host <lanIp>] [--port <port>] [--token <token>] [--url <baseUrl>]
   ctrl-f5 completion bash|powershell
 
-start/stop/status  Manage local ctrl-a gateway (pid under data/ctrl-a.pid).
+start/stop/restart/status  Manage local ctrl-a gateway (pid under data/ctrl-a.pid).
 chat               One-shot or interactive TTY chat against a running gateway.
 backup             Host snapshot list / create / restore (optional --passphrase).
-channel            List/add/start/stop gateway channels (telegram, webhook).
+knowledge          Search / reindex / embedding status against a running gateway.
+channel            List/add/start/stop gateway channels (telegram, discord, slack, webhook).
 pair               Print LAN QR; exits 0 after phone pairing ack (or Ctrl+C).
 completion         Print shell tab-completion script (eval / source it).
 
-Env: CTRL_A_URL, CTRL_A_HOST, CTRL_GATEWAY_TOKEN, CTRL_BACKUP_PASSPHRASE, TELEGRAM_BOT_TOKEN, PORT, CTRL_DATA_DIR, CTRL_REPO_ROOT
+Env: CTRL_A_URL, CTRL_A_HOST, CTRL_GATEWAY_TOKEN, CTRL_BACKUP_PASSPHRASE,
+     TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, SLACK_BOT_TOKEN, SLACK_APP_TOKEN,
+     PORT, CTRL_DATA_DIR, CTRL_REPO_ROOT
 `);
   process.exit(1);
 }
@@ -233,6 +240,27 @@ async function cmdStop(args: string[]): Promise<void> {
   process.stdout.write(`${result.message}\n`);
 }
 
+async function cmdRestart(args: string[]): Promise<void> {
+  const portFlag = flagValue(args, '--port');
+  const hostFlag = flagValue(args, '--host');
+  const opts: { port?: number; host?: string } = {};
+  if (portFlag) {
+    opts.port = Number(portFlag);
+  }
+  if (hostFlag) {
+    opts.host = hostFlag;
+  } else if (process.env['CTRL_A_HOST']) {
+    opts.host = process.env['CTRL_A_HOST'];
+  }
+  const result = await gatewayRestart(opts);
+  process.stdout.write(`${result.stop.message}\n`);
+  process.stdout.write(
+    result.start.alreadyRunning
+      ? `already running · ${result.start.meta.url} · pid ${result.start.meta.pid || '—'}\n`
+      : `restarted · ${result.start.meta.url} · pid ${result.start.meta.pid}\n`
+  );
+}
+
 async function cmdStatus(args: string[]): Promise<void> {
   const port = parsePort(args);
   const host = flagValue(args, '--host');
@@ -275,6 +303,17 @@ async function main(): Promise<void> {
     await cmdStop(rest);
     return;
   }
+  if (cmd === 'restart') {
+    try {
+      await cmdRestart(rest);
+    } catch (err) {
+      process.stderr.write(
+        `${err instanceof Error ? err.message : String(err)}\n`
+      );
+      process.exit(1);
+    }
+    return;
+  }
   if (cmd === 'status') {
     await cmdStatus(rest);
     return;
@@ -297,6 +336,20 @@ async function main(): Promise<void> {
     try {
       // Keep --label / --passphrase / --workspace for backupCommand.
       await backupCommand(baseUrl, rest, token);
+    } catch (err) {
+      process.stderr.write(
+        `${err instanceof Error ? err.message : String(err)}\n`
+      );
+      process.exit(1);
+    }
+    return;
+  }
+  if (cmd === 'knowledge') {
+    const baseUrl = parseUrl(rest);
+    const token =
+      flagValue(rest, '--token') ?? process.env['CTRL_GATEWAY_TOKEN'];
+    try {
+      await knowledgeCommand(baseUrl, rest, token);
     } catch (err) {
       process.stderr.write(
         `${err instanceof Error ? err.message : String(err)}\n`
