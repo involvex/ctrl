@@ -25,6 +25,18 @@ Each device can chat without the other. Pairing is optional for sync / cloud.
 4. Pairing (Host QR / `ctrl-f5 pair`) is only needed for PC cascade, sync, or cloud keys on the gateway.
 5. If chat shows unavailable · …, open Model setup from the banner CTA.
 
+### Phone model files (one `.litertlm`)
+
+`react-native-litert-lm` loads **one** resident engine. A second `loadModel` replaces the first; it does not keep two chat models in RAM. There is no on-device GGUF / llama.cpp runner on the phone.
+
+What Model setup supports today:
+
+- Download the default Gemma 4 E2B `.litertlm`, or import **one** `.litertlm` via the document picker (`multiple: false`).
+- Persist that single path (`ctrl.mobile.litert.modelSource`), Load / Unload / Reset.
+- Native `listCachedFiles()` only sees the module download cache (`filesDir/models`), not Expo import copies under `documentDirectory/models/`. The app does not call it for a catalog UI.
+
+A multi-file picker stays out of scope until the app owns an explicit multi-path catalog (and loosens the hardcoded E2B policy). GGUF stays on desktop llama (`userData/models/*.gguf`).
+
 ## PC (Desktop / gateway)
 
 | Backend      | Default probe              | Env                                         |
@@ -131,8 +143,9 @@ Providers → HF model catalog: pick a quant (Q4_K_M default, plus Q5_K_M or Q6_
 
 Still parked:
 
-1. Phone GGUF / multi-`.litertlm` picker; auto-download of `llama-server` / `litert-lm` binaries
-2. Rust `agentd` / monetization experiments
-3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
+1. Auto-download of `llama-server` / `litert-lm` binaries (pinned URL + checksum)
+2. App-owned multi-path `.litertlm` catalog on phone (only if product wants replace-to-switch UX; runner still holds one engine)
+3. Rust `agentd` / monetization experiments
+4. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
 
 Living order for remaining work: [ROADMAP.md](../ROADMAP.md).

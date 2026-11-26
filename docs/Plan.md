@@ -351,3 +351,7 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - `ctrl-r` catalog entries expose a short `quantizations[]` (Q4_K_M default + higher quants) with pinned HF resolve URLs.
     - Desktop Providers panel select → download uses the chosen quant filename/`-m` path.
     - Still parked: phone GGUF / multi-`.litertlm` picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+31. Phone model files gap (done this slice — docs only):
+    - Confirmed `react-native-litert-lm` holds one resident `.litertlm`; no phone GGUF runner.
+    - Documented in [standalone-local.md](standalone-local.md); no fake multi-model picker.
+    - Still parked: auto-download of `llama-server` / `litert-lm`, optional app multi-path catalog, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
