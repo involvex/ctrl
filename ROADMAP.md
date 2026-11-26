@@ -2,7 +2,7 @@
 
 Living backlog for `@involvex/ctrl`. Historical phase notes stay in [docs/Plan.md](docs/Plan.md). Operator soak stays in [docs/soak-v0.md](docs/soak-v0.md).
 
-Root `package.json` is still `0.2.0` (Release workflow syncs from the tag). Desktop packaging is still `0.0.1` in-repo until a tag cut. Published on `origin`: `v0.2.0`, `v0.3.0`, `v0.4.0`. Next cut: `v0.5.0` (knowledge sync + model tooling). Optional `v0.2.1` remains soak-gated.
+Root `package.json` is still `0.2.0` (Release workflow syncs from the tag). Desktop packaging is still `0.0.1` in-repo until a tag cut. Published on `origin`: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0`. Optional `v0.2.1` remains soak-gated.
 
 ## Now
 
@@ -26,7 +26,7 @@ _(empty)_
 
 - [ ] Soak rows 1–6 in [docs/soak-v0.md](docs/soak-v0.md) — pending on your hardware; do not push `v0.2.1` until green ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)). Cutting `v0.5.0` does not mark soak pass.
 - [x] Cut `v0.3.0` / `v0.4.0` for device knowledge and local model install (on `origin`).
-- [ ] Cut `v0.5.0` — knowledge edit/delete + attachment blobs + HF quant picker + pinned local-bin fetch ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)).
+- [x] Cut `v0.5.0` — knowledge edit/delete + attachment blobs + HF quant picker + pinned local-bin fetch ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)).
 
 ## Done
 

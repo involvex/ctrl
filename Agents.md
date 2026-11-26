@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). `## Now` is empty. Cut `v0.5.0` from main (knowledge sync + model tooling); soak rows 1–6 stay operator hardware; pick from Later for new code.
+See [ROADMAP.md](ROADMAP.md). `## Now` is empty. `v0.5.0` is cut (knowledge sync + model tooling); soak rows 1–6 stay operator hardware; pick from Later for new code.
 
 ## Learned preferences
 
@@ -263,7 +263,8 @@ See [ROADMAP.md](ROADMAP.md). `## Now` is empty. Cut `v0.5.0` from main (knowled
 
 - Phases 0–8 and slices 10–31 are shipped; living backlog is `ROADMAP.md`.
 - Root version is still `0.2.0` in git; Release workflow syncs from the tag. Desktop packaging is still `0.0.1` until a tag cut.
-- Published tags on origin: `v0.2.0`, `v0.3.0`, `v0.4.0`; next feature cut is `v0.5.0`.
+- Published tags on origin: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0`.
+
 - Phone LiteRT holds one resident `.litertlm` (no phone GGUF); multi-file picker deferred.
 - Packages `ctrl-space`, `ctrl-l`, and `ctrl-comma` are named in the plan but not on disk yet.
 - Soak rows 1–6 in `docs/soak-v0.md` are hardware-only; optional `v0.2.1` stays soak-gated and is independent of feature tags.
