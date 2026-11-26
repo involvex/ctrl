@@ -32,7 +32,7 @@ export type ClientBrainConversation = {
   updatedAt: number;
 };
 
-/** Local / replicated text note (attachment body without blob). */
+/** Local / replicated text note (attachment body without blob by default). */
 export type ClientBrainNote = {
   id: string;
   filename: string;
@@ -44,6 +44,10 @@ export type ClientBrainNote = {
   origin: 'local' | 'gateway';
   /** Host attachment id after push or when pulled. */
   gatewayAttachmentId?: string;
+  /** Optional on-demand host blob copy (base64); not synced automatically. */
+  localBlobBase64?: string;
+  localBlobMimeType?: string;
+  localBlobSizeBytes?: number;
 };
 
 /** Local / replicated memory item. */
@@ -135,6 +139,15 @@ function normalizeNote(raw: Record<string, unknown>): ClientBrainNote {
     origin: raw['origin'] === 'gateway' ? 'gateway' : 'local',
     ...(typeof raw['gatewayAttachmentId'] === 'string'
       ? { gatewayAttachmentId: raw['gatewayAttachmentId'] }
+      : {}),
+    ...(typeof raw['localBlobBase64'] === 'string'
+      ? { localBlobBase64: raw['localBlobBase64'] }
+      : {}),
+    ...(typeof raw['localBlobMimeType'] === 'string'
+      ? { localBlobMimeType: raw['localBlobMimeType'] }
+      : {}),
+    ...(typeof raw['localBlobSizeBytes'] === 'number'
+      ? { localBlobSizeBytes: raw['localBlobSizeBytes'] }
       : {}),
   };
 }
@@ -446,10 +459,54 @@ export function deleteLocalNote<T extends ClientBrainState>(
     ...state,
     notes: state.notes.map((n) =>
       n.id === noteId
-        ? { ...n, deletedAt: now, updatedAt: now, origin: 'local' as const }
+        ? {
+            id: n.id,
+            filename: n.filename,
+            text: n.text,
+            createdAt: n.createdAt,
+            updatedAt: now,
+            deletedAt: now,
+            origin: 'local' as const,
+            ...(n.gatewayAttachmentId
+              ? { gatewayAttachmentId: n.gatewayAttachmentId }
+              : {}),
+          }
         : n
     ),
     chunks: state.chunks.filter((c) => c.noteId !== noteId),
+  };
+}
+
+/**
+ * Attach an on-demand host blob copy to a note (does not bump updatedAt / sync).
+ */
+export function storeLocalNoteBlob<T extends ClientBrainState>(
+  state: T,
+  noteId: string,
+  blob: {
+    base64: string;
+    mimeType: string;
+    sizeBytes: number;
+    filename?: string;
+  }
+): T {
+  const existing = state.notes.find((n) => n.id === noteId);
+  if (!existing || existing.deletedAt != null || !blob.base64) {
+    return state;
+  }
+  return {
+    ...state,
+    notes: state.notes.map((n) =>
+      n.id === noteId
+        ? {
+            ...n,
+            ...(blob.filename ? { filename: blob.filename } : {}),
+            localBlobBase64: blob.base64,
+            localBlobMimeType: blob.mimeType,
+            localBlobSizeBytes: blob.sizeBytes,
+          }
+        : n
+    ),
   };
 }
 
@@ -808,7 +865,8 @@ function hostAttachmentText(
 
 /**
  * Pull host attachments + chunks with last-write-wins and tombstones.
- * Binary blobs stay on the host; only chunk text is replicated.
+ * Binary blobs stay on the host until the client downloads them on demand;
+ * sync only replicates chunk text and attachment metadata.
  */
 export function mergeGatewayKnowledge<T extends ClientBrainState>(
   state: T,
@@ -889,8 +947,10 @@ export function mergeGatewayKnowledge<T extends ClientBrainState>(
       mutated = true;
       if (hostDeleted) {
         notes[idx] = {
-          ...local,
+          id: local.id,
           filename: att.filename,
+          text: '',
+          createdAt: local.createdAt,
           updatedAt: att.updatedAt,
           deletedAt: att.deletedAt ?? att.updatedAt,
           origin: 'gateway',

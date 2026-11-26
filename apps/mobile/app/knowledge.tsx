@@ -15,13 +15,16 @@ import {
   addLocalMemory,
   addLocalNote,
   assembleLocalContextPrefix,
+  bytesToBase64,
   deleteLocalMemory,
   deleteLocalNote,
+  downloadAttachmentBlob,
   getEmbeddingStatus,
   inspectContext,
   reindexKnowledge,
   searchKnowledge,
   searchLocalChunks,
+  storeLocalNoteBlob,
   updateLocalMemory,
   updateLocalNote,
   updateMemory,
@@ -596,6 +599,58 @@ export default function KnowledgeScreen() {
                   >
                     <Text style={styles.link}>delete</Text>
                   </Pressable>
+                  {paired &&
+                  gatewayUrl &&
+                  note.gatewayAttachmentId &&
+                  !note.localBlobBase64 ? (
+                    <Pressable
+                      disabled={busy || !brain}
+                      onPress={() => {
+                        if (!brain || !gatewayUrl) {
+                          return;
+                        }
+                        const attachmentId = note.gatewayAttachmentId!;
+                        const noteId = note.id;
+                        void (async () => {
+                          setBusy(true);
+                          setStatus('downloading blob…');
+                          try {
+                            const blob = await downloadAttachmentBlob(
+                              gatewayUrl,
+                              attachmentId
+                            );
+                            const next = storeLocalNoteBlob(brain, noteId, {
+                              base64: bytesToBase64(blob.bytes),
+                              mimeType: blob.mimeType,
+                              sizeBytes: blob.sizeBytes,
+                              filename: blob.filename,
+                            });
+                            await persistBrain(next);
+                            refreshLocal(next, query);
+                            setStatus(`blob saved · ${blob.sizeBytes} B`);
+                          } catch (error) {
+                            setStatus(
+                              error instanceof Error
+                                ? error.message
+                                : 'blob download failed'
+                            );
+                          } finally {
+                            setBusy(false);
+                          }
+                        })();
+                      }}
+                    >
+                      <Text style={styles.link}>download blob</Text>
+                    </Pressable>
+                  ) : null}
+                  {note.localBlobBase64 ? (
+                    <Text style={styles.meta}>
+                      blob local
+                      {note.localBlobSizeBytes != null
+                        ? ` · ${note.localBlobSizeBytes} B`
+                        : ''}
+                    </Text>
+                  ) : null}
                 </View>
               </View>
             ))}

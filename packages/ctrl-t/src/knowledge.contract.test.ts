@@ -3,6 +3,7 @@ import {
   createMemory,
   createWorkspace,
   deleteAttachment,
+  downloadAttachmentBlob,
   getEmbeddingStatus,
   inspectContext,
   listAttachments,
@@ -41,6 +42,43 @@ describe('contract: knowledge + memory', () => {
     expect(chunks.some((c) => c.content.toLowerCase().includes('lww'))).toBe(
       true
     );
+  });
+
+  test('upload text attachment → fetch blob → soft-delete → 404', async () => {
+    const ws = await createWorkspace(baseUrl(), 'knowledge-blob-ws');
+    const body = [
+      '# Blob download',
+      '',
+      'Device pulls attachment bytes on demand.',
+    ].join('\n');
+    const created = await uploadAttachmentText(baseUrl(), ws.id, {
+      filename: 'blob-note.md',
+      mimeType: 'text/markdown',
+      text: body,
+    });
+    expect(created.status).toBe('ready');
+    expect(created.deletedAt).toBeNull();
+
+    const blob = await downloadAttachmentBlob(baseUrl(), created.id);
+    expect(blob.mimeType).toContain('text/markdown');
+    expect(blob.filename).toContain('blob-note');
+    expect(blob.sizeBytes).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(blob.bytes)).toContain('on demand');
+
+    const deleted = await deleteAttachment(baseUrl(), created.id);
+    expect(deleted.deletedAt).not.toBeNull();
+
+    let status = 0;
+    try {
+      await downloadAttachmentBlob(baseUrl(), created.id);
+    } catch (error) {
+      status = Number(
+        /downloadAttachmentBlob failed: (\d+)/.exec(
+          error instanceof Error ? error.message : String(error)
+        )?.[1] ?? 0
+      );
+    }
+    expect(status).toBe(404);
   });
 
   test('update attachment text → soft-delete tombstone', async () => {

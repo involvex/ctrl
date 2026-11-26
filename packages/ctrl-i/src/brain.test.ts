@@ -21,6 +21,7 @@ import {
   migrateClientBrainState,
   setConversationGatewayId,
   setGatewayWorkspaceId,
+  storeLocalNoteBlob,
   syncClientBrain,
   updateLocalMemory,
   updateLocalNote,
@@ -524,8 +525,15 @@ describe('brain knowledge', () => {
     brain = updateLocalNote(brain, noteId, { text: 'coolant loop' });
     expect(brain.notes[0]!.text).toBe('coolant loop');
     expect(brain.chunks.some((c) => c.content.includes('coolant'))).toBe(true);
+    brain = storeLocalNoteBlob(brain, noteId, {
+      base64: 'YmxvYg==',
+      mimeType: 'text/plain',
+      sizeBytes: 4,
+    });
+    expect(brain.notes[0]!.localBlobBase64).toBe('YmxvYg==');
     brain = deleteLocalNote(brain, noteId);
     expect(brain.notes[0]!.deletedAt).toBeDefined();
+    expect(brain.notes[0]!.localBlobBase64).toBeUndefined();
     expect(brain.chunks).toHaveLength(0);
   });
 
