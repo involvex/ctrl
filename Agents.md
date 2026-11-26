@@ -243,10 +243,27 @@ Key environment variables (see full list in codebase):
 ## Quick Reference
 
 - **Main docs**: [README.md](README.md), [docs/Plan.md](docs/Plan.md), [docs/Namespace_and_Design.md](docs/Namespace_and_Design.md)
+- **Roadmap**: [ROADMAP.md](ROADMAP.md)
 - **Quality docs**: [docs/CodeQuality.md](docs/CodeQuality.md)
 - **CI/Releases**: [docs/ci-and-releases.md](docs/ci-and-releases.md)
 - **Security**: [SECURITY.md](SECURITY.md)
 - **Theme color**: `#00ff66` (Matrix green)
 - **Node/Bun requirement**: Bun >= 1.3.4
+
+## Current work
+
+See [ROADMAP.md](ROADMAP.md). Next shippable code slice: quantization picker on desktop HF catalog.
+
+## Learned preferences
+
+- Bun-native only (`bun check` / `bun lint` / `bun fmt`); never ESLint or Prettier packages.
+- Operator runs ADB install / monkey / start on their own device.
+
+## Learned workspace facts
+
+- Phases 0–8 and slices 10–28 are shipped; living backlog is `ROADMAP.md`.
+- Root version is still `0.2.0`; desktop packaging is still `0.0.1`.
+- Packages `ctrl-space`, `ctrl-l`, and `ctrl-comma` are named in the plan but not on disk yet.
+- Soak rows 1–6 in `docs/soak-v0.md` are hardware-only before tagging `v0.2.1`.
 
 For detailed architecture and phase information, consult the docs in the `docs/` directory. When in doubt about patterns, look at existing code in similar packages for conventions.

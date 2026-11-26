@@ -342,3 +342,8 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Last-write-wins merge in `syncClientBrain` / `mergeGatewayKnowledge` / `mergeGatewayMemory`.
     - Host `PATCH`/`DELETE /api/v1/attachments/:id` (schema v6 `updated_at` / `deleted_at`); re-ingest without re-seeding memory.
     - Still parked: binary blob download onto the device, phone GGUF / quantization picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+    - Living order for remaining work: [ROADMAP.md](../ROADMAP.md).
+29. Device attachment blob download (done this slice):
+    - Host `GET /api/v1/attachments/:id/blob` serves raw bytes (404 when missing or soft-deleted).
+    - `downloadAttachmentBlob` / `storeLocalNoteBlob` in `@involvex/ctrl-i`; mobile/web knowledge UI downloads on demand (not every sync).
+    - Still parked: phone GGUF / quantization picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

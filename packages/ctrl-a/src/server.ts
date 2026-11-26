@@ -90,6 +90,7 @@ import {
   ChannelStore,
   KnowledgeStore,
   openDatabase,
+  readBlob,
   Store,
 } from '@involvex/ctrl-z';
 import path from 'node:path';
@@ -619,6 +620,38 @@ export async function startServer(): Promise<StartedGateway> {
               },
               201
             );
+          }
+        }
+
+        const attachmentBlob = /^\/api\/v1\/attachments\/([^/]+)\/blob$/.exec(
+          url.pathname
+        );
+        if (attachmentBlob && req.method === 'GET') {
+          const attachmentId = attachmentBlob[1]!;
+          const existing = knowledge.getAttachment(attachmentId);
+          if (!existing || existing.deletedAt != null) {
+            return json(req, { error: 'attachment not found' }, 404);
+          }
+          try {
+            const bytes = readBlob(knowledge.blobRoot, existing.blobPath);
+            const body = new Uint8Array(bytes);
+            const safeName = existing.filename
+              .replace(/[^\w.-]+/g, '_')
+              .slice(0, 120);
+            return withCors(
+              req,
+              new Response(body, {
+                status: 200,
+                headers: {
+                  'Content-Type':
+                    existing.mimeType || 'application/octet-stream',
+                  'Content-Length': String(body.byteLength),
+                  'Content-Disposition': `attachment; filename="${safeName}"`,
+                },
+              })
+            );
+          } catch {
+            return json(req, { error: 'blob not found' }, 404);
           }
         }
 

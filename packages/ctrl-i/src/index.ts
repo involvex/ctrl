@@ -99,6 +99,7 @@ export {
   migrateClientBrainState,
   setConversationGatewayId,
   setGatewayWorkspaceId,
+  storeLocalNoteBlob,
   syncClientBrain,
   updateLocalMemory,
   updateLocalNote,
@@ -939,6 +940,51 @@ export async function deleteAttachment(
     throw new Error(`deleteAttachment failed: ${res.status}`);
   }
   return attachmentSchema.parse(await readJson(res));
+}
+
+export type AttachmentBlobDownload = {
+  bytes: Uint8Array;
+  mimeType: string;
+  filename: string;
+  sizeBytes: number;
+};
+
+/** Encode bytes for optional local brain storage (on-demand blob copies). */
+export function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+/** Fetch raw attachment bytes from the host (on demand; not part of sync). */
+export async function downloadAttachmentBlob(
+  baseUrl: string,
+  attachmentId: string
+): Promise<AttachmentBlobDownload> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/attachments/${attachmentId}/blob`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) {
+    throw new Error(`downloadAttachmentBlob failed: ${res.status}`);
+  }
+  const mimeType =
+    res.headers.get('Content-Type')?.split(';')[0]?.trim() ||
+    'application/octet-stream';
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = /filename="([^"]+)"/i.exec(disposition);
+  const filename = filenameMatch?.[1] || `${attachmentId}.bin`;
+  const buffer = new Uint8Array(await res.arrayBuffer());
+  return {
+    bytes: buffer,
+    mimeType,
+    filename,
+    sizeBytes: buffer.byteLength,
+  };
 }
 
 export async function searchKnowledge(
