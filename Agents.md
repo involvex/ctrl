@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). `## Now` is empty. CLI leftovers (`ctrl-f5 restart` / knowledge / Discord+Slack channel add) are Done; soak rows 1–6 stay operator hardware; pick from Later for new code.
+See [ROADMAP.md](ROADMAP.md). `## Now` is empty. `v0.6.0` is cut (CLI leftovers over `v0.5.1`); soak rows 1–6 stay operator hardware; pick from Later for new code.
 
 ## Learned preferences
 
@@ -263,7 +263,7 @@ See [ROADMAP.md](ROADMAP.md). `## Now` is empty. CLI leftovers (`ctrl-f5 restart
 
 - Phases 0–8 and slices 10–33 are shipped; living backlog is `ROADMAP.md`.
 - Root version is still `0.2.0` in git; Release workflow syncs from the tag. Desktop packaging is still `0.0.1` until a tag cut.
-- Published tags on origin: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0` (APK incomplete), `v0.5.1`.
+- Published tags on origin: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0` (APK incomplete), `v0.5.1`, `v0.6.0`.
 
 - Phone LiteRT holds one resident `.litertlm` (no phone GGUF); multi-file picker deferred.
 - Packages `ctrl-space`, `ctrl-l`, and `ctrl-comma` are named in the plan but not on disk yet.

@@ -2,7 +2,7 @@
 
 Local-first agent platform: phone LiteRT and PC llama/litert-lm without requiring each other.
 
-Current workspace line: **0.2.0** (root `package.json`). The Release workflow syncs artifact names from the tag (`v0.5.0` → `ctrl-0.5.0-…`). Published tags on `origin`: **`v0.2.0`**, **`v0.3.0`**, **`v0.4.0`**, **`v0.5.0`** (APK incomplete), **`v0.5.1`**. Soak rows 1–6 in [`soak-v0.md`](soak-v0.md) stay pending on hardware; cutting a feature tag does **not** mark them pass.
+Current workspace line: **0.2.0** (root `package.json`). The Release workflow syncs artifact names from the tag (`v0.6.0` → `ctrl-0.6.0-…`). Published tags on `origin`: **`v0.2.0`**, **`v0.3.0`**, **`v0.4.0`**, **`v0.5.0`** (APK incomplete), **`v0.5.1`**, **`v0.6.0`**. Soak rows 1–6 in [`soak-v0.md`](soak-v0.md) stay pending on hardware; cutting a feature tag does **not** mark them pass.
 
 1. **Phone** — Install the APK → Model setup → download/import `.litertlm` → Load → chat **On this phone** (PC optional). One resident `.litertlm`; no phone GGUF runner.
 2. **Desktop** — Install the Windows build → Host → local models → detect / fetch → start → use → chat offline from cloud.
@@ -48,3 +48,15 @@ Already on `origin`. Feature contents match `v0.5.1`. The Release workflow’s `
 ## Tag recipe — `v0.5.1` (Android release harden) — published
 
 Already on `origin`. Skips the flaky `org.gradle.toolchains.foojay-resolver-convention` portal fetch in `@react-native/gradle-plugin` (JDK 17 already from `setup-java` / local `JAVA_HOME`). Same product features as `v0.5.0`, plus reliable Android `assembleRelease` in CI.
+
+## Tag recipe — `v0.6.0` (CLI leftovers) — published
+
+Already on `origin` at the CLI leftovers merge (#36). Ship story: `ctrl-f5 restart`, thin `knowledge search|reindex|status`, Discord/Slack `channel add` + usage/completions. Soak rows 1–6 stay independent.
+
+```bash
+# on main, clean tree (already cut — keep for reference):
+git checkout main
+git pull origin main
+git tag -a v0.6.0 -m "ctrl v0.6.0 — CLI restart, knowledge wrappers, Discord/Slack channel add"
+git push origin v0.6.0
+```
