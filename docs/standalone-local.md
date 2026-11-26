@@ -125,9 +125,13 @@ Paired sync uses last-write-wins on notes and memory (`updatedAt`). Deletes are 
 
 Paired knowledge notes with a host attachment id can **download blob** on demand. Bytes stay on the host until then; sync still only replicates chunk text and metadata. Soft-deleted attachments return 404.
 
+### Desktop HF quantization picker
+
+Providers → HF model catalog: pick a quant (Q4_K_M default, plus Q5_K_M or Q6_K and Q8_0 where the repo publishes them), then download. Size label follows the selected quant.
+
 Still parked:
 
-1. Phone GGUF / quantization picker; auto-download of `llama-server` / `litert-lm` binaries
+1. Phone GGUF / multi-`.litertlm` picker; auto-download of `llama-server` / `litert-lm` binaries
 2. Rust `agentd` / monetization experiments
 3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
 

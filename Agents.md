@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). Next shippable code slice: quantization picker on desktop HF catalog.
+See [ROADMAP.md](ROADMAP.md). Next shippable code slice: phone model files beyond a single `.litertlm` import (document gap; picker only if a real runner supports it).
 
 ## Learned preferences
 

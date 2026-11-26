@@ -7,75 +7,210 @@ import {
   type ProviderId,
 } from '@involvex/ctrl-s';
 
+/** One downloadable GGUF quant for an HF catalog model. */
+export type HfModelQuantOption = {
+  id: string;
+  filename: string;
+  downloadUrl: string;
+  sizeGb?: number;
+};
+
 export type HfModelEntry = {
   id: string;
   name: string;
   description: string;
   sizeGb?: number;
   tags: string[];
-  /** Pinned Hugging Face resolve URL for one GGUF file. */
+  /** Default quant id (usually Q4_K_M). */
+  defaultQuant: string;
+  /** Pinned Hugging Face resolve URL for the default quant. */
   downloadUrl: string;
-  /** Local filename under userData/models/. */
+  /** Local filename under userData/models/ for the default quant. */
   filename: string;
-  quantizations?: string[];
+  /** Short list of pinned quants the desktop picker can choose from. */
+  quantizations: HfModelQuantOption[];
 };
 
+function hfQuant(
+  repoId: string,
+  filename: string,
+  quantId: string,
+  sizeGb?: number
+): HfModelQuantOption {
+  return {
+    id: quantId,
+    filename,
+    downloadUrl: `https://huggingface.co/${repoId}/resolve/main/${filename}`,
+    ...(sizeGb !== undefined ? { sizeGb } : {}),
+  };
+}
+
+function entryFromQuants(
+  meta: {
+    id: string;
+    name: string;
+    description: string;
+    tags: string[];
+  },
+  quantizations: HfModelQuantOption[],
+  defaultQuant = 'Q4_K_M'
+): HfModelEntry {
+  const selected =
+    quantizations.find((q) => q.id === defaultQuant) ?? quantizations[0];
+  if (!selected) {
+    throw new Error(`HF catalog entry ${meta.id} has no quantizations`);
+  }
+  return {
+    ...meta,
+    defaultQuant: selected.id,
+    downloadUrl: selected.downloadUrl,
+    filename: selected.filename,
+    sizeGb: selected.sizeGb,
+    quantizations,
+  };
+}
+
 const HF_MODEL_CATALOG: HfModelEntry[] = [
-  {
-    id: 'bartowski/Phi-3.1-mini-4k-instruct-GGUF',
-    name: 'Phi-3.1 Mini (GGUF)',
-    description: 'Small efficient model, good for general chat',
-    sizeGb: 2.4,
-    tags: ['chat', 'small', 'gguf'],
-    quantizations: ['Q4_K_M'],
-    filename: 'Phi-3.1-mini-4k-instruct-Q4_K_M.gguf',
-    downloadUrl:
-      'https://huggingface.co/bartowski/Phi-3.1-mini-4k-instruct-GGUF/resolve/main/Phi-3.1-mini-4k-instruct-Q4_K_M.gguf',
-  },
-  {
-    id: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
-    name: 'Llama 3.2 3B Instruct (GGUF)',
-    description: 'Meta Llama 3.2, instruction tuned',
-    sizeGb: 2.0,
-    tags: ['chat', 'llama', 'gguf'],
-    quantizations: ['Q4_K_M'],
-    filename: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
-    downloadUrl:
-      'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
-  },
-  {
-    id: 'lmstudio-community/SmolLM2-1.7B-Instruct-GGUF',
-    name: 'SmolLM2 1.7B Instruct (GGUF)',
-    description: 'Very compact, great for local use',
-    sizeGb: 1.1,
-    tags: ['chat', 'small', 'gguf'],
-    quantizations: ['Q4_K_M'],
-    filename: 'SmolLM2-1.7B-Instruct-Q4_K_M.gguf',
-    downloadUrl:
-      'https://huggingface.co/lmstudio-community/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf',
-  },
-  {
-    id: 'QuantFactory/Meta-Llama-3-8B-Instruct-GGUF',
-    name: 'Llama 3 8B Instruct (GGUF)',
-    description: 'Larger model with better quality',
-    sizeGb: 4.9,
-    tags: ['chat', 'llama', 'gguf'],
-    quantizations: ['Q4_K_M'],
-    filename: 'Meta-Llama-3-8B-Instruct.Q4_K_M.gguf',
-    downloadUrl:
-      'https://huggingface.co/QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct.Q4_K_M.gguf',
-  },
-  {
-    id: 'bartowski/gemma-2-2b-it-GGUF',
-    name: 'Gemma 2 2B IT (GGUF)',
-    description: 'Google Gemma, efficient and capable',
-    sizeGb: 1.7,
-    tags: ['chat', 'gemma', 'gguf'],
-    quantizations: ['Q4_K_M'],
-    filename: 'gemma-2-2b-it-Q4_K_M.gguf',
-    downloadUrl:
-      'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
-  },
+  entryFromQuants(
+    {
+      id: 'bartowski/Phi-3.1-mini-4k-instruct-GGUF',
+      name: 'Phi-3.1 Mini (GGUF)',
+      description: 'Small efficient model, good for general chat',
+      tags: ['chat', 'small', 'gguf'],
+    },
+    [
+      hfQuant(
+        'bartowski/Phi-3.1-mini-4k-instruct-GGUF',
+        'Phi-3.1-mini-4k-instruct-Q4_K_M.gguf',
+        'Q4_K_M',
+        2.4
+      ),
+      hfQuant(
+        'bartowski/Phi-3.1-mini-4k-instruct-GGUF',
+        'Phi-3.1-mini-4k-instruct-Q5_K_M.gguf',
+        'Q5_K_M',
+        2.8
+      ),
+      hfQuant(
+        'bartowski/Phi-3.1-mini-4k-instruct-GGUF',
+        'Phi-3.1-mini-4k-instruct-Q8_0.gguf',
+        'Q8_0',
+        4.1
+      ),
+    ]
+  ),
+  entryFromQuants(
+    {
+      id: 'bartowski/Llama-3.2-3B-Instruct-GGUF',
+      name: 'Llama 3.2 3B Instruct (GGUF)',
+      description: 'Meta Llama 3.2, instruction tuned',
+      tags: ['chat', 'llama', 'gguf'],
+    },
+    [
+      hfQuant(
+        'bartowski/Llama-3.2-3B-Instruct-GGUF',
+        'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+        'Q4_K_M',
+        2.0
+      ),
+      hfQuant(
+        'bartowski/Llama-3.2-3B-Instruct-GGUF',
+        'Llama-3.2-3B-Instruct-Q5_K_M.gguf',
+        'Q5_K_M',
+        2.3
+      ),
+      hfQuant(
+        'bartowski/Llama-3.2-3B-Instruct-GGUF',
+        'Llama-3.2-3B-Instruct-Q8_0.gguf',
+        'Q8_0',
+        3.4
+      ),
+    ]
+  ),
+  entryFromQuants(
+    {
+      id: 'lmstudio-community/SmolLM2-1.7B-Instruct-GGUF',
+      name: 'SmolLM2 1.7B Instruct (GGUF)',
+      description: 'Very compact, great for local use',
+      tags: ['chat', 'small', 'gguf'],
+    },
+    [
+      hfQuant(
+        'lmstudio-community/SmolLM2-1.7B-Instruct-GGUF',
+        'SmolLM2-1.7B-Instruct-Q4_K_M.gguf',
+        'Q4_K_M',
+        1.1
+      ),
+      hfQuant(
+        'lmstudio-community/SmolLM2-1.7B-Instruct-GGUF',
+        'SmolLM2-1.7B-Instruct-Q6_K.gguf',
+        'Q6_K',
+        1.4
+      ),
+      hfQuant(
+        'lmstudio-community/SmolLM2-1.7B-Instruct-GGUF',
+        'SmolLM2-1.7B-Instruct-Q8_0.gguf',
+        'Q8_0',
+        1.8
+      ),
+    ]
+  ),
+  entryFromQuants(
+    {
+      id: 'QuantFactory/Meta-Llama-3-8B-Instruct-GGUF',
+      name: 'Llama 3 8B Instruct (GGUF)',
+      description: 'Larger model with better quality',
+      tags: ['chat', 'llama', 'gguf'],
+    },
+    [
+      hfQuant(
+        'QuantFactory/Meta-Llama-3-8B-Instruct-GGUF',
+        'Meta-Llama-3-8B-Instruct.Q4_K_M.gguf',
+        'Q4_K_M',
+        4.9
+      ),
+      hfQuant(
+        'QuantFactory/Meta-Llama-3-8B-Instruct-GGUF',
+        'Meta-Llama-3-8B-Instruct.Q5_K_M.gguf',
+        'Q5_K_M',
+        5.7
+      ),
+      hfQuant(
+        'QuantFactory/Meta-Llama-3-8B-Instruct-GGUF',
+        'Meta-Llama-3-8B-Instruct.Q8_0.gguf',
+        'Q8_0',
+        8.5
+      ),
+    ]
+  ),
+  entryFromQuants(
+    {
+      id: 'bartowski/gemma-2-2b-it-GGUF',
+      name: 'Gemma 2 2B IT (GGUF)',
+      description: 'Google Gemma, efficient and capable',
+      tags: ['chat', 'gemma', 'gguf'],
+    },
+    [
+      hfQuant(
+        'bartowski/gemma-2-2b-it-GGUF',
+        'gemma-2-2b-it-Q4_K_M.gguf',
+        'Q4_K_M',
+        1.7
+      ),
+      hfQuant(
+        'bartowski/gemma-2-2b-it-GGUF',
+        'gemma-2-2b-it-Q5_K_M.gguf',
+        'Q5_K_M',
+        1.9
+      ),
+      hfQuant(
+        'bartowski/gemma-2-2b-it-GGUF',
+        'gemma-2-2b-it-Q8_0.gguf',
+        'Q8_0',
+        2.8
+      ),
+    ]
+  ),
 ];
 
 const CATALOG: Record<
@@ -171,4 +306,25 @@ export function listHfModelCatalog(): HfModelEntry[] {
 
 export function getHfModelCatalogEntry(id: string): HfModelEntry | undefined {
   return HF_MODEL_CATALOG.find((m) => m.id === id);
+}
+
+/** Resolve a catalog entry to a concrete quant (defaults to entry.defaultQuant). */
+export function resolveHfModelQuant(
+  entry: HfModelEntry,
+  quantId?: string
+): HfModelQuantOption {
+  const wanted = quantId?.trim() || entry.defaultQuant;
+  const match =
+    entry.quantizations.find((q) => q.id === wanted) ??
+    entry.quantizations.find((q) => q.id === entry.defaultQuant) ??
+    entry.quantizations[0];
+  if (match) {
+    return match;
+  }
+  return {
+    id: entry.defaultQuant,
+    filename: entry.filename,
+    downloadUrl: entry.downloadUrl,
+    sizeGb: entry.sizeGb,
+  };
 }

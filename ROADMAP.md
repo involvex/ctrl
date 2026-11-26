@@ -6,11 +6,10 @@ Root `package.json` is still `0.2.0` while slices 26–28 are already described 
 
 ## Now
 
-- [ ] **Quantization picker on desktop HF catalog** — expand `ctrl-r` catalog beyond a single pinned `Q4_K_M` URL; Providers panel picks a quant before download.
+- [ ] **Phone model files beyond a single `.litertlm` import** — document the gap; add a picker only if LiteRT (or a real on-device runner) can load more than one file. Do not pretend phone GGUF works without a runner.
 
 ## Next
 
-- [ ] **Phone model files beyond a single `.litertlm` import** — document the gap; add a picker only if LiteRT (or a real on-device runner) can load more than one file. Do not pretend phone GGUF works without a runner.
 - [ ] **Known-good fetch of `llama-server` / `litert-lm`** — pinned URL plus checksum for those two binaries; skip when `CTRL_LLAMA_BIN` is set; no silent background download.
 
 ## Later
@@ -41,3 +40,4 @@ Root `package.json` is still `0.2.0` while slices 26–28 are already described 
 - [x] Desktop HF GGUF download + llama `-m` — v0.4.0 features
 - [x] Device knowledge edit/delete sync with last-write-wins tombstones
 - [x] Device attachment blob download (`GET /api/v1/attachments/:id/blob`, on-demand mobile/web)
+- [x] Desktop HF quantization picker (Q4_K_M / Q5_K_M or Q6_K / Q8_0 per model)

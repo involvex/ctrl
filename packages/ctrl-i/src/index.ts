@@ -244,18 +244,56 @@ export async function listModels(
   return { provider: providerId, items };
 }
 
+export type HfModelQuantOption = {
+  id: string;
+  filename: string;
+  downloadUrl: string;
+  sizeGb?: number;
+};
+
 export type HfModelCatalogEntry = {
   id: string;
   name: string;
   description: string;
   sizeGb?: number;
   tags: string[];
-  /** Pinned Hugging Face resolve URL for one GGUF file. */
+  /** Default quant id (usually Q4_K_M). */
+  defaultQuant?: string;
+  /** Pinned Hugging Face resolve URL for the default quant. */
   downloadUrl?: string;
-  /** Local filename under userData/models/. */
+  /** Local filename under userData/models/ for the default quant. */
   filename?: string;
-  quantizations?: string[];
+  /** Pinned quants the desktop picker can choose from. */
+  quantizations?: HfModelQuantOption[];
 };
+
+/** Resolve a catalog entry to a concrete quant (defaults to defaultQuant / Q4_K_M). */
+export function resolveHfCatalogQuant(
+  entry: HfModelCatalogEntry,
+  quantId?: string
+): HfModelQuantOption | null {
+  const quants = entry.quantizations ?? [];
+  const wanted =
+    quantId?.trim() ||
+    entry.defaultQuant ||
+    quants.find((q) => q.id === 'Q4_K_M')?.id ||
+    quants[0]?.id;
+  if (wanted) {
+    const match = quants.find((q) => q.id === wanted);
+    if (match) {
+      return match;
+    }
+  }
+  if (entry.downloadUrl && entry.filename) {
+    return {
+      id: entry.defaultQuant ?? 'Q4_K_M',
+      filename: entry.filename,
+      downloadUrl: entry.downloadUrl,
+      sizeGb: entry.sizeGb,
+    };
+  }
+  return null;
+}
 
 export async function listHfModelCatalog(
   baseUrl: string
