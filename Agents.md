@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). Next shippable code slice: phone model files beyond a single `.litertlm` import (document gap; picker only if a real runner supports it).
+See [ROADMAP.md](ROADMAP.md). Next shippable code slice: known-good fetch of `llama-server` / `litert-lm` (pinned URL + checksum).
 
 ## Learned preferences
 
@@ -261,8 +261,9 @@ See [ROADMAP.md](ROADMAP.md). Next shippable code slice: phone model files beyon
 
 ## Learned workspace facts
 
-- Phases 0–8 and slices 10–28 are shipped; living backlog is `ROADMAP.md`.
+- Phases 0–8 and slices 10–31 are shipped; living backlog is `ROADMAP.md`.
 - Root version is still `0.2.0`; desktop packaging is still `0.0.1`.
+- Phone LiteRT holds one resident `.litertlm` (no phone GGUF); multi-file picker deferred.
 - Packages `ctrl-space`, `ctrl-l`, and `ctrl-comma` are named in the plan but not on disk yet.
 - Soak rows 1–6 in `docs/soak-v0.md` are hardware-only before tagging `v0.2.1`.
 

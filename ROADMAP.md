@@ -6,14 +6,15 @@ Root `package.json` is still `0.2.0` while slices 26–28 are already described 
 
 ## Now
 
-- [ ] **Phone model files beyond a single `.litertlm` import** — document the gap; add a picker only if LiteRT (or a real on-device runner) can load more than one file. Do not pretend phone GGUF works without a runner.
+- [ ] **Known-good fetch of `llama-server` / `litert-lm`** — pinned URL plus checksum for those two binaries; skip when `CTRL_LLAMA_BIN` is set; no silent background download.
 
 ## Next
 
-- [ ] **Known-good fetch of `llama-server` / `litert-lm`** — pinned URL plus checksum for those two binaries; skip when `CTRL_LLAMA_BIN` is set; no silent background download.
+_(empty — promote from Later when Now is done)_
 
 ## Later
 
+- [ ] Optional app-owned multi-path `.litertlm` catalog on phone (replace-to-switch only; runner still one engine) — only if product wants it.
 - [ ] Rust `agentd` (Plan phase 9 / §11) — process manager → pairing/auth → storage; agent loop only with a reason; contract tests stay Bun.
 - [ ] Monetization — sponsors in [docs/funding.md](docs/funding.md); needs an explicit product decision before any billing code.
 - [ ] Extract `ctrl-space`, `ctrl-l`, `ctrl-comma` — only when a second caller needs shared UI tokens, logging, or config.
@@ -41,3 +42,4 @@ Root `package.json` is still `0.2.0` while slices 26–28 are already described 
 - [x] Device knowledge edit/delete sync with last-write-wins tombstones
 - [x] Device attachment blob download (`GET /api/v1/attachments/:id/blob`, on-demand mobile/web)
 - [x] Desktop HF quantization picker (Q4_K_M / Q5_K_M or Q6_K / Q8_0 per model)
+- [x] Phone model files gap documented — one resident `.litertlm`, no phone GGUF runner; no fake picker
