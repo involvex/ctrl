@@ -133,6 +133,14 @@ type DesktopApi = {
     id: string,
     url: string
   ) => Promise<{ ok: boolean; path: string }>;
+  downloadPinnedLocalBackendBin: (id: string) => Promise<{
+    ok: boolean;
+    path: string;
+    skipped: boolean;
+    reason?: string;
+    version?: string;
+    label?: string;
+  }>;
   listLocalModels: () => Promise<{
     dir: string;
     files: string[];
@@ -1705,6 +1713,11 @@ export function App() {
               ))}
             </ul>
             <p className="host-title">download binary</p>
+            <p className="meta">
+              Known-good pins (sha256-verified). Skips when CTRL_LLAMA_BIN /
+              CTRL_LITERT_LM_BIN already points at a file. No silent background
+              fetch.
+            </p>
             <div className="host-row">
               <select
                 className="host-input host-input-narrow"
@@ -1718,11 +1731,48 @@ export function App() {
                 <option value="llama">llama</option>
                 <option value="litert-lm">litert-lm</option>
               </select>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      setError(null);
+                      setDownloadProgress({
+                        id: binDownloadId,
+                        downloaded: 0,
+                      });
+                      const result =
+                        await window.ctrlDesktop?.downloadPinnedLocalBackendBin(
+                          binDownloadId
+                        );
+                      await refreshLocalBackends();
+                      if (result?.skipped) {
+                        setDownloadProgress({
+                          id: binDownloadId,
+                          downloaded: 0,
+                          percent: 100,
+                          done: true,
+                        });
+                      }
+                    } catch (err) {
+                      setError(
+                        err instanceof Error ? err.message : String(err)
+                      );
+                      setDownloadProgress(null);
+                    }
+                  })();
+                }}
+              >
+                download known-good
+              </button>
+            </div>
+            <div className="host-row">
               <input
                 className="host-input"
                 value={binDownloadUrl}
                 onChange={(e) => setBinDownloadUrl(e.target.value)}
-                placeholder="binary download URL"
+                placeholder="or paste a custom binary URL"
               />
               <button
                 type="button"
@@ -1749,7 +1799,7 @@ export function App() {
                   })();
                 }}
               >
-                download
+                download URL
               </button>
             </div>
             {downloadProgress && downloadProgress.id === binDownloadId ? (

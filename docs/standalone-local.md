@@ -48,13 +48,22 @@ Desktop **Host → local models**: detect binaries / running `/models`, Start / 
 
 ### PC GGUF install (desktop)
 
-1. Install `llama-server` (C++ binary) and point Host at it (`CTRL_LLAMA_BIN`, browse, or download-bin URL).
+1. Install `llama-server` (C++ binary) and point Host at it (`CTRL_LLAMA_BIN`, browse, **download known-good**, or paste a custom URL).
 2. Open **Providers → HF model catalog** → **download** on a row (writes under Electron `userData/models/`). A second click skips the network when that `.gguf` is already present.
 3. The downloaded file becomes the selected model (`userData/local-llama-model.json`). Host → local models shows `GGUF -m: …`.
 4. **Start** llama — desktop passes `-m <path>` (unless `CTRL_LLAMA_ARGS` already includes `-m` / `--model`).
 5. **use** → refresh models → pick the local id → chat.
 
 Phone stays on `.litertlm` (Model setup); this flow is desktop-only.
+
+### Pinned binary fetch (desktop)
+
+Host → local models → **download known-good**:
+
+- Pins a release asset per OS/arch (llama.cpp `b7438` CPU archives; LiteRT-LM CLI `v0.10.1` files) with a hardcoded sha256.
+- Verifies the download, extracts `llama-server` from archives when needed, installs under Electron `userData/bin/`.
+- **Skips** when `CTRL_LLAMA_BIN` / `CTRL_LITERT_LM_BIN` already points at an existing file, or when the cached binary is already present. Never runs in the background.
+- Custom URL download remains available for advanced installs (no checksum).
 
 Install examples (Windows PowerShell):
 
@@ -143,9 +152,8 @@ Providers → HF model catalog: pick a quant (Q4_K_M default, plus Q5_K_M or Q6_
 
 Still parked:
 
-1. Auto-download of `llama-server` / `litert-lm` binaries (pinned URL + checksum)
-2. App-owned multi-path `.litertlm` catalog on phone (only if product wants replace-to-switch UX; runner still holds one engine)
-3. Rust `agentd` / monetization experiments
-4. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
+1. App-owned multi-path `.litertlm` catalog on phone (only if product wants replace-to-switch UX; runner still holds one engine)
+2. Rust `agentd` / monetization experiments
+3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
 
 Living order for remaining work: [ROADMAP.md](../ROADMAP.md).

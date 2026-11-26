@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). Next shippable code slice: known-good fetch of `llama-server` / `litert-lm` (pinned URL + checksum).
+See [ROADMAP.md](ROADMAP.md). R4+ code Now is empty — next product work is operator soak / tags, or pick from Later.
 
 ## Learned preferences
 

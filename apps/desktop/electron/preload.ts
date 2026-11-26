@@ -43,6 +43,16 @@ contextBridge.exposeInMainWorld('ctrlDesktop', {
     url: string
   ): Promise<{ ok: boolean; path: string }> =>
     ipcRenderer.invoke('localBackends:downloadBin', { id, url }),
+  downloadPinnedLocalBackendBin: (
+    id: string
+  ): Promise<{
+    ok: boolean;
+    path: string;
+    skipped: boolean;
+    reason?: string;
+    version?: string;
+    label?: string;
+  }> => ipcRenderer.invoke('localBackends:downloadPinned', { id }),
   listLocalModels: (): Promise<{
     dir: string;
     files: string[];
