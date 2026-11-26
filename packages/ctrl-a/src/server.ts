@@ -62,6 +62,7 @@ import {
   providerIdSchema,
   sendChannelMessageInputSchema,
   updateAgentProfileInputSchema,
+  updateAttachmentInputSchema,
   updateMemoryInputSchema,
   updateProviderConfigInputSchema,
   updateSkillInputSchema,
@@ -75,6 +76,7 @@ import {
   type KnowledgeHit,
   type LocalBackendInfo,
   type PairingAck,
+  type UpdateAttachmentInput,
 } from '@involvex/ctrl-s';
 import { applySkillsToProfile, SkillStore } from '@involvex/ctrl-slash';
 import {
@@ -224,7 +226,7 @@ function resolveSandboxRoot(): string {
 }
 
 function decodeAttachmentBytes(
-  input: CreateAttachmentInput
+  input: Pick<CreateAttachmentInput, 'text' | 'contentBase64'>
 ): Uint8Array | null {
   if (typeof input.text === 'string') {
     return new TextEncoder().encode(input.text);
@@ -236,6 +238,12 @@ function decodeAttachmentBytes(
     return Uint8Array.from(Buffer.from(input.contentBase64, 'base64'));
   }
   return null;
+}
+
+function decodeUpdateAttachmentBytes(
+  input: UpdateAttachmentInput
+): Uint8Array | null {
+  return decodeAttachmentBytes(input);
 }
 
 async function streamIterable(
@@ -611,6 +619,71 @@ export async function startServer(): Promise<StartedGateway> {
               },
               201
             );
+          }
+        }
+
+        const attachmentItem = /^\/api\/v1\/attachments\/([^/]+)$/.exec(
+          url.pathname
+        );
+        if (attachmentItem) {
+          const attachmentId = attachmentItem[1]!;
+          const existing = knowledge.getAttachment(attachmentId);
+          if (!existing) {
+            return json(req, { error: 'attachment not found' }, 404);
+          }
+          if (req.method === 'PATCH') {
+            const body: unknown = await req.json();
+            const input = updateAttachmentInputSchema.parse(body);
+            const bytes = decodeUpdateAttachmentBytes(input);
+            const hasBody =
+              typeof input.text === 'string' ||
+              (typeof input.contentBase64 === 'string' &&
+                input.contentBase64.length > 0);
+            if (hasBody && !bytes) {
+              return json(
+                req,
+                { error: 'text or contentBase64 required' },
+                400
+              );
+            }
+            if (
+              !hasBody &&
+              input.filename === undefined &&
+              input.mimeType === undefined
+            ) {
+              return json(
+                req,
+                { error: 'filename, mimeType, or body required' },
+                400
+              );
+            }
+            const updated = knowledge.updateAttachment(
+              attachmentId,
+              input,
+              bytes
+            );
+            if (!updated) {
+              return json(req, { error: 'attachment not found' }, 404);
+            }
+            if (bytes) {
+              const ingest = await ingestAttachment(knowledge, updated, {
+                embedder,
+                seedMemory: false,
+              });
+              const ready = knowledge.getAttachment(attachmentId) ?? updated;
+              return json(req, {
+                ...ready,
+                embeddedCount: ingest.embeddedCount,
+              });
+            }
+            return json(req, updated);
+          }
+          if (req.method === 'DELETE') {
+            const deleted = knowledge.softDeleteAttachment(attachmentId);
+            if (!deleted) {
+              return json(req, { error: 'attachment not found' }, 404);
+            }
+            return json(req, deleted);
           }
         }
 

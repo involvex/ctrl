@@ -10,6 +10,8 @@ import {
   addHostConversation,
   addLocalMemory,
   addLocalNote,
+  deleteLocalMemory,
+  deleteLocalNote,
   localMemoryToPush,
   localMessagesToPush,
   localNotesToPush,
@@ -20,6 +22,8 @@ import {
   setConversationGatewayId,
   setGatewayWorkspaceId,
   syncClientBrain,
+  updateLocalMemory,
+  updateLocalNote,
   type BrainSyncApi,
   type ClientBrainState,
 } from './brain';
@@ -90,9 +94,18 @@ function stubKnowledgeApi(overrides: Partial<BrainSyncApi> = {}): BrainSyncApi {
     uploadAttachmentText: async () => {
       throw new Error('upload not stubbed');
     },
+    updateAttachmentText: async () => {
+      throw new Error('updateAttachment not stubbed');
+    },
+    deleteAttachment: async () => {
+      throw new Error('deleteAttachment not stubbed');
+    },
     listMemory: async () => [],
     createMemory: async () => {
       throw new Error('createMemory not stubbed');
+    },
+    updateMemory: async () => {
+      throw new Error('updateMemory not stubbed');
     },
     ...overrides,
   };
@@ -209,7 +222,7 @@ describe('brain knowledge', () => {
     expect(hits[0]!.filename).toBe('reactor.md');
   });
 
-  test('mergeGatewayMemory is append-only and skips fingerprints', () => {
+  test('mergeGatewayMemory links fingerprints and pulls new host rows', () => {
     let brain = addLocalMemory(emptyBrain(), {
       content: 'Prefer Matrix green',
       kind: 'preference',
@@ -258,6 +271,8 @@ describe('brain knowledge', () => {
         error: null,
         chunkCount: 1,
         createdAt: 10,
+        updatedAt: 10,
+        deletedAt: null,
       },
     ];
     const hostChunks: KnowledgeChunkExport[] = [
@@ -275,10 +290,243 @@ describe('brain knowledge', () => {
     brain = mergeGatewayKnowledge(brain, hostAttachments, hostChunks);
     expect(brain.notes).toHaveLength(1);
     expect(brain.notes[0]!.gatewayAttachmentId).toBe('att_1');
+    expect(brain.notes[0]!.updatedAt).toBe(10);
     expect(brain.chunks).toHaveLength(1);
     brain = mergeGatewayKnowledge(brain, hostAttachments, hostChunks);
     expect(brain.notes).toHaveLength(1);
     expect(brain.chunks).toHaveLength(1);
+  });
+
+  test('local edit wins over older host note copy', () => {
+    let brain = emptyBrain();
+    brain = {
+      ...brain,
+      notes: [
+        {
+          id: 'note_1',
+          filename: 'notes.md',
+          text: 'local newer text',
+          createdAt: 10,
+          updatedAt: 50,
+          origin: 'local',
+          gatewayAttachmentId: 'att_1',
+        },
+      ],
+      chunks: [],
+    };
+    const hostAttachments: Attachment[] = [
+      {
+        id: 'att_1',
+        workspaceId: 'ws',
+        conversationId: null,
+        filename: 'notes.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 10,
+        blobPath: 'blobs/att_1',
+        status: 'ready',
+        error: null,
+        chunkCount: 1,
+        createdAt: 10,
+        updatedAt: 20,
+        deletedAt: null,
+      },
+    ];
+    const hostChunks: KnowledgeChunkExport[] = [
+      {
+        id: 'chk_old',
+        attachmentId: 'att_1',
+        workspaceId: 'ws',
+        chunkIndex: 0,
+        content: 'host older text',
+        createdAt: 10,
+        filename: 'notes.md',
+      },
+    ];
+    brain = mergeGatewayKnowledge(brain, hostAttachments, hostChunks);
+    expect(brain.notes[0]!.text).toBe('local newer text');
+    expect(brain.notes[0]!.updatedAt).toBe(50);
+  });
+
+  test('host edit wins over older local note copy', () => {
+    let brain = emptyBrain();
+    brain = {
+      ...brain,
+      notes: [
+        {
+          id: 'note_1',
+          filename: 'notes.md',
+          text: 'local older text',
+          createdAt: 10,
+          updatedAt: 20,
+          origin: 'local',
+          gatewayAttachmentId: 'att_1',
+        },
+      ],
+      chunks: [
+        {
+          id: 'chk_local',
+          noteId: 'note_1',
+          filename: 'notes.md',
+          content: 'local older text',
+          chunkIndex: 0,
+          createdAt: 10,
+          origin: 'local',
+          gatewayAttachmentId: 'att_1',
+        },
+      ],
+    };
+    const hostAttachments: Attachment[] = [
+      {
+        id: 'att_1',
+        workspaceId: 'ws',
+        conversationId: null,
+        filename: 'notes.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 10,
+        blobPath: 'blobs/att_1',
+        status: 'ready',
+        error: null,
+        chunkCount: 1,
+        createdAt: 10,
+        updatedAt: 80,
+        deletedAt: null,
+      },
+    ];
+    const hostChunks: KnowledgeChunkExport[] = [
+      {
+        id: 'chk_host',
+        attachmentId: 'att_1',
+        workspaceId: 'ws',
+        chunkIndex: 0,
+        content: 'host newer text',
+        createdAt: 80,
+        filename: 'notes.md',
+      },
+    ];
+    brain = mergeGatewayKnowledge(brain, hostAttachments, hostChunks);
+    expect(brain.notes[0]!.text).toBe('host newer text');
+    expect(brain.notes[0]!.updatedAt).toBe(80);
+    expect(brain.chunks.some((c) => c.content === 'host newer text')).toBe(
+      true
+    );
+  });
+
+  test('delete does not resurrect note from host', () => {
+    let brain = emptyBrain();
+    brain = {
+      ...brain,
+      notes: [
+        {
+          id: 'note_1',
+          filename: 'notes.md',
+          text: 'gone',
+          createdAt: 10,
+          updatedAt: 100,
+          deletedAt: 100,
+          origin: 'local',
+          gatewayAttachmentId: 'att_1',
+        },
+      ],
+      chunks: [],
+    };
+    const hostAttachments: Attachment[] = [
+      {
+        id: 'att_1',
+        workspaceId: 'ws',
+        conversationId: null,
+        filename: 'notes.md',
+        mimeType: 'text/markdown',
+        sizeBytes: 10,
+        blobPath: 'blobs/att_1',
+        status: 'ready',
+        error: null,
+        chunkCount: 1,
+        createdAt: 10,
+        updatedAt: 50,
+        deletedAt: null,
+      },
+    ];
+    const hostChunks: KnowledgeChunkExport[] = [
+      {
+        id: 'chk_1',
+        attachmentId: 'att_1',
+        workspaceId: 'ws',
+        chunkIndex: 0,
+        content: 'gone',
+        createdAt: 10,
+        filename: 'notes.md',
+      },
+    ];
+    brain = mergeGatewayKnowledge(brain, hostAttachments, hostChunks);
+    expect(brain.notes[0]!.deletedAt).toBe(100);
+    expect(brain.chunks).toHaveLength(0);
+  });
+
+  test('host memory edit wins; local delete does not resurrect', () => {
+    let brain = addLocalMemory(emptyBrain(), {
+      content: 'old',
+      kind: 'fact',
+      pinned: true,
+    });
+    const memId = brain.memory[0]!.id;
+    brain = updateLocalMemory(brain, memId, { content: 'old' });
+    brain = {
+      ...brain,
+      memory: brain.memory.map((m) =>
+        m.id === memId
+          ? {
+              ...m,
+              updatedAt: 10,
+              gatewayMemoryId: 'mem_host',
+            }
+          : m
+      ),
+    };
+    brain = mergeGatewayMemory(brain, [
+      {
+        id: 'mem_host',
+        workspaceId: 'ws',
+        kind: 'fact',
+        content: 'host newer',
+        sourceAttachmentId: null,
+        pinned: true,
+        status: 'active',
+        createdAt: 1,
+        updatedAt: 40,
+      },
+    ]);
+    expect(brain.memory[0]!.content).toBe('host newer');
+
+    brain = deleteLocalMemory(brain, memId);
+    brain = mergeGatewayMemory(brain, [
+      {
+        id: 'mem_host',
+        workspaceId: 'ws',
+        kind: 'fact',
+        content: 'host newer',
+        sourceAttachmentId: null,
+        pinned: true,
+        status: 'active',
+        createdAt: 1,
+        updatedAt: 40,
+      },
+    ]);
+    expect(brain.memory[0]!.deletedAt).toBeDefined();
+    expect(brain.memory[0]!.status).toBe('archived');
+  });
+
+  test('updateLocalNote rebuilds chunks; deleteLocalNote drops them', () => {
+    let brain = addLocalNote(emptyBrain(), {
+      filename: 'a.md',
+      text: 'hello moss',
+    });
+    const noteId = brain.notes[0]!.id;
+    brain = updateLocalNote(brain, noteId, { text: 'coolant loop' });
+    expect(brain.notes[0]!.text).toBe('coolant loop');
+    expect(brain.chunks.some((c) => c.content.includes('coolant'))).toBe(true);
+    brain = deleteLocalNote(brain, noteId);
+    expect(brain.notes[0]!.deletedAt).toBeDefined();
+    expect(brain.chunks).toHaveLength(0);
   });
 
   test('localNotesToPush skips notes already linked to host', () => {
@@ -458,6 +706,7 @@ describe('syncClientBrain multi-thread', () => {
       listMemory: async () => hostMemory,
       uploadAttachmentText: async (_ws, input) => {
         uploaded.push({ filename: input.filename, text: input.text });
+        const now = Date.now();
         const att: Attachment = {
           id: `att_${uploaded.length}`,
           workspaceId: 'ws_1',
@@ -469,7 +718,9 @@ describe('syncClientBrain multi-thread', () => {
           status: 'ready',
           error: null,
           chunkCount: 1,
-          createdAt: Date.now(),
+          createdAt: now,
+          updatedAt: now,
+          deletedAt: null,
         };
         attachments = [...attachments, att];
         chunks = [
@@ -486,6 +737,43 @@ describe('syncClientBrain multi-thread', () => {
         ];
         return att;
       },
+      updateAttachmentText: async (attachmentId, input) => {
+        const now = Date.now();
+        attachments = attachments.map((a) =>
+          a.id === attachmentId
+            ? {
+                ...a,
+                filename: input.filename ?? a.filename,
+                sizeBytes: input.text.length,
+                updatedAt: now,
+                deletedAt: null,
+              }
+            : a
+        );
+        chunks = [
+          ...chunks.filter((c) => c.attachmentId !== attachmentId),
+          {
+            id: `chk_upd_${attachmentId}`,
+            attachmentId,
+            workspaceId: 'ws_1',
+            chunkIndex: 0,
+            content: input.text,
+            createdAt: now,
+            filename: input.filename ?? 'notes.md',
+          },
+        ];
+        return attachments.find((a) => a.id === attachmentId)!;
+      },
+      deleteAttachment: async (attachmentId) => {
+        const now = Date.now();
+        attachments = attachments.map((a) =>
+          a.id === attachmentId
+            ? { ...a, deletedAt: now, updatedAt: now, chunkCount: 0 }
+            : a
+        );
+        chunks = chunks.filter((c) => c.attachmentId !== attachmentId);
+        return attachments.find((a) => a.id === attachmentId)!;
+      },
       createMemory: async (_ws, input) => {
         createdMem.push({ content: input.content });
         const item: MemoryItem = {
@@ -501,6 +789,21 @@ describe('syncClientBrain multi-thread', () => {
         };
         hostMemory = [...hostMemory, item];
         return item;
+      },
+      updateMemory: async (memoryId, input) => {
+        hostMemory = hostMemory.map((m) =>
+          m.id === memoryId
+            ? {
+                ...m,
+                content: input.content ?? m.content,
+                kind: input.kind ?? m.kind,
+                status: input.status ?? m.status,
+                pinned: input.pinned ?? m.pinned,
+                updatedAt: Date.now(),
+              }
+            : m
+        );
+        return hostMemory.find((m) => m.id === memoryId)!;
       },
     });
 

@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 export type CtrlDb = Database;
 
@@ -226,6 +226,18 @@ function migrate(db: Database): void {
 
       CREATE INDEX IF NOT EXISTS idx_knowledge_vectors_workspace
         ON knowledge_vectors(workspace_id, model);
+    `);
+  }
+
+  if (current < 6) {
+    db.exec(`
+      ALTER TABLE attachments ADD COLUMN updated_at INTEGER;
+      ALTER TABLE attachments ADD COLUMN deleted_at INTEGER;
+    `);
+    db.exec(`
+      UPDATE attachments
+      SET updated_at = created_at
+      WHERE updated_at IS NULL;
     `);
   }
 

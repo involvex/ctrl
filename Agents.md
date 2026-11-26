@@ -189,7 +189,7 @@ bun run gateway:free
 ### Architecture Principles
 
 - **Local-first**: Identity and transcripts live on clients. Gateway is optional for basic chat functionality.
-- **Gateway as home node**: Tools, MCP, channels, backups live on the gateway. Sync is append-only when reachable.
+- **Gateway as home node**: Tools, MCP, channels, backups live on the gateway. Message sync is append-only; notes/memory use last-write-wins with tombstones when reachable.
 - **Process boundaries**: Gateway runs as independent Bun process. Desktop starts/manages it. Clients communicate via HTTP/WebSocket.
 - **Canonical event format**: Use the event types defined in `@involvex/ctrl-s` (see Plan.md). Don't invent custom event schemas.
 - **Provider abstraction**: All LLM providers go through `ModelProvider` interface in `ctrl-r`. Adapters normalize to canonical format.

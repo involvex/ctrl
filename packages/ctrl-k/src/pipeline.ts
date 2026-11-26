@@ -13,6 +13,8 @@ import { extractText } from './extract';
 export type IngestOptions = {
   /** When set, chunks are embedded during ingest (failures leave them pending). */
   embedder?: Embedder | null;
+  /** Seed a pending-review memory from the first chunk (default true). */
+  seedMemory?: boolean;
 };
 
 export type IngestResult = {
@@ -68,13 +70,15 @@ export async function ingestAttachment(
       }
     }
 
-    // Seed a pending-review memory from the first chunk for the review UI.
-    knowledge.createMemory(attachment.workspaceId, {
-      kind: 'note',
-      content: `From ${attachment.filename}: ${chunks[0]!.slice(0, 400)}`,
-      sourceAttachmentId: attachment.id,
-      status: 'pending_review',
-    });
+    if (opts.seedMemory !== false) {
+      // Seed a pending-review memory from the first chunk for the review UI.
+      knowledge.createMemory(attachment.workspaceId, {
+        kind: 'note',
+        content: `From ${attachment.filename}: ${chunks[0]!.slice(0, 400)}`,
+        sourceAttachmentId: attachment.id,
+        status: 'pending_review',
+      });
+    }
 
     return { chunkCount: stored.length, embeddedCount };
   } catch (err) {

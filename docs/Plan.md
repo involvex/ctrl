@@ -336,4 +336,9 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Pin one Hugging Face GGUF `downloadUrl` + `filename` on each `HfModelEntry` (Q4_K_M); unit-test URL/filename shape.
     - Desktop Providers HF catalog: Download into `userData/models/`, progress via existing download channel; skip re-fetch when the file is already on disk.
     - Persist selected GGUF path in `userData/local-llama-model.json`; `LocalBackendsManager.start('llama')` appends `-m <path>` unless `CTRL_LLAMA_ARGS` already has `-m`/`--model`.
-    - Still parked: edit/delete conflict resolution, phone GGUF, quantization picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+    - Still parked at the time: edit/delete conflict resolution (shipped in §28), phone GGUF, quantization picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+28. Device knowledge edit/delete sync (done this slice):
+    - Notes gain `updatedAt` + `deletedAt` tombstones; memory tombstones archive on the host via `PATCH /api/v1/memory/:id`.
+    - Last-write-wins merge in `syncClientBrain` / `mergeGatewayKnowledge` / `mergeGatewayMemory`.
+    - Host `PATCH`/`DELETE /api/v1/attachments/:id` (schema v6 `updated_at` / `deleted_at`); re-ingest without re-seeding memory.
+    - Still parked: binary blob download onto the device, phone GGUF / quantization picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

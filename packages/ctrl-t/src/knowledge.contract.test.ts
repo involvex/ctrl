@@ -2,12 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import {
   createMemory,
   createWorkspace,
+  deleteAttachment,
   getEmbeddingStatus,
   inspectContext,
+  listAttachments,
   listKnowledgeChunks,
   listMemory,
   reindexKnowledge,
   searchKnowledge,
+  updateAttachmentText,
   updateMemory,
   uploadAttachmentText,
 } from '@involvex/ctrl-i';
@@ -22,20 +25,72 @@ describe('contract: knowledge + memory', () => {
       text: [
         '# Device knowledge',
         '',
-        'Phone notes replicate append-only via knowledge chunks.',
+        'Phone notes replicate via knowledge chunks with LWW edits.',
         'Neon moss accents stay #00ff66 on every client.',
       ].join('\n'),
     });
     expect(attachment.status).toBe('ready');
     expect(attachment.chunkCount).toBeGreaterThan(0);
+    expect(attachment.updatedAt).toBeGreaterThanOrEqual(attachment.createdAt);
+    expect(attachment.deletedAt).toBeNull();
 
     const chunks = await listKnowledgeChunks(baseUrl(), ws.id);
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.some((c) => c.attachmentId === attachment.id)).toBe(true);
     expect(chunks.some((c) => c.filename === 'device-sync.md')).toBe(true);
+    expect(chunks.some((c) => c.content.toLowerCase().includes('lww'))).toBe(
+      true
+    );
+  });
+
+  test('update attachment text → soft-delete tombstone', async () => {
+    const ws = await createWorkspace(baseUrl(), 'knowledge-mutate-ws');
+    const created = await uploadAttachmentText(baseUrl(), ws.id, {
+      filename: 'mutate.md',
+      mimeType: 'text/markdown',
+      text: 'Initial coolant note.',
+    });
+    expect(created.status).toBe('ready');
+
+    const updated = await updateAttachmentText(baseUrl(), created.id, {
+      filename: 'mutate.md',
+      text: 'Updated neon moss coolant note.',
+    });
+    expect(updated.id).toBe(created.id);
+    expect(updated.updatedAt).toBeGreaterThanOrEqual(created.updatedAt);
+    expect(updated.deletedAt).toBeNull();
+
+    const chunks = await listKnowledgeChunks(baseUrl(), ws.id);
     expect(
-      chunks.some((c) => c.content.toLowerCase().includes('append-only'))
+      chunks.some(
+        (c) =>
+          c.attachmentId === created.id &&
+          c.content.toLowerCase().includes('neon moss')
+      )
     ).toBe(true);
+    expect(
+      chunks.every(
+        (c) =>
+          c.attachmentId !== created.id ||
+          !c.content.toLowerCase().includes('initial coolant')
+      )
+    ).toBe(true);
+
+    const deleted = await deleteAttachment(baseUrl(), created.id);
+    expect(deleted.deletedAt).not.toBeNull();
+    expect(deleted.chunkCount).toBe(0);
+
+    const listed = await listAttachments(baseUrl(), ws.id);
+    const tombstone = listed.find((a) => a.id === created.id);
+    expect(tombstone?.deletedAt).not.toBeNull();
+
+    const afterDeleteChunks = await listKnowledgeChunks(baseUrl(), ws.id);
+    expect(afterDeleteChunks.every((c) => c.attachmentId !== created.id)).toBe(
+      true
+    );
+
+    const hits = await searchKnowledge(baseUrl(), ws.id, 'neon moss');
+    expect(hits.every((h) => h.attachmentId !== created.id)).toBe(true);
   });
 
   test('upload text attachment → FTS hit → memory review', async () => {

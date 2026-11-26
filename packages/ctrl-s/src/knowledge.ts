@@ -16,6 +16,10 @@ export const attachmentSchema = z.object({
   error: z.string().nullable(),
   chunkCount: z.number().int().nonnegative().default(0),
   createdAt: z.number().int().nonnegative(),
+  /** Last content/metadata write — used for device knowledge LWW sync. */
+  updatedAt: z.number().int().nonnegative(),
+  /** Soft-delete tombstone; null when live. */
+  deletedAt: z.number().int().nonnegative().nullable().default(null),
 });
 
 export type Attachment = z.infer<typeof attachmentSchema>;
@@ -31,6 +35,16 @@ export const createAttachmentInputSchema = z.object({
 });
 
 export type CreateAttachmentInput = z.infer<typeof createAttachmentInputSchema>;
+
+/** Replace attachment text and/or filename (re-ingest when body changes). */
+export const updateAttachmentInputSchema = z.object({
+  filename: z.string().min(1).max(500).optional(),
+  mimeType: z.string().min(1).max(200).optional(),
+  text: z.string().max(2_000_000).optional(),
+  contentBase64: z.string().max(4_000_000).optional(),
+});
+
+export type UpdateAttachmentInput = z.infer<typeof updateAttachmentInputSchema>;
 
 export const knowledgeChunkSchema = z.object({
   id: z.string(),

@@ -156,7 +156,10 @@ export function listPinnedLocalMemory(
   state: ClientBrainState
 ): ClientBrainMemory[] {
   return state.memory.filter(
-    (m) => m.pinned && (m.status === 'active' || m.status === 'pending_review')
+    (m) =>
+      m.deletedAt == null &&
+      m.pinned &&
+      (m.status === 'active' || m.status === 'pending_review')
   );
 }
 
@@ -176,7 +179,11 @@ export function assembleLocalContextPrefix(
       parts.push(`- (${m.kind}) ${m.content}`);
     }
   }
-  const hits = searchLocalChunks(state.chunks, query, opts.hitLimit ?? 6);
+  const liveNoteIds = new Set(
+    state.notes.filter((n) => n.deletedAt == null).map((n) => n.id)
+  );
+  const liveChunks = state.chunks.filter((c) => liveNoteIds.has(c.noteId));
+  const hits = searchLocalChunks(liveChunks, query, opts.hitLimit ?? 6);
   if (hits.length > 0) {
     parts.push('## Knowledge hits');
     for (const hit of hits) {

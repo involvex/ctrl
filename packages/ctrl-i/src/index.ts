@@ -82,9 +82,15 @@ export {
   addHostConversation,
   addLocalMemory,
   addLocalNote,
+  deleteLocalMemory,
+  deleteLocalNote,
+  localMemoryToDelete,
   localMemoryToPush,
+  localMemoryToUpdate,
   localMessagesToPush,
+  localNotesToDelete,
   localNotesToPush,
+  localNotesToUpdate,
   markMemoryPushed,
   markNotePushed,
   mergeGatewayKnowledge,
@@ -94,6 +100,8 @@ export {
   setConversationGatewayId,
   setGatewayWorkspaceId,
   syncClientBrain,
+  updateLocalMemory,
+  updateLocalNote,
   type BrainSyncApi,
   type BrainSyncResult,
   type ClientBrainChunk,
@@ -893,6 +901,46 @@ export async function uploadAttachmentText(
   return attachmentSchema.parse(await readJson(res));
 }
 
+export async function updateAttachmentText(
+  baseUrl: string,
+  attachmentId: string,
+  input: {
+    filename?: string;
+    text: string;
+    mimeType?: string;
+  }
+): Promise<Attachment> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/attachments/${attachmentId}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(input),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`updateAttachment failed: ${res.status}`);
+  }
+  return attachmentSchema.parse(await readJson(res));
+}
+
+export async function deleteAttachment(
+  baseUrl: string,
+  attachmentId: string
+): Promise<Attachment> {
+  const res = await fetch(
+    `${normalizeBaseUrl(baseUrl)}/api/v1/attachments/${attachmentId}`,
+    {
+      method: 'DELETE',
+      headers: authHeaders(),
+    }
+  );
+  if (!res.ok) {
+    throw new Error(`deleteAttachment failed: ${res.status}`);
+  }
+  return attachmentSchema.parse(await readJson(res));
+}
+
 export async function searchKnowledge(
   baseUrl: string,
   workspaceId: string,
@@ -1277,8 +1325,12 @@ export function createBrainSyncApi(baseUrl: string): BrainSyncApi {
     listChunks: (workspaceId) => listKnowledgeChunks(baseUrl, workspaceId),
     uploadAttachmentText: (workspaceId, input) =>
       uploadAttachmentText(baseUrl, workspaceId, input),
+    updateAttachmentText: (attachmentId, input) =>
+      updateAttachmentText(baseUrl, attachmentId, input),
+    deleteAttachment: (attachmentId) => deleteAttachment(baseUrl, attachmentId),
     listMemory: (workspaceId) => listMemory(baseUrl, workspaceId),
     createMemory: (workspaceId, input) =>
       createMemory(baseUrl, workspaceId, input),
+    updateMemory: (memoryId, input) => updateMemory(baseUrl, memoryId, input),
   };
 }

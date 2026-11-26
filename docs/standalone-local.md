@@ -115,11 +115,15 @@ Phone and web brains sync **every** local conversation to its own gateway chat (
 
 ### Device knowledge (local notes + memory)
 
-Phone and web brains store notes, memory, and text chunks offline. Unpaired: create notes/memory and keyword-search them; LiteRT prompts include pinned memory + local hits. Paired: append-only sync pushes new notes/memory and pulls host chunks (`GET /api/v1/workspaces/:id/knowledge/chunks`). Vector/hybrid search still needs the gateway.
+Phone and web brains store notes, memory, and text chunks offline. Unpaired: create notes/memory and keyword-search them; LiteRT prompts include pinned memory + local hits. Paired: sync pushes creates/edits/deletes (last-write-wins) and pulls host chunks (`GET /api/v1/workspaces/:id/knowledge/chunks`). Vector/hybrid search still needs the gateway.
+
+### Device knowledge edit/delete sync
+
+Paired sync uses last-write-wins on notes and memory (`updatedAt`). Deletes are tombstones on the device and soft-delete (`deletedAt`) / archive on the host so a slower peer cannot resurrect them. Messages stay append-only.
 
 Still parked:
 
-1. Edit/delete conflict resolution; binary attachment blob download onto the device
+1. Binary attachment blob download onto the device
 2. Phone GGUF / quantization picker; auto-download of `llama-server` / `litert-lm` binaries
 3. Rust `agentd` / monetization experiments
 4. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)

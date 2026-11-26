@@ -10,6 +10,7 @@ import {
   type KnowledgeHit,
   type MemoryItem,
   type MemoryStatus,
+  type UpdateAttachmentInput,
   type UpdateMemoryInput,
 } from '@involvex/ctrl-s';
 import { resolveBlobRoot, writeBlob } from './blobs';
@@ -30,6 +31,8 @@ type AttachmentRow = {
   error: string | null;
   chunk_count: number;
   created_at: number;
+  updated_at: number | null;
+  deleted_at: number | null;
 };
 
 type MemoryRow = {
@@ -84,6 +87,10 @@ function blobToFloat32(bytes: Uint8Array): Float32Array {
   return new Float32Array(copy.buffer, 0, copy.byteLength / 4);
 }
 
+const ATTACHMENT_SELECT = `id, workspace_id, conversation_id, filename, mime_type, size_bytes,
+                blob_path, status, error, chunk_count, created_at,
+                COALESCE(updated_at, created_at) AS updated_at, deleted_at`;
+
 function mapAttachment(row: AttachmentRow): Attachment {
   return attachmentSchema.parse({
     id: row.id,
@@ -97,6 +104,8 @@ function mapAttachment(row: AttachmentRow): Attachment {
     error: row.error,
     chunkCount: row.chunk_count,
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
+    deletedAt: row.deleted_at ?? null,
   });
 }
 
@@ -168,13 +177,15 @@ export class KnowledgeStore {
       error: null,
       chunkCount: 0,
       createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
     });
     this.db
       .query(
         `INSERT INTO attachments(
           id, workspace_id, conversation_id, filename, mime_type, size_bytes,
-          blob_path, status, error, chunk_count, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          blob_path, status, error, chunk_count, created_at, updated_at, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         row.id,
@@ -187,7 +198,9 @@ export class KnowledgeStore {
         row.status,
         row.error,
         row.chunkCount,
-        row.createdAt
+        row.createdAt,
+        row.updatedAt,
+        row.deletedAt
       );
     return row;
   }
@@ -195,21 +208,22 @@ export class KnowledgeStore {
   getAttachment(attachmentId: string): Attachment | null {
     const row = this.db
       .query<AttachmentRow, [string]>(
-        `SELECT id, workspace_id, conversation_id, filename, mime_type, size_bytes,
-                blob_path, status, error, chunk_count, created_at
+        `SELECT ${ATTACHMENT_SELECT}
          FROM attachments WHERE id = ?`
       )
       .get(attachmentId);
     return row ? mapAttachment(row) : null;
   }
 
+  /**
+   * List attachments including soft-deleted rows (tombstones for client sync).
+   */
   listAttachments(workspaceId: string): Attachment[] {
     const rows = this.db
       .query<AttachmentRow, [string]>(
-        `SELECT id, workspace_id, conversation_id, filename, mime_type, size_bytes,
-                blob_path, status, error, chunk_count, created_at
+        `SELECT ${ATTACHMENT_SELECT}
          FROM attachments WHERE workspace_id = ?
-         ORDER BY created_at DESC`
+         ORDER BY COALESCE(updated_at, created_at) DESC`
       )
       .all(workspaceId);
     return rows.map(mapAttachment);
@@ -231,6 +245,73 @@ export class KnowledgeStore {
          WHERE id = ?`
       )
       .run(error, attachmentId);
+  }
+
+  /**
+   * Replace attachment body/filename and bump updatedAt.
+   * Caller re-ingests when bytes change. Clears soft-delete if resurrecting.
+   */
+  updateAttachment(
+    attachmentId: string,
+    input: UpdateAttachmentInput,
+    bytes: Uint8Array | null
+  ): Attachment | null {
+    const existing = this.getAttachment(attachmentId);
+    if (!existing) {
+      return null;
+    }
+    const now = Date.now();
+    const filename = input.filename ?? existing.filename;
+    const mimeType = input.mimeType ?? existing.mimeType;
+    let blobPath = existing.blobPath;
+    let sizeBytes = existing.sizeBytes;
+    if (bytes) {
+      blobPath = writeBlob(
+        this.blobRoot,
+        existing.workspaceId,
+        attachmentId,
+        filename,
+        bytes
+      );
+      sizeBytes = bytes.byteLength;
+    }
+    this.db
+      .query(
+        `UPDATE attachments
+         SET filename = ?, mime_type = ?, size_bytes = ?, blob_path = ?,
+             status = 'pending', error = NULL, updated_at = ?, deleted_at = NULL
+         WHERE id = ?`
+      )
+      .run(filename, mimeType, sizeBytes, blobPath, now, attachmentId);
+    return this.getAttachment(attachmentId);
+  }
+
+  /** Soft-delete: tombstone for sync; clears chunks/FTS/vectors. */
+  softDeleteAttachment(attachmentId: string): Attachment | null {
+    const existing = this.getAttachment(attachmentId);
+    if (!existing) {
+      return null;
+    }
+    if (existing.deletedAt != null) {
+      return existing;
+    }
+    this.replaceChunks(
+      attachmentId,
+      existing.workspaceId,
+      existing.filename,
+      []
+    );
+    this.deleteVectorsForAttachment(attachmentId);
+    const now = Date.now();
+    this.db
+      .query(
+        `UPDATE attachments
+         SET deleted_at = ?, updated_at = ?, status = 'ready', error = NULL,
+             chunk_count = 0
+         WHERE id = ?`
+      )
+      .run(now, now, attachmentId);
+    return this.getAttachment(attachmentId);
   }
 
   replaceChunks(
@@ -344,7 +425,8 @@ export class KnowledgeStore {
              FROM knowledge_vectors v
              JOIN knowledge_chunks c ON c.id = v.chunk_id
              JOIN attachments a ON a.id = v.attachment_id
-             WHERE v.workspace_id = ? AND v.model = ?`
+             WHERE v.workspace_id = ? AND v.model = ?
+               AND a.deleted_at IS NULL`
           )
           .all(workspaceId, model)
       : this.db
@@ -354,7 +436,8 @@ export class KnowledgeStore {
              FROM knowledge_vectors v
              JOIN knowledge_chunks c ON c.id = v.chunk_id
              JOIN attachments a ON a.id = v.attachment_id
-             WHERE v.workspace_id = ?`
+             WHERE v.workspace_id = ?
+               AND a.deleted_at IS NULL`
           )
           .all(workspaceId);
 
@@ -395,7 +478,7 @@ export class KnowledgeStore {
                 c.content, c.created_at, a.filename
          FROM knowledge_chunks c
          JOIN attachments a ON a.id = c.attachment_id
-         WHERE c.workspace_id = ?
+         WHERE c.workspace_id = ? AND a.deleted_at IS NULL
          ORDER BY a.created_at ASC, c.chunk_index ASC
          LIMIT ?`
       )
@@ -505,7 +588,9 @@ export class KnowledgeStore {
            f.workspace_id AS workspace_id
          FROM knowledge_fts f
          JOIN knowledge_chunks c ON c.id = f.chunk_id
+         JOIN attachments a ON a.id = c.attachment_id
          WHERE knowledge_fts MATCH ? AND f.workspace_id = ?
+           AND a.deleted_at IS NULL
          ORDER BY rank
          LIMIT ?`
       )

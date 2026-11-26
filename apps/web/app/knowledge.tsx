@@ -13,11 +13,15 @@ import {
   addLocalMemory,
   addLocalNote,
   assembleLocalContextPrefix,
+  deleteLocalMemory,
+  deleteLocalNote,
   getEmbeddingStatus,
   inspectContext,
   reindexKnowledge,
   searchKnowledge,
   searchLocalChunks,
+  updateLocalMemory,
+  updateLocalNote,
   updateMemory,
   type KnowledgeHit,
 } from '@involvex/ctrl-i';
@@ -60,17 +64,22 @@ export default function KnowledgeScreen() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [filename, setFilename] = useState('notes.md');
   const [draft, setDraft] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<KnowledgeHit[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [memoryDraft, setMemoryDraft] = useState('');
+  const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('loading…');
   const [searchMode, setSearchMode] = useState<KnowledgeSearchMode>('fts');
   const [embeddingLine, setEmbeddingLine] = useState<string | null>(null);
 
   const paired = Boolean(gatewayUrl && workspaceId);
-  const memory: BrainMemory[] = brain?.memory ?? [];
+  const memory: BrainMemory[] = (brain?.memory ?? []).filter(
+    (m) => m.deletedAt == null
+  );
+  const notes = (brain?.notes ?? []).filter((n) => n.deletedAt == null);
 
   const persistBrain = useCallback(async (next: BrainState) => {
     setBrain(next);
@@ -85,10 +94,42 @@ export default function KnowledgeScreen() {
     }
     const assembled = assembleLocalContextPrefix(state, q.trim() || ' ');
     setPreview(assembled || null);
-    setStatus(
-      `local brain · ${state.notes.length} notes · ${state.memory.length} memory`
-    );
+    const noteCount = state.notes.filter((n) => n.deletedAt == null).length;
+    const memCount = state.memory.filter((m) => m.deletedAt == null).length;
+    setStatus(`local brain · ${noteCount} notes · ${memCount} memory`);
   }, []);
+
+  const applyBrainMutation = useCallback(
+    async (
+      mutate: (state: BrainState) => BrainState,
+      okStatus: string
+    ): Promise<boolean> => {
+      if (!brain) {
+        return false;
+      }
+      setBusy(true);
+      try {
+        let next = mutate(brain);
+        await persistBrain(next);
+        if (paired) {
+          const synced = await syncBrainWithGateway(next);
+          if (synced.ok) {
+            next = synced.brain;
+            await persistBrain(next);
+          }
+        }
+        refreshLocal(next, query);
+        setStatus(okStatus);
+        return true;
+      } catch (err) {
+        setStatus(err instanceof Error ? err.message : String(err));
+        return false;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [brain, paired, persistBrain, query, refreshLocal]
+  );
 
   const refresh = useCallback(async () => {
     const state = brain ?? (await loadBrain());
@@ -203,7 +244,9 @@ export default function KnowledgeScreen() {
       <Text style={styles.title}>knowledge</Text>
       <Text style={styles.meta}>{status}</Text>
       {embeddingLine ? <Text style={styles.meta}>{embeddingLine}</Text> : null}
-      <Text style={styles.label}>ingest note</Text>
+      <Text style={styles.label}>
+        {editingNoteId ? 'edit note' : 'ingest note'}
+      </Text>
       <TextInput
         style={styles.input}
         value={filename}
@@ -219,41 +262,55 @@ export default function KnowledgeScreen() {
         placeholderTextColor="#6b7f72"
         multiline
       />
-      <Pressable
-        style={styles.button}
-        disabled={busy || !draft.trim() || !brain}
-        onPress={() => {
-          if (!brain || !draft.trim()) {
-            return;
-          }
-          void (async () => {
-            setBusy(true);
-            try {
-              let next = addLocalNote(brain, {
-                filename: filename.trim() || 'notes.md',
-                text: draft,
-              });
-              await persistBrain(next);
-              setDraft('');
-              if (paired) {
-                const synced = await syncBrainWithGateway(next);
-                if (synced.ok) {
-                  next = synced.brain;
-                  await persistBrain(next);
-                }
-              }
-              refreshLocal(next, query);
-              setStatus('note saved');
-            } catch (err) {
-              setStatus(err instanceof Error ? err.message : String(err));
-            } finally {
-              setBusy(false);
+      <View style={styles.memActions}>
+        <Pressable
+          style={styles.button}
+          disabled={busy || !draft.trim() || !brain}
+          onPress={() => {
+            if (!brain || !draft.trim()) {
+              return;
             }
-          })();
-        }}
-      >
-        <Text style={styles.buttonText}>ingest</Text>
-      </Pressable>
+            const noteId = editingNoteId;
+            void applyBrainMutation(
+              (state) =>
+                noteId
+                  ? updateLocalNote(state, noteId, {
+                      filename: filename.trim() || 'notes.md',
+                      text: draft,
+                    })
+                  : addLocalNote(state, {
+                      filename: filename.trim() || 'notes.md',
+                      text: draft,
+                    }),
+              noteId ? 'note updated' : 'note saved'
+            ).then((ok) => {
+              if (!ok) {
+                return;
+              }
+              setDraft('');
+              setEditingNoteId(null);
+              setFilename('notes.md');
+            });
+          }}
+        >
+          <Text style={styles.buttonText}>
+            {editingNoteId ? 'save edit' : 'ingest'}
+          </Text>
+        </Pressable>
+        {editingNoteId ? (
+          <Pressable
+            style={styles.ghostBtn}
+            disabled={busy}
+            onPress={() => {
+              setEditingNoteId(null);
+              setDraft('');
+              setFilename('notes.md');
+            }}
+          >
+            <Text style={styles.ghostText}>cancel</Text>
+          </Pressable>
+        ) : null}
+      </View>
       <Text style={styles.label}>search mode</Text>
       <View style={styles.modeRow}>
         {(paired ? SEARCH_MODES : (['fts'] as const)).map((mode) => (
@@ -335,7 +392,9 @@ export default function KnowledgeScreen() {
           <Text style={styles.body}>{hit.snippet}</Text>
         </View>
       ))}
-      <Text style={styles.label}>memory</Text>
+      <Text style={styles.label}>
+        {editingMemoryId ? 'edit memory' : 'memory'}
+      </Text>
       <TextInput
         style={styles.input}
         value={memoryDraft}
@@ -343,42 +402,53 @@ export default function KnowledgeScreen() {
         placeholder="new memory"
         placeholderTextColor="#6b7f72"
       />
-      <Pressable
-        style={styles.button}
-        disabled={!memoryDraft.trim() || !brain}
-        onPress={() => {
-          if (!brain || !memoryDraft.trim()) {
-            return;
-          }
-          void (async () => {
-            setBusy(true);
-            try {
-              let next = addLocalMemory(brain, {
-                content: memoryDraft.trim(),
-                pinned: true,
-                status: 'active',
-              });
-              await persistBrain(next);
-              setMemoryDraft('');
-              if (paired) {
-                const synced = await syncBrainWithGateway(next);
-                if (synced.ok) {
-                  next = synced.brain;
-                  await persistBrain(next);
-                }
-              }
-              refreshLocal(next, query);
-              setStatus('memory saved');
-            } catch (err) {
-              setStatus(err instanceof Error ? err.message : String(err));
-            } finally {
-              setBusy(false);
+      <View style={styles.memActions}>
+        <Pressable
+          style={styles.button}
+          disabled={busy || !memoryDraft.trim() || !brain}
+          onPress={() => {
+            if (!brain || !memoryDraft.trim()) {
+              return;
             }
-          })();
-        }}
-      >
-        <Text style={styles.buttonText}>add memory</Text>
-      </Pressable>
+            const memoryId = editingMemoryId;
+            void applyBrainMutation(
+              (state) =>
+                memoryId
+                  ? updateLocalMemory(state, memoryId, {
+                      content: memoryDraft.trim(),
+                    })
+                  : addLocalMemory(state, {
+                      content: memoryDraft.trim(),
+                      pinned: true,
+                      status: 'active',
+                    }),
+              memoryId ? 'memory updated' : 'memory saved'
+            ).then((ok) => {
+              if (!ok) {
+                return;
+              }
+              setMemoryDraft('');
+              setEditingMemoryId(null);
+            });
+          }}
+        >
+          <Text style={styles.buttonText}>
+            {editingMemoryId ? 'save edit' : 'add memory'}
+          </Text>
+        </Pressable>
+        {editingMemoryId ? (
+          <Pressable
+            style={styles.ghostBtn}
+            disabled={busy}
+            onPress={() => {
+              setEditingMemoryId(null);
+              setMemoryDraft('');
+            }}
+          >
+            <Text style={styles.ghostText}>cancel</Text>
+          </Pressable>
+        ) : null}
+      </View>
       {memory.map((item) => (
         <View key={item.id} style={styles.panel}>
           <Text style={styles.meta}>
@@ -387,11 +457,38 @@ export default function KnowledgeScreen() {
             {item.origin === 'local' ? ' · local' : ''}
           </Text>
           <Text style={styles.body}>{item.content}</Text>
-          {item.status === 'pending_review' &&
-          paired &&
-          gatewayUrl &&
-          item.gatewayMemoryId ? (
-            <View style={styles.memActions}>
+          <View style={styles.memActions}>
+            <Pressable
+              style={styles.ghostBtn}
+              disabled={busy}
+              onPress={() => {
+                setEditingMemoryId(item.id);
+                setMemoryDraft(item.content);
+              }}
+            >
+              <Text style={styles.ghostText}>edit</Text>
+            </Pressable>
+            <Pressable
+              style={styles.ghostBtn}
+              disabled={busy}
+              onPress={() => {
+                void applyBrainMutation(
+                  (state) => deleteLocalMemory(state, item.id),
+                  'memory deleted'
+                ).then(() => {
+                  if (editingMemoryId === item.id) {
+                    setEditingMemoryId(null);
+                    setMemoryDraft('');
+                  }
+                });
+              }}
+            >
+              <Text style={styles.ghostText}>delete</Text>
+            </Pressable>
+            {item.status === 'pending_review' &&
+            paired &&
+            gatewayUrl &&
+            item.gatewayMemoryId ? (
               <Pressable
                 style={styles.ghostBtn}
                 onPress={() => {
@@ -412,18 +509,49 @@ export default function KnowledgeScreen() {
               >
                 <Text style={styles.ghostText}>approve + pin</Text>
               </Pressable>
-            </View>
-          ) : null}
+            ) : null}
+          </View>
         </View>
       ))}
-      {brain && brain.notes.length > 0
-        ? brain.notes.slice(0, 12).map((note) => (
+      {notes.length > 0
+        ? notes.slice(0, 12).map((note) => (
             <View key={note.id} style={styles.panel}>
               <Text style={styles.meta}>
                 {note.filename}
                 {note.origin === 'local' ? ' · local' : ' · synced'}
               </Text>
               <Text style={styles.body}>{note.text.slice(0, 160)}</Text>
+              <View style={styles.memActions}>
+                <Pressable
+                  style={styles.ghostBtn}
+                  disabled={busy}
+                  onPress={() => {
+                    setEditingNoteId(note.id);
+                    setFilename(note.filename);
+                    setDraft(note.text);
+                  }}
+                >
+                  <Text style={styles.ghostText}>edit</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.ghostBtn}
+                  disabled={busy}
+                  onPress={() => {
+                    void applyBrainMutation(
+                      (state) => deleteLocalNote(state, note.id),
+                      'note deleted'
+                    ).then(() => {
+                      if (editingNoteId === note.id) {
+                        setEditingNoteId(null);
+                        setDraft('');
+                        setFilename('notes.md');
+                      }
+                    });
+                  }}
+                >
+                  <Text style={styles.ghostText}>delete</Text>
+                </Pressable>
+              </View>
             </View>
           ))
         : null}
