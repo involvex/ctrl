@@ -355,3 +355,7 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Confirmed `react-native-litert-lm` holds one resident `.litertlm`; no phone GGUF runner.
     - Documented in [standalone-local.md](standalone-local.md); no fake multi-model picker.
     - Still parked: auto-download of `llama-server` / `litert-lm`, optional app multi-path catalog, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+32. Pinned local binary fetch (done this slice):
+    - Desktop Host **download known-good**: platform pin + sha256 for llama.cpp `llama-server` archives and LiteRT-LM CLI files.
+    - Skips when `CTRL_LLAMA_BIN` / `CTRL_LITERT_LM_BIN` already points at a file; no silent background download.
+    - Still parked: optional phone multi-path catalog, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

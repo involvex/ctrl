@@ -6,11 +6,11 @@ Root `package.json` is still `0.2.0` while slices 26–28 are already described 
 
 ## Now
 
-- [ ] **Known-good fetch of `llama-server` / `litert-lm`** — pinned URL plus checksum for those two binaries; skip when `CTRL_LLAMA_BIN` is set; no silent background download.
+_(empty — promote from Later when ready)_
 
 ## Next
 
-_(empty — promote from Later when Now is done)_
+_(empty)_
 
 ## Later
 
@@ -43,3 +43,4 @@ _(empty — promote from Later when Now is done)_
 - [x] Device attachment blob download (`GET /api/v1/attachments/:id/blob`, on-demand mobile/web)
 - [x] Desktop HF quantization picker (Q4_K_M / Q5_K_M or Q6_K / Q8_0 per model)
 - [x] Phone model files gap documented — one resident `.litertlm`, no phone GGUF runner; no fake picker
+- [x] Known-good fetch of `llama-server` / `litert-lm` (pinned URL + sha256; skip when CTRL_*_BIN set)

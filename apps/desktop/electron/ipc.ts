@@ -4,7 +4,9 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  rmSync,
   statSync,
+  unlinkSync,
 } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -13,6 +15,16 @@ import type { GatewayManager, GatewayStatus } from './gateway-manager';
 import { listLanAddresses } from './lan';
 import { modelsDir, saveLlamaModelPath } from './llama-model-state';
 import type { LocalBackendId, LocalBackendsManager } from './local-backends';
+import {
+  assertSha256,
+  envBinAlreadySet,
+  envBinKey,
+  extractArchive,
+  findNamedFile,
+  installExtractedBinary,
+  resolvePinnedBinary,
+  sha256File,
+} from './pinned-bins';
 import type { SecretVault } from './secrets';
 import type { UpdateManager, UpdateStatus } from './updater';
 
@@ -253,6 +265,161 @@ export function registerDesktopIpc(deps: DesktopIpcDeps): void {
     });
     return { ok: true, path: target };
   });
+
+  ipcMain.handle(
+    'localBackends:downloadPinned',
+    async (event, raw: unknown) => {
+      const input = z.object({ id: backendIdSchema }).parse(raw);
+      const envPath = envBinAlreadySet(input.id);
+      if (envPath) {
+        deps.localBackends.setBinPath(input.id, envPath);
+        return {
+          ok: true as const,
+          path: envPath,
+          skipped: true as const,
+          reason: `env:${envBinKey(input.id)}`,
+        };
+      }
+
+      const pin = resolvePinnedBinary(input.id);
+      if (!pin) {
+        throw new Error(
+          `no pinned ${input.id} binary for ${process.platform}/${process.arch}`
+        );
+      }
+
+      const binDir = path.join(app.getPath('userData'), 'bin');
+      mkdirSync(binDir, { recursive: true });
+      const ext = process.platform === 'win32' ? '.exe' : '';
+      const target = path.join(binDir, `${input.id}${ext}`);
+      const webContents = event.sender;
+
+      if (existsSync(target) && statSync(target).size > 0) {
+        deps.localBackends.setBinPath(input.id, target);
+        if (deps.vault?.isAvailable()) {
+          deps.vault.set(`localBin:${input.id}`, target);
+        }
+        webContents.send('localBackends:downloadProgress', {
+          id: input.id,
+          downloaded: statSync(target).size,
+          total: statSync(target).size,
+          percent: 100,
+          done: true,
+        });
+        return {
+          ok: true as const,
+          path: target,
+          skipped: true as const,
+          reason: 'cached',
+        };
+      }
+
+      const downloadName = path.basename(new URL(pin.url).pathname);
+      const downloadPath = path.join(binDir, `download-${downloadName}`);
+      const extractDir = path.join(binDir, `extract-${input.id}`);
+
+      const res = await fetch(pin.url);
+      if (!res.ok) {
+        throw new Error(`pinned download failed: ${res.status}`);
+      }
+      if (!res.body) {
+        throw new Error('pinned download failed: no response body');
+      }
+
+      const contentLength = res.headers.get('content-length');
+      const total = contentLength ? Number(contentLength) : undefined;
+      const fileStream = createWriteStream(downloadPath, { flags: 'w' });
+      let downloaded = 0;
+      const reader = res.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          if (value) {
+            fileStream.write(Buffer.from(value));
+            downloaded += value.byteLength;
+            webContents.send('localBackends:downloadProgress', {
+              id: input.id,
+              downloaded,
+              total,
+              percent: total
+                ? Math.round((downloaded / total) * 100)
+                : undefined,
+            });
+          }
+        }
+      } finally {
+        fileStream.end();
+        await new Promise<void>((resolve) => fileStream.on('finish', resolve));
+      }
+
+      const digest = await sha256File(downloadPath);
+      try {
+        assertSha256(digest, pin.sha256, pin.label);
+      } catch (error) {
+        try {
+          unlinkSync(downloadPath);
+        } catch {
+          // ignore cleanup failure
+        }
+        throw error;
+      }
+
+      if (pin.kind === 'file') {
+        installExtractedBinary(downloadPath, target);
+        try {
+          unlinkSync(downloadPath);
+        } catch {
+          // keep download if unlink fails
+        }
+      } else {
+        const extractName = pin.extractName;
+        if (!extractName) {
+          throw new Error(`pinned archive ${pin.label} missing extractName`);
+        }
+        try {
+          rmSync(extractDir, { recursive: true, force: true });
+        } catch {
+          // ignore
+        }
+        await extractArchive(downloadPath, extractDir);
+        const found = findNamedFile(extractDir, extractName);
+        if (!found) {
+          throw new Error(
+            `pinned archive ${pin.label} did not contain ${extractName}`
+          );
+        }
+        installExtractedBinary(found, target);
+        try {
+          unlinkSync(downloadPath);
+          rmSync(extractDir, { recursive: true, force: true });
+        } catch {
+          // ignore cleanup failure
+        }
+      }
+
+      deps.localBackends.setBinPath(input.id, target);
+      if (deps.vault?.isAvailable()) {
+        deps.vault.set(`localBin:${input.id}`, target);
+      }
+      webContents.send('localBackends:downloadProgress', {
+        id: input.id,
+        downloaded,
+        total: downloaded,
+        percent: 100,
+        done: true,
+      });
+      return {
+        ok: true as const,
+        path: target,
+        skipped: false as const,
+        version: pin.version,
+        label: pin.label,
+      };
+    }
+  );
 
   ipcMain.handle('localModels:list', () => {
     const dir = modelsDir();
