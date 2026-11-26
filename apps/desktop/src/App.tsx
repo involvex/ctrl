@@ -15,6 +15,7 @@ import {
   listChannels,
   listConversations,
   listHfModelCatalog,
+  resolveHfCatalogQuant,
   createSkill,
   deleteMcpServer,
   deleteSkill,
@@ -261,6 +262,10 @@ export function App() {
     Array<{ id: string; displayName?: string }>
   >([]);
   const [hfModels, setHfModels] = useState<HfModelCatalogEntry[]>([]);
+  /** Selected quant id per HF catalog model id. */
+  const [hfQuantByModelId, setHfQuantByModelId] = useState<
+    Record<string, string>
+  >({});
   const [localModelFiles, setLocalModelFiles] = useState<string[]>([]);
   const [selectedModelFilename, setSelectedModelFilename] = useState<
     string | null
@@ -619,6 +624,20 @@ export function App() {
     try {
       const listed = await listHfModelCatalog(gatewayUrl);
       setHfModels(listed.items);
+      setHfQuantByModelId((prev) => {
+        const next = { ...prev };
+        for (const item of listed.items) {
+          const current = next[item.id];
+          const valid =
+            Boolean(current) &&
+            (item.quantizations ?? []).some((q) => q.id === current);
+          if (!valid) {
+            next[item.id] =
+              item.defaultQuant ?? item.quantizations?.[0]?.id ?? 'Q4_K_M';
+          }
+        }
+        return next;
+      });
     } catch {
       setHfModels([]);
     }
@@ -1848,8 +1867,8 @@ export function App() {
 
           <p className="host-title">HF model catalog</p>
           <p className="meta">
-            Download a pinned GGUF into userData/models/, then Host → local
-            models → Start llama. Selected file is passed as -m.
+            Pick a quant, download the GGUF into userData/models/, then Host →
+            local models → Start llama. Selected file is passed as -m.
           </p>
           <div className="host-row">
             <button
@@ -1868,16 +1887,24 @@ export function App() {
               <li className="meta">no catalog entries</li>
             ) : (
               hfModels.map((m: HfModelCatalogEntry) => {
-                const filename = m.filename;
-                const downloadUrl = m.downloadUrl;
+                const quantId =
+                  hfQuantByModelId[m.id] ??
+                  m.defaultQuant ??
+                  m.quantizations?.[0]?.id;
+                const quant = resolveHfCatalogQuant(m, quantId);
+                const filename = quant?.filename ?? m.filename;
+                const downloadUrl = quant?.downloadUrl ?? m.downloadUrl;
+                const sizeGb = quant?.sizeGb ?? m.sizeGb;
+                const downloadId = `${m.id}:${quant?.id ?? 'default'}`;
                 const onDisk =
                   Boolean(filename) && localModelFiles.includes(filename!);
                 const selected =
                   Boolean(filename) && selectedModelFilename === filename;
                 const progressForRow =
-                  downloadProgress && downloadProgress.id === m.id
+                  downloadProgress && downloadProgress.id === downloadId
                     ? downloadProgress
                     : null;
+                const quantOptions = m.quantizations ?? [];
                 return (
                   <li key={m.id}>
                     <div>
@@ -1885,7 +1912,7 @@ export function App() {
                       <br />
                       <span className="meta">
                         {m.id}
-                        {m.sizeGb ? ` · ${m.sizeGb} GB` : ''}
+                        {sizeGb ? ` · ${sizeGb} GB` : ''}
                         {(m.tags?.length ?? 0) > 0
                           ? ` · ${(m.tags ?? []).join(', ')}`
                           : ''}
@@ -1913,6 +1940,32 @@ export function App() {
                         </>
                       ) : null}
                       <div className="host-row">
+                        {quantOptions.length > 0 ? (
+                          <label className="meta">
+                            quant{' '}
+                            <select
+                              className="host-input host-input-narrow"
+                              value={quant?.id ?? ''}
+                              disabled={Boolean(
+                                progressForRow && !progressForRow.done
+                              )}
+                              onChange={(event) => {
+                                const nextQuant = event.target.value;
+                                setHfQuantByModelId((prev) => ({
+                                  ...prev,
+                                  [m.id]: nextQuant,
+                                }));
+                              }}
+                            >
+                              {quantOptions.map((q) => (
+                                <option key={q.id} value={q.id}>
+                                  {q.id}
+                                  {q.sizeGb ? ` · ${q.sizeGb} GB` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
                         <button
                           type="button"
                           className="ghost-btn"
@@ -1929,7 +1982,7 @@ export function App() {
                               try {
                                 setError(null);
                                 await window.ctrlDesktop?.downloadLocalModel(
-                                  m.id,
+                                  downloadId,
                                   downloadUrl,
                                   filename
                                 );

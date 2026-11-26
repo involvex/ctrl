@@ -347,3 +347,7 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Host `GET /api/v1/attachments/:id/blob` serves raw bytes (404 when missing or soft-deleted).
     - `downloadAttachmentBlob` / `storeLocalNoteBlob` in `@involvex/ctrl-i`; mobile/web knowledge UI downloads on demand (not every sync).
     - Still parked: phone GGUF / quantization picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+30. Desktop HF quantization picker (done this slice):
+    - `ctrl-r` catalog entries expose a short `quantizations[]` (Q4_K_M default + higher quants) with pinned HF resolve URLs.
+    - Desktop Providers panel select → download uses the chosen quant filename/`-m` path.
+    - Still parked: phone GGUF / multi-`.litertlm` picker, auto-download of `llama-server` / `litert-lm`, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.

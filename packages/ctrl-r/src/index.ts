@@ -30,7 +30,9 @@ export {
   getProviderCatalogEntry,
   listHfModelCatalog,
   getHfModelCatalogEntry,
+  resolveHfModelQuant,
   type HfModelEntry,
+  type HfModelQuantOption,
 } from './catalog';
 export { LiteRTProvider } from './litert-provider';
 export { DevicePairProvider, type DevicePairConfig } from './device-provider';

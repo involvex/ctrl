@@ -14,5 +14,10 @@ describe('contract: models', () => {
     expect(Array.isArray(catalog.items)).toBe(true);
     expect(catalog.items.length).toBeGreaterThan(0);
     expect(typeof catalog.items[0]?.id).toBe('string');
+    const first = catalog.items[0]!;
+    expect(Array.isArray(first.quantizations)).toBe(true);
+    expect((first.quantizations?.length ?? 0) > 1).toBe(true);
+    expect(first.quantizations?.[0]?.downloadUrl).toContain('huggingface.co');
+    expect(first.defaultQuant).toBeTruthy();
   });
 });
