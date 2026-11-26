@@ -20,7 +20,6 @@ _(empty)_
 - [ ] Extract `ctrl-space`, `ctrl-l`, `ctrl-comma` — only when a second caller needs shared UI tokens, logging, or config.
 - [ ] Semantic reranking — hybrid search is RRF only; left out of Plan slice 11 on purpose.
 - [ ] Non-MVP from Plan §10 — WhatsApp, plugin marketplace, multi-agent orchestration, inbound internet exposure, automatic skill generation, full OpenAI compatibility, separate vector database.
-- [ ] CLI leftovers (only if touching `ctrl-f5`) — gateway `restart`, knowledge wrappers, channel usage text for Discord/Slack.
 
 ## Operator (not agent work)
 
@@ -46,3 +45,4 @@ _(empty)_
 - [x] Desktop HF quantization picker (Q4_K_M / Q5_K_M or Q6_K / Q8_0 per model)
 - [x] Phone model files gap documented — one resident `.litertlm`, no phone GGUF runner; no fake picker
 - [x] Known-good fetch of `llama-server` / `litert-lm` (pinned URL + sha256; skip when CTRL_*_BIN set)
+- [x] CLI leftovers — `ctrl-f5 restart`, knowledge search/reindex/status, Discord/Slack channel add + usage

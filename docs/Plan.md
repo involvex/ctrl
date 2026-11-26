@@ -359,3 +359,8 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - Desktop Host **download known-good**: platform pin + sha256 for llama.cpp `llama-server` archives and LiteRT-LM CLI files.
     - Skips when `CTRL_LLAMA_BIN` / `CTRL_LITERT_LM_BIN` already points at a file; no silent background download.
     - Still parked: optional phone multi-path catalog, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`.
+33. CLI leftovers / Phase 8 finish (done this slice):
+    - `ctrl-f5 restart` (stop then start; reuses managed port/host meta).
+    - Thin knowledge wrappers: `search` / `reindex` / `status` via `@involvex/ctrl-i`.
+    - Channel add + usage for Discord (`botToken`) and Slack (`botToken` + `appToken`); completions updated.
+    - Still parked: optional phone multi-path catalog, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`. Living order: [ROADMAP.md](../ROADMAP.md).
