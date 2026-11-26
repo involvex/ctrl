@@ -25,6 +25,7 @@ describe('android-release script', () => {
     );
     const body = executableLines(src);
     expect(body).toContain("['assembleRelease']");
+    expect(body).toContain('patchRnFoojayResolver');
     expect(body).not.toContain('expo run');
     expect(body).not.toContain('__expo_url');
     expect(body).not.toContain('8081');

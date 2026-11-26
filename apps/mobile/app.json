@@ -34,6 +34,7 @@
       ],
       "./plugins/with-android-sdk-props.js",
       "./plugins/with-litert-consumer-proguard.js",
+      "./plugins/with-rn-foojay-skip.js",
       [
         "expo-splash-screen",
         {

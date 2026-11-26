@@ -4,7 +4,13 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
+
+const require = createRequire(import.meta.url);
+const { patchRnFoojayResolver } = require('./patch-rn-foojay.js') as {
+  patchRnFoojayResolver: (repoRoot: string) => number;
+};
 
 const mobileRoot = join(import.meta.dir, '..');
 const repoRoot = join(mobileRoot, '..', '..');
@@ -66,6 +72,8 @@ function ensureLitertConsumerRules(): void {
 }
 
 ensureLitertConsumerRules();
+/** Bun reinstalls wipe node_modules patches from prebuild — re-apply before Gradle. */
+patchRnFoojayResolver(repoRoot);
 
 const isWin = process.platform === 'win32';
 const gradle = isWin ? 'gradlew.bat' : './gradlew';

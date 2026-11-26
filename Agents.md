@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). `## Now` is empty. `v0.5.0` is cut (knowledge sync + model tooling); soak rows 1–6 stay operator hardware; pick from Later for new code.
+See [ROADMAP.md](ROADMAP.md). `## Now` is empty. `v0.5.0` is cut (knowledge sync + model tooling; Android APK incomplete); cut `v0.5.1` for foojay CI harden; soak rows 1–6 stay operator hardware; pick from Later for new code.
 
 ## Learned preferences
 
