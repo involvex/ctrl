@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  listHfModelCatalog,
-  resolveHfModelQuant,
-} from './catalog';
+import { listHfModelCatalog, resolveHfModelQuant } from './catalog';
 
 describe('HF model catalog', () => {
   test('every entry has a pinned huggingface GGUF URL and filename', () => {

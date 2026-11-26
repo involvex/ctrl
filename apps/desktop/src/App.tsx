@@ -633,9 +633,7 @@ export function App() {
             (item.quantizations ?? []).some((q) => q.id === current);
           if (!valid) {
             next[item.id] =
-              item.defaultQuant ??
-              item.quantizations?.[0]?.id ??
-              'Q4_K_M';
+              item.defaultQuant ?? item.quantizations?.[0]?.id ?? 'Q4_K_M';
           }
         }
         return next;
