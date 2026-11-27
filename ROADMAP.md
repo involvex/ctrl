@@ -14,7 +14,7 @@ _(empty)_
 
 ## Later
 
-- [ ] Optional app-owned multi-path `.litertlm` catalog on phone (replace-to-switch only; runner still one engine) — only if product wants it.
+- [ ] Share phone LiteRT catalog: free announcement draft in SHARE.md
 - [ ] Rust `agentd` (Plan phase 9 / §11) — process manager → pairing/auth → storage; agent loop only with a reason; contract tests stay Bun.
 - [ ] Monetization — sponsors in [docs/funding.md](docs/funding.md); needs an explicit product decision before any billing code.
 - [ ] Extract `ctrl-space`, `ctrl-l`, `ctrl-comma` — only when a second caller needs shared UI tokens, logging, or config.
@@ -47,3 +47,4 @@ _(empty)_
 - [x] Phone model files gap documented — one resident `.litertlm`, no phone GGUF runner; no fake picker
 - [x] Known-good fetch of `llama-server` / `litert-lm` (pinned URL + sha256; skip when CTRL_*_BIN set)
 - [x] CLI leftovers — `ctrl-f5 restart`, knowledge search/reindex/status, Discord/Slack channel add + usage
+- [x] Phone multi-path `.litertlm` catalog (replace-to-switch; one engine; no phone GGUF)

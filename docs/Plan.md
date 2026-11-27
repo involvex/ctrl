@@ -363,4 +363,9 @@ Typen für Rust aus dem Schema (`typify`, `progenitor`).
     - `ctrl-f5 restart` (stop then start; reuses managed port/host meta).
     - Thin knowledge wrappers: `search` / `reindex` / `status` via `@involvex/ctrl-i`.
     - Channel add + usage for Discord (`botToken`) and Slack (`botToken` + `appToken`); completions updated.
-    - Still parked: optional phone multi-path catalog, Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`. Living order: [ROADMAP.md](../ROADMAP.md).
+    - Still parked at the time: optional phone multi-path catalog (shipped — app-owned catalog + replace-to-switch), Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`. Living order: [ROADMAP.md](../ROADMAP.md).
+34. Phone multi-path `.litertlm` catalog (done this slice):
+    - App-owned catalog (`ctrl.mobile.litert.catalog`) + active `modelSource`; import/download upsert; forget removes list entry only.
+    - Model setup lists local files; tap switches active path and unloads a different loaded engine; Load still explicit.
+    - `policyRequestForSource` loosens non-E2B RAM floor; chat `generate` re-reads active source.
+    - Still parked: Rust `agentd`, monetization, `ctrl-space` / `ctrl-l` / `ctrl-comma`. Living order: [ROADMAP.md](../ROADMAP.md).
