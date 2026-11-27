@@ -1,9 +1,9 @@
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { ModelRegistry } from 'react-native-litert-lm';
+import { registerLocalModel } from './model-catalog';
 import { normalizeModelPath } from './model-path';
 import { minBytesForSource } from './model-path';
-import { saveModelSource } from './model-source';
 
 export type ImportModelResult =
   { ok: true; path: string; bytes: number } | { ok: false; error: string };
@@ -102,6 +102,10 @@ export async function importLitertModelFromPicker(): Promise<ImportModelResult> 
     };
   }
 
-  await saveModelSource(localPath);
+  await registerLocalModel({
+    path: localPath,
+    bytes: size,
+    origin: 'import',
+  });
   return { ok: true, path: localPath, bytes: size };
 }

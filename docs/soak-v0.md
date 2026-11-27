@@ -42,5 +42,5 @@ Hardware Status remains **pending you** — agents cannot complete phone/PC soak
 
 1. Install [Bun](https://bun.sh) ≥ 1.3.4 (dev) **or** use the desktop installer / APK from the GitHub Release.
 2. Optional local AI on PC: put `llama-server` or `litert-lm` on PATH (see [standalone-local.md](standalone-local.md)).
-3. Phone: install APK → Model setup → download/import `.litertlm` → chat with **On this phone**.
+3. Phone: install APK → Model setup → download/import `.litertlm` into catalog → Load → chat with **On this phone**.
 4. Pair only if you want PC cascade/sync: same Wi‑Fi → Host QR → Scan.

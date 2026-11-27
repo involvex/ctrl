@@ -4,7 +4,7 @@ Local-first agent platform: phone LiteRT and PC llama/litert-lm without requirin
 
 Current workspace line: **0.2.0** (root `package.json`). The Release workflow syncs artifact names from the tag (`v0.6.0` → `ctrl-0.6.0-…`). Published tags on `origin`: **`v0.2.0`**, **`v0.3.0`**, **`v0.4.0`**, **`v0.5.0`** (APK incomplete), **`v0.5.1`**, **`v0.6.0`**. Soak rows 1–6 in [`soak-v0.md`](soak-v0.md) stay pending on hardware; cutting a feature tag does **not** mark them pass.
 
-1. **Phone** — Install the APK → Model setup → download/import `.litertlm` → Load → chat **On this phone** (PC optional). One resident `.litertlm`; no phone GGUF runner.
+1. **Phone** — Install the APK → Model setup → download/import `.litertlm` into the catalog → pick active → Load → chat **On this phone** (PC optional). One resident engine (replace-to-switch); no phone GGUF runner.
 2. **Desktop** — Install the Windows build → Host → local models → detect / fetch → start → use → chat offline from cloud.
 3. **Pair (optional)** — Same Wi‑Fi → Host QR / `ctrl-f5 pair` → phone Scan → pairing ack closes the CLI.
 4. **Models** — Providers → refresh models → pick an id for the next turn.

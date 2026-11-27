@@ -19,23 +19,25 @@ Each device can chat without the other. Pairing is optional for sync / cloud.
 
 ## Phone (Expo)
 
-1. **Model setup** — download or import a `.litertlm` file, then Load model.
+1. **Model setup** — download or import `.litertlm` files into the catalog, pick one, then Load model.
 2. Generator chip **On this phone** — send uses LiteRT only (no PC/cloud cascade).
 3. Default provider order is `litert → gateway → zen`.
 4. Pairing (Host QR / `ctrl-f5 pair`) is only needed for PC cascade, sync, or cloud keys on the gateway.
 5. If chat shows unavailable · …, open Model setup from the banner CTA.
 
-### Phone model files (one `.litertlm`)
+### Phone model files (catalog + one engine)
 
-`react-native-litert-lm` loads **one** resident engine. A second `loadModel` replaces the first; it does not keep two chat models in RAM. There is no on-device GGUF / llama.cpp runner on the phone.
+`react-native-litert-lm` loads **one** resident engine. Switching catalog entries unloads the current weights and loads the next on demand (replace-to-switch); it does not keep two chat models in RAM. There is no on-device GGUF / llama.cpp runner on the phone.
 
 What Model setup supports today:
 
-- Download the default Gemma 4 E2B `.litertlm`, or import **one** `.litertlm` via the document picker (`multiple: false`).
-- Persist that single path (`ctrl.mobile.litert.modelSource`), Load / Unload / Reset.
-- Native `listCachedFiles()` only sees the module download cache (`filesDir/models`), not Expo import copies under `documentDirectory/models/`. The app does not call it for a catalog UI.
+- App-owned catalog (`ctrl.mobile.litert.catalog`) of local `.litertlm` paths (download + import). Active path stays in `ctrl.mobile.litert.modelSource`.
+- Download the default Gemma 4 E2B `.litertlm`, or import via the document picker (`multiple: false` — one file per pick; repeat to grow the catalog).
+- Tap a catalog row to make it active (unloads a different loaded engine; does **not** auto-load). Then Load / Unload / Reset.
+- Seeds from `documentDirectory/models/*.litertlm` and a cached Gemma download path when present. Native `listCachedFiles()` is still not the catalog UI (it only sees `filesDir/models`).
+- Policy: Gemma E2B keeps the 4 GB RAM floor; other `.litertlm` files use a lower floor via `policyRequestForSource`.
 
-A multi-file picker stays out of scope until the app owns an explicit multi-path catalog (and loosens the hardcoded E2B policy). GGUF stays on desktop llama (`userData/models/*.gguf`).
+GGUF stays on desktop llama (`userData/models/*.gguf`).
 
 ## PC (Desktop / gateway)
 
@@ -152,8 +154,7 @@ Providers → HF model catalog: pick a quant (Q4_K_M default, plus Q5_K_M or Q6_
 
 Still parked:
 
-1. App-owned multi-path `.litertlm` catalog on phone (only if product wants replace-to-switch UX; runner still holds one engine)
-2. Rust `agentd` / monetization experiments
-3. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
+1. Rust `agentd` / monetization experiments
+2. Shared UI package (`ctrl-space`), logger (`ctrl-l`), config package (`ctrl-comma`)
 
 Living order for remaining work: [ROADMAP.md](../ROADMAP.md).

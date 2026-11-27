@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { evaluateOnDevicePolicy, type PolicyDecision } from '@involvex/ctrl-s';
 import { backendForPolicy, probeDeviceCapabilities } from './capabilities';
+import { policyRequestForSource } from './model-catalog-pure';
 import {
   ensureLitertLoaded,
   generateWithLitert,
   isLitertEngineLoaded,
   unloadLitertEngine,
 } from './litert-engine';
-import { assertModelFileUsable } from './model-size';
+import { assertModelFileUsable, readModelFileBytes } from './model-size';
 import {
   DEFAULT_MODEL_URL,
   isRemoteModelUrl,
@@ -31,6 +32,10 @@ export type LitertEngineStatus = {
 export function useLitertEngine(systemPrompt: string) {
   const [frozenPrompt] = useState(systemPrompt);
   const [modelSource, setModelSource] = useState(DEFAULT_MODEL_URL);
+  const modelSourceRef = useRef(modelSource);
+  useEffect(() => {
+    modelSourceRef.current = modelSource;
+  }, [modelSource]);
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(
     null
@@ -40,13 +45,14 @@ export function useLitertEngine(systemPrompt: string) {
   const [generating, setGenerating] = useState(false);
   const [engineError, setEngineError] = useState<string | null>(null);
 
-  const probe = useCallback(async () => {
+  const probe = useCallback(async (pathForPolicy?: string) => {
     const caps = await probeDeviceCapabilities();
-    const policy = evaluateOnDevicePolicy(caps, {
-      modelId: 'GEMMA_4_E2B_IT',
-      minMemoryMb: 4096,
-      preferredBackend: 'cpu',
-    });
+    const path = pathForPolicy ?? modelSourceRef.current;
+    const bytes = isRemoteModelUrl(path) ? 0 : readModelFileBytes(path);
+    const policy = evaluateOnDevicePolicy(
+      caps,
+      policyRequestForSource(path, bytes > 0 ? bytes : undefined)
+    );
     setDecision(policy);
     if (!caps.litertAvailable) {
       setUnavailableReason(
@@ -82,7 +88,7 @@ export function useLitertEngine(systemPrompt: string) {
         setUnavailableReason(err instanceof Error ? err.message : String(err));
         return;
       }
-      await probe();
+      await probe(saved);
       if (!cancelled) {
         setReady(isLitertEngineLoaded(saved));
         setLoadedOnce(isLitertEngineLoaded(saved));
@@ -96,19 +102,27 @@ export function useLitertEngine(systemPrompt: string) {
   const generate = useCallback(
     async (prompt: string): Promise<string> => {
       setEngineError(null);
-      const fresh = await probe();
+      // Re-read active path — Model setup may have switched while chat stayed mounted.
+      const saved = await loadSavedModelSource();
+      setModelSource(saved);
+      if (isRemoteModelUrl(saved)) {
+        throw new Error(
+          'Model not downloaded. Open Model setup to download or import a .litertlm file.'
+        );
+      }
+      const fresh = await probe(saved);
       if (!fresh.allowed) {
         throw new Error(
           `On-device blocked: ${fresh.reasons.join('; ') || 'not allowed'}`
         );
       }
-      assertModelFileUsable(modelSource);
+      assertModelFileUsable(saved);
       const backend = backendForPolicy(fresh.backend);
       setLoadedOnce(true);
       setGenerating(true);
       try {
         await ensureLitertLoaded({
-          path: modelSource,
+          path: saved,
           backend,
           systemPrompt: frozenPrompt,
         });
@@ -123,7 +137,7 @@ export function useLitertEngine(systemPrompt: string) {
         setGenerating(false);
       }
     },
-    [frozenPrompt, modelSource, probe]
+    [frozenPrompt, probe]
   );
 
   const unload = useCallback(async () => {

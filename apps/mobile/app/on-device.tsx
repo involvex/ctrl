@@ -23,9 +23,22 @@ import {
 import { saveGeneratorMode } from '../src/device/inference-mode';
 import {
   ensureLitertLoaded,
+  getLitertEnginePath,
+  isLitertEngineLoaded,
   unloadLitertEngine,
 } from '../src/device/litert-engine';
-import { assertModelFileUsable } from '../src/device/model-size';
+import {
+  forgetModelCatalogEntry,
+  labelFromModelPath,
+  loadModelCatalog,
+  registerLocalModel,
+  type ModelCatalogEntry,
+} from '../src/device/model-catalog';
+import { policyRequestForSource } from '../src/device/model-catalog-pure';
+import {
+  assertModelFileUsable,
+  readModelFileBytes,
+} from '../src/device/model-size';
 import {
   DEFAULT_MODEL_URL,
   describeDownloadError,
@@ -154,12 +167,21 @@ function ModelEngineHost({
   );
 }
 
-/** Download / import / path UI — never mounts useModel. */
+function formatCatalogBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+}
+
+/** Download / import / catalog UI — never mounts useModel. */
 function ModelSourcePanel({
   pathOrUrl,
   backend,
   decision,
   engineArmed,
+  catalog,
+  onCatalogChange,
   onSourceChange,
   onArmEngine,
 }: {
@@ -167,6 +189,8 @@ function ModelSourcePanel({
   backend: 'cpu' | 'gpu' | 'npu';
   decision: PolicyDecision;
   engineArmed: boolean;
+  catalog: ModelCatalogEntry[];
+  onCatalogChange: (next: ModelCatalogEntry[]) => void;
   onSourceChange: (next: string) => void;
   onArmEngine: () => void;
 }) {
@@ -187,9 +211,26 @@ function ModelSourcePanel({
   const downloading = busyAction === 'download';
   const downloadPct = Math.round(manualProgress * 100);
   const remote = isRemoteModelUrl(pathOrUrl);
-  const sourceLabel = remote
+  const activeLabel = remote
     ? 'HuggingFace URL (download)'
-    : `local · ${pathOrUrl.split(/[/\\]/).pop() ?? pathOrUrl}`;
+    : labelFromModelPath(pathOrUrl);
+
+  const switchActive = useCallback(
+    async (nextPath: string) => {
+      const normalized = nextPath;
+      await saveModelSource(normalized);
+      const loadedPath = getLitertEnginePath();
+      if (isLitertEngineLoaded() && loadedPath && loadedPath !== normalized) {
+        try {
+          await unloadLitertEngine();
+        } catch {
+          // ignore
+        }
+      }
+      onSourceChange(normalized);
+    },
+    [onSourceChange]
+  );
 
   const onDownload = useCallback(() => {
     setLocalError(null);
@@ -197,24 +238,30 @@ function ModelSourcePanel({
     setManualProgress(0);
     void (async () => {
       try {
-        if (!isRemoteModelUrl(pathOrUrl)) {
-          setLocalError('Source is already local. Tap Load model instead.');
-          return;
-        }
-        const localPath = await downloadModelWithRetry(pathOrUrl, {
+        const url = isRemoteModelUrl(pathOrUrl) ? pathOrUrl : DEFAULT_MODEL_URL;
+        const localPath = await downloadModelWithRetry(url, {
           attempts: 3,
           onProgress: (p) => {
             setManualProgress(p);
             void saveDownloadProgress(p);
           },
         });
-        await saveModelSource(localPath);
+        const bytes = readModelFileBytes(localPath);
+        await registerLocalModel({
+          path: localPath,
+          bytes,
+          origin: 'download',
+        });
         await clearDownloadProgress();
-        onSourceChange(localPath);
+        const nextCatalog = await loadModelCatalog({ seed: false });
+        onCatalogChange(nextCatalog);
+        await switchActive(localPath);
       } catch (err: unknown) {
         setLocalError(describeDownloadError(err));
         try {
-          ModelRegistry.deleteFile(pathOrUrl);
+          ModelRegistry.deleteFile(
+            isRemoteModelUrl(pathOrUrl) ? pathOrUrl : DEFAULT_MODEL_URL
+          );
         } catch {
           // ignore
         }
@@ -222,7 +269,7 @@ function ModelSourcePanel({
         setBusyAction('idle');
       }
     })();
-  }, [onSourceChange, pathOrUrl]);
+  }, [onCatalogChange, pathOrUrl, switchActive]);
 
   const onImportFromFilesystem = useCallback(() => {
     setLocalError(null);
@@ -238,14 +285,16 @@ function ModelSourcePanel({
           }
           return;
         }
-        onSourceChange(result.path);
+        const nextCatalog = await loadModelCatalog({ seed: false });
+        onCatalogChange(nextCatalog);
+        await switchActive(result.path);
       } catch (err: unknown) {
         setLocalError(err instanceof Error ? err.message : String(err));
       } finally {
         setBusyAction('idle');
       }
     })();
-  }, [onSourceChange]);
+  }, [onCatalogChange, switchActive]);
 
   const onResetToDefaultUrl = useCallback(() => {
     setLocalError(null);
@@ -256,13 +305,45 @@ function ModelSourcePanel({
         } catch {
           // ignore
         }
-        await saveModelSource(DEFAULT_MODEL_URL);
-        onSourceChange(DEFAULT_MODEL_URL);
+        await switchActive(DEFAULT_MODEL_URL);
       } catch (err: unknown) {
         setLocalError(err instanceof Error ? err.message : String(err));
       }
     })();
-  }, [onSourceChange]);
+  }, [switchActive]);
+
+  const onSelectCatalogEntry = useCallback(
+    (entry: ModelCatalogEntry) => {
+      setLocalError(null);
+      void (async () => {
+        try {
+          assertModelFileUsable(entry.path);
+          await switchActive(entry.path);
+        } catch (err: unknown) {
+          setLocalError(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    },
+    [switchActive]
+  );
+
+  const onForgetCatalogEntry = useCallback(
+    (entry: ModelCatalogEntry) => {
+      setLocalError(null);
+      void (async () => {
+        try {
+          const result = await forgetModelCatalogEntry(entry.path, pathOrUrl);
+          onCatalogChange(result.entries);
+          if (result.active !== pathOrUrl) {
+            await switchActive(result.active);
+          }
+        } catch (err: unknown) {
+          setLocalError(err instanceof Error ? err.message : String(err));
+        }
+      })();
+    },
+    [onCatalogChange, pathOrUrl, switchActive]
+  );
 
   const onLoadTap = useCallback(() => {
     setLocalError(null);
@@ -282,17 +363,53 @@ function ModelSourcePanel({
   return (
     <View style={styles.block}>
       <Text style={styles.label}>
-        LiteRT · Gemma 4 E2B · backend {backend}
+        LiteRT · {activeLabel} · backend {backend}
         {decision.warnings.length > 0
           ? ` · ${decision.warnings.join('; ')}`
           : ''}
       </Text>
-      <Text style={styles.meta}>source · {sourceLabel}</Text>
       <Text style={styles.meta}>
-        Engine stays unloaded until you tap Load model. Incomplete downloads
-        (&lt;2 GB for Gemma E2B) are rejected before native load. One shared
-        engine with Chat — unload frees RAM without deleting the file.
+        active · {remote ? 'download URL' : `local · ${activeLabel}`}
       </Text>
+      <Text style={styles.meta}>
+        Catalog keeps several .litertlm paths. Switching unloads the shared
+        engine but does not auto-load weights — tap Load model. Incomplete
+        downloads (&lt;2 GB for Gemma E2B) are rejected before native load.
+      </Text>
+
+      {catalog.length > 0 ? (
+        <View style={styles.catalog}>
+          <Text style={styles.catalogTitle}>catalog</Text>
+          {catalog.map((entry) => {
+            const active = !remote && entry.path === pathOrUrl;
+            return (
+              <View key={entry.path} style={styles.catalogRow}>
+                <NavRow
+                  label={`${active ? '● ' : ''}${entry.label}`}
+                  subtitle={`${formatCatalogBytes(entry.bytes)} · ${entry.origin}${active ? ' · active' : ''}`}
+                  onPress={() => {
+                    onSelectCatalogEntry(entry);
+                  }}
+                />
+                <Pressable
+                  style={styles.forgetBtn}
+                  onPress={() => {
+                    onForgetCatalogEntry(entry);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Forget ${entry.label}`}
+                >
+                  <Text style={styles.forgetText}>forget</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <Text style={styles.meta}>
+          Catalog empty — download or import a .litertlm to add one.
+        </Text>
+      )}
 
       {remote ? (
         <Pressable
@@ -308,11 +425,24 @@ function ModelSourcePanel({
                 ? `downloading ${downloadPct}%`
                 : savedProgress > 0 && savedProgress < 1
                   ? `retry full download (${Math.round(savedProgress * 100)}% was progress UI only)`
-                  : 'download (~2.6 GB, 3 full retries)'}
+                  : 'download Gemma E2B (~2.6 GB, 3 full retries)'}
             </Text>
           )}
         </Pressable>
-      ) : null}
+      ) : (
+        <Pressable
+          style={[
+            styles.secondaryBtn,
+            busyAction !== 'idle' && styles.buttonDisabled,
+          ]}
+          onPress={onDownload}
+          disabled={busyAction !== 'idle'}
+        >
+          <Text style={styles.secondaryText}>
+            download default Gemma E2B (~2.6 GB)
+          </Text>
+        </Pressable>
+      )}
 
       {downloading ? (
         <View style={styles.progressTrack}>
@@ -351,8 +481,8 @@ function ModelSourcePanel({
       </Pressable>
 
       <Text style={styles.meta}>
-        Prefer: download gemma-4-E2B-it.litertlm on a PC, copy to the phone,
-        then Import. Chat uses this file when generator is On this phone.
+        Prefer: download .litertlm on a PC, copy to the phone, then Import. Chat
+        uses the active catalog file when generator is On this phone.
       </Text>
 
       {localError ? <Text style={styles.error}>{localError}</Text> : null}
@@ -366,16 +496,22 @@ export default function OnDeviceScreen() {
   const [decision, setDecision] = useState<PolicyDecision | null>(null);
   const [busy, setBusy] = useState(true);
   const [modelSource, setModelSource] = useState(DEFAULT_MODEL_URL);
+  const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [engineArmed, setEngineArmed] = useState(false);
   const [engineMessage, setEngineMessage] = useState<string | null>(null);
+  const modelSourceRef = useRef(modelSource);
+  useEffect(() => {
+    modelSourceRef.current = modelSource;
+  }, [modelSource]);
 
   const probePolicy = useCallback(async (): Promise<PolicyDecision | null> => {
     const next = await probeDeviceCapabilities();
-    const policy = evaluateOnDevicePolicy(next, {
-      modelId: 'GEMMA_4_E2B_IT',
-      minMemoryMb: 4096,
-      preferredBackend: 'cpu',
-    });
+    const path = modelSourceRef.current;
+    const bytes = isRemoteModelUrl(path) ? 0 : readModelFileBytes(path);
+    const policy = evaluateOnDevicePolicy(
+      next,
+      policyRequestForSource(path, bytes > 0 ? bytes : undefined)
+    );
     setCaps(next);
     setDecision(policy);
     return policy;
@@ -391,9 +527,13 @@ export default function OnDeviceScreen() {
     let cancelled = false;
     void (async () => {
       setBusy(true);
-      const saved = await loadSavedModelSource();
+      const [saved, entries] = await Promise.all([
+        loadSavedModelSource(),
+        loadModelCatalog({ seed: true }),
+      ]);
       if (!cancelled) {
         setModelSource(saved);
+        setCatalog(entries);
         setEngineArmed(false);
         setEngineMessage(null);
       }
@@ -407,11 +547,16 @@ export default function OnDeviceScreen() {
     };
   }, [probePolicy]);
 
-  const onSourceChange = useCallback((next: string) => {
-    setModelSource(next);
-    setEngineArmed(false);
-    setEngineMessage(null);
-  }, []);
+  const onSourceChange = useCallback(
+    (next: string) => {
+      setModelSource(next);
+      modelSourceRef.current = next;
+      setEngineArmed(false);
+      setEngineMessage(null);
+      void probePolicy();
+    },
+    [probePolicy]
+  );
 
   const backend = backendForPolicy(decision?.backend ?? null);
   const canSetup = Boolean(caps?.litertAvailable);
@@ -435,13 +580,14 @@ export default function OnDeviceScreen() {
         <Text style={styles.title}>model setup</Text>
         <ModeChip mode="litert" />
         <Text style={styles.meta}>
-          First step for standalone phone chat: download or import a .litertlm
-          file, then tap Load model. Conversation lives in Chat — this screen is
-          not a second chat.
+          First step for standalone phone chat: download or import .litertlm
+          files into the catalog, pick one, then tap Load model. Conversation
+          lives in Chat — this screen is not a second chat. Runner holds one
+          engine (replace-to-switch).
         </Text>
         {canSetup && !engineArmed ? (
           <Text style={styles.ctaHint}>
-            ↓ Use Download (~2.6 GB) or Import .litertlm, then Load model.
+            ↓ Download / Import into catalog, select a row, then Load model.
           </Text>
         ) : null}
 
@@ -485,6 +631,8 @@ export default function OnDeviceScreen() {
                   backend={backend}
                   decision={decision}
                   engineArmed={engineArmed}
+                  catalog={catalog}
+                  onCatalogChange={setCatalog}
                   onSourceChange={onSourceChange}
                   onArmEngine={() => {
                     setEngineMessage(null);
@@ -588,6 +736,24 @@ const styles = StyleSheet.create({
   },
   error: { color: '#ff6666', fontFamily: 'monospace', fontSize: 12 },
   block: { gap: 10 },
+  catalog: { gap: 8 },
+  catalogTitle: {
+    color: colors.accent,
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  catalogRow: { gap: 4 },
+  forgetBtn: {
+    alignSelf: 'flex-end',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  forgetText: {
+    color: colors.muted,
+    fontFamily: fonts.mono,
+    fontSize: 11,
+  },
   button: {
     backgroundColor: '#00ff66',
     paddingVertical: 14,
