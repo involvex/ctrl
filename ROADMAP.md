@@ -2,7 +2,7 @@
 
 Living backlog for `@involvex/ctrl`. Historical phase notes stay in [docs/Plan.md](docs/Plan.md). Operator soak stays in [docs/soak-v0.md](docs/soak-v0.md).
 
-Root `package.json` is still `0.2.0` (Release workflow syncs from the tag). Desktop packaging is still `0.0.1` in-repo until a tag cut. Published on `origin`: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0` (APK incomplete), `v0.5.1`, `v0.6.0`. Next cut: `v0.7.0` (phone LiteRT catalog — [docs/RELEASE-v0.md](docs/RELEASE-v0.md)). Optional `v0.2.1` remains soak-gated.
+Root `package.json` is still `0.2.0` (Release workflow syncs from the tag). Desktop packaging is still `0.0.1` in-repo until a tag cut. Published on `origin`: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0` (APK incomplete), `v0.5.1`, `v0.6.0`, `v0.7.0`. Optional `v0.2.1` remains soak-gated.
 
 ## Now
 
@@ -27,7 +27,7 @@ _(empty)_
 - [x] Cut `v0.5.0` — knowledge edit/delete + attachment blobs + HF quant picker + pinned local-bin fetch ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)). Android APK job failed (foojay portal); use `v0.5.1`.
 - [x] Cut `v0.5.1` — skip flaky foojay-resolver portal fetch so Release publishes APK ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)).
 - [x] Cut `v0.6.0` — CLI leftovers: restart, knowledge wrappers, Discord/Slack channel add ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)).
-- [ ] Cut `v0.7.0` — phone multi-path `.litertlm` catalog, replace-to-switch ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)). Confirm Android APK + Release assets before calling installable.
+- [x] Cut `v0.7.0` — phone multi-path `.litertlm` catalog, replace-to-switch; APK + Windows assets on Release ([docs/RELEASE-v0.md](docs/RELEASE-v0.md)).
 - [x] Share phone LiteRT catalog — free announcement draft in [SHARE.md](SHARE.md) (human posts; agent does not publish).
 
 ## Done
