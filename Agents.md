@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). `## Now` is empty. Next cut is `v0.7.0` (phone LiteRT catalog recipe in [docs/RELEASE-v0.md](docs/RELEASE-v0.md)); soak rows 1–6 stay operator hardware; pick from Later for new code.
+See [ROADMAP.md](ROADMAP.md). `## Now` is empty. `v0.7.0` is cut (phone LiteRT catalog); soak rows 1–6 stay operator hardware; pick from Later for new code.
 
 ## Learned preferences
 
@@ -263,7 +263,7 @@ See [ROADMAP.md](ROADMAP.md). `## Now` is empty. Next cut is `v0.7.0` (phone Lit
 
 - Phases 0–8 and slices 10–34 are shipped; living backlog is `ROADMAP.md`.
 - Root version is still `0.2.0` in git; Release workflow syncs from the tag. Desktop packaging is still `0.0.1` until a tag cut.
-- Published tags on origin: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0` (APK incomplete), `v0.5.1`, `v0.6.0`.
+- Published tags on origin: `v0.2.0`, `v0.3.0`, `v0.4.0`, `v0.5.0` (APK incomplete), `v0.5.1`, `v0.6.0`, `v0.7.0`.
 - Phone LiteRT: app-owned multi-path `.litertlm` catalog + replace-to-switch; still one resident engine; no phone GGUF.
 - Packages `ctrl-space`, `ctrl-l`, and `ctrl-comma` are named in the plan but not on disk yet.
 - Soak rows 1–6 in `docs/soak-v0.md` are hardware-only; optional `v0.2.1` stays soak-gated and is independent of feature tags.
