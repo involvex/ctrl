@@ -2,7 +2,7 @@
 
 Local-first agent platform: phone LiteRT and PC llama/litert-lm without requiring each other.
 
-Current workspace line: **0.2.0** (root `package.json`). The Release workflow syncs artifact names from the tag (`v0.6.0` → `ctrl-0.6.0-…`). Published tags on `origin`: **`v0.2.0`**, **`v0.3.0`**, **`v0.4.0`**, **`v0.5.0`** (APK incomplete), **`v0.5.1`**, **`v0.6.0`**. Soak rows 1–6 in [`soak-v0.md`](soak-v0.md) stay pending on hardware; cutting a feature tag does **not** mark them pass.
+Current workspace line: **0.2.0** (root `package.json`). The Release workflow syncs artifact names from the tag (`v0.7.0` → `ctrl-0.7.0-…`). Published tags on `origin`: **`v0.2.0`**, **`v0.3.0`**, **`v0.4.0`**, **`v0.5.0`** (APK incomplete), **`v0.5.1`**, **`v0.6.0`**. Cut **`v0.7.0`** with the recipe below (phone LiteRT catalog). Soak rows 1–6 in [`soak-v0.md`](soak-v0.md) stay pending on hardware; cutting a feature tag does **not** mark them pass.
 
 1. **Phone** — Install the APK → Model setup → download/import `.litertlm` into the catalog → pick active → Load → chat **On this phone** (PC optional). One resident engine (replace-to-switch); no phone GGUF runner.
 2. **Desktop** — Install the Windows build → Host → local models → detect / fetch → start → use → chat offline from cloud.
@@ -60,3 +60,17 @@ git pull origin main
 git tag -a v0.6.0 -m "ctrl v0.6.0 — CLI restart, knowledge wrappers, Discord/Slack channel add"
 git push origin v0.6.0
 ```
+
+## Tag recipe — `v0.7.0` (phone LiteRT catalog)
+
+Ship story: app-owned multi-path `.litertlm` catalog on phone (PR #38). Model setup keeps several paths; switching unloads the current LiteRT engine and loads the next (one engine in RAM — replace-to-switch, not dual load). Download the default Gemma E2B or import from storage. GGUF stays on desktop. Free announcement draft: [`SHARE.md`](../SHARE.md) (human posts). Soak rows 1–6 stay independent.
+
+```bash
+# on main, clean tree, after release-notes merge:
+git checkout main
+git pull origin main
+git tag -a v0.7.0 -m "ctrl v0.7.0 — phone multi-path LiteRT catalog (replace-to-switch)"
+git push origin v0.7.0
+```
+
+Confirm GitHub Actions `Release` completes `build-android` and `github-release` (APK attached) before treating the tag as installable.
