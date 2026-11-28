@@ -252,7 +252,7 @@ Key environment variables (see full list in codebase):
 
 ## Current work
 
-See [ROADMAP.md](ROADMAP.md). `## Now` is empty after phone LiteRT catalog. `v0.6.0` is cut; soak rows 1–6 stay operator hardware; pick from Later for new code.
+See [ROADMAP.md](ROADMAP.md). `## Now` is empty. Next cut is `v0.7.0` (phone LiteRT catalog recipe in [docs/RELEASE-v0.md](docs/RELEASE-v0.md)); soak rows 1–6 stay operator hardware; pick from Later for new code.
 
 ## Learned preferences
 
