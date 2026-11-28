@@ -1,0 +1,23 @@
+---
+description: Guidelines when working under apps/ (desktop, mobile, web, CLI)
+globs:
+  - "apps/**/*"
+alwaysApply: false
+---
+
+# apps/
+
+| App | Package | Notes |
+|-----|---------|--------|
+| `desktop` | `@involvex/ctrl-desktop` | Electron; starts gateway; safeStorage; Matrix UI |
+| `mobile` | `@involvex/ctrl-mobile` | Expo Android; operator runs ADB install/start themselves |
+| `web` | `@involvex/ctrl-web` | Expo Router PWA |
+| `cli` | `@involvex/ctrl-f5` | Publishable Bun CLI |
+
+## Rules
+
+1. Talk to the gateway via `@involvex/ctrl-i` / protocol types from `ctrl-s`
+2. Do not embed or sync SQLite from clients
+3. Desktop: keep Electron security defaults (isolation, no nodeIntegration, sandbox, Zod IPC)
+4. UI: Matrix theme only (`#00ff66`); exclusive panels on desktop
+5. Dev: `bun run dev:desktop` \| `dev:android` \| `dev:cli` — never npm scripts as the primary path

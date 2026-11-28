@@ -1,0 +1,48 @@
+---
+description: Commands, paths, env vars, and stack cheat sheet for @involvex/ctrl
+alwaysApply: false
+---
+
+# Quick reference
+
+## Commands
+
+```bash
+bun install
+bun run dev:gateway
+bun run dev:desktop
+bun run dev:android
+bun run dev:cli
+bun run validate
+bun check
+bun lint
+bun run format:write
+bun test
+bun run test:contracts
+bun run gateway:free
+bun run docs:dev
+```
+
+## Paths
+
+| Path | Purpose |
+|------|---------|
+| `apps/desktop` | Electron |
+| `apps/mobile` | Expo Android |
+| `apps/web` | Expo PWA |
+| `apps/cli` | `ctrl-f5` CLI |
+| `packages/ctrl-*` | Gateway, protocol, runtimes, memory, agent, MCP, knowledge, channels, client, contracts |
+| `docs/` | Plan, soak, CI, security docs |
+| `native/android-litert/` | On-device LiteRT |
+
+## Env (common)
+
+- `CTRL_HOST`, `CTRL_PORT`, `CTRL_TOKEN`
+- `CTRL_LLAMA_BIN`
+- `CTRL_EMBEDDINGS` (`hash` \| `openai` \| `llama` \| `litert` \| `off`)
+- `CTRL_EMBEDDINGS_MODEL`, `CTRL_EMBEDDINGS_DIM`, `CTRL_EMBEDDINGS_BASE_URL`, `CTRL_EMBEDDINGS_API_KEY`
+- `BASE_URL` — contract tests
+
+## Stack
+
+TypeScript + Bun workspaces · React (Electron/Expo) · VitePress (docs/Vue) · `bun:sqlite` · `bun:test` · Matrix `#00ff66`

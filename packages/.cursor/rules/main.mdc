@@ -1,0 +1,34 @@
+---
+description: Guidelines when working under packages/ (ctrl-* workspace packages)
+globs:
+  - "packages/**/*"
+alwaysApply: false
+---
+
+# packages/
+
+Scoped workspace packages `@involvex/ctrl-*`. Prefer `workspace:*` for internal deps.
+
+## Package map
+
+| Package | Focus |
+|---------|--------|
+| `ctrl-a` | Gateway daemon |
+| `ctrl-s` | Protocol / Zod (source of truth) |
+| `ctrl-r` | Model providers |
+| `ctrl-z` | SQLite memory & migrations |
+| `ctrl-x` | Agent loop & tools |
+| `ctrl-m` | MCP client |
+| `ctrl-k` | Knowledge / embeddings |
+| `ctrl-c` | Channel adapters |
+| `ctrl-i` | Typed agent client |
+| `ctrl-t` | Contract tests |
+| `ctrl-slash` | Skills |
+
+## Rules
+
+1. Export a clear public API; keep internal modules unexported when possible
+2. Schema or event changes → update `ctrl-s` first, then consumers + `ctrl-t`
+3. Only `ctrl-z` / gateway process owns SQLite
+4. Test the package with `bun test` in-package; contracts for HTTP/WS surfaces
+5. Build with root scripts (`bun run build:ctrl-a`, etc.) — Bun only

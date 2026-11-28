@@ -1,0 +1,56 @@
+---
+description: TypeScript, imports, UI theme, and Bun-native quality tooling
+globs:
+  - "**/*.{ts,tsx,js,jsx}"
+alwaysApply: false
+---
+
+# Code style
+
+## TypeScript
+
+- Strict mode; avoid `any` unless necessary
+- Target ES2022, module ESNext, bundler resolution
+- `verbatimModuleSyntax`, `isolatedModules`, JSX `react-jsx`
+- Typecheck only via `bun check` (no emit for packages in the usual flow)
+
+## Imports
+
+```typescript
+// Workspace packages
+import { SomeSchema } from "@involvex/ctrl-s";
+
+// Node built-ins — always node: protocol
+import { join } from "node:path";
+import { readFile } from "node:fs/promises";
+```
+
+## Naming
+
+- Functions / variables: `camelCase`
+- Types / components: `PascalCase`
+- Prefer existing package file naming; stay consistent within a package
+
+## Boundaries & errors
+
+- Parse external input with Zod from `@involvex/ctrl-s` at the edge
+- Do not leak internal errors to clients; log server-side appropriately
+- Gateway binds `127.0.0.1` by default; LAN (`0.0.0.0`) needs explicit pairing
+
+## UI (desktop / mobile / web)
+
+- Matrix dark only: `#000000` bg, `#00ff66` accent, containers `#111613`
+- Monospace fonts (JetBrains Mono / Fira Code)
+- Thin borders, sharp edges — no rounded iOS-style chrome
+- Desktop: exclusive panels (one open); Escape closes; keyboard-friendly nav
+
+## Quality commands (Bun-native only)
+
+```bash
+bun run validate   # check + lint + format check
+bun check
+bun lint           # bun lint --fix when fixing
+bun run format:write
+```
+
+Never introduce ESLint or Prettier as project dependencies.

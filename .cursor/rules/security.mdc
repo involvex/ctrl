@@ -1,0 +1,48 @@
+---
+description: Auth, binding, secrets, Electron, and input validation for ctrl
+globs:
+  - "packages/ctrl-a/**/*"
+  - "packages/ctrl-c/**/*"
+  - "apps/desktop/**/*"
+  - "**/*auth*"
+  - "**/*secret*"
+alwaysApply: false
+---
+
+# Security
+
+See also `SECURITY.md` at repo root.
+
+## Network & auth
+
+- Default bind: `127.0.0.1`
+- LAN (`0.0.0.0`) only with explicit activation + pairing codes
+- Gateway bearer tokens for authenticated access
+- Skills have no automatic system rights — Permission Policy + audit logs for sensitive ops
+
+## Electron
+
+- `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`
+- Validate all IPC with Zod from `@involvex/ctrl-s`
+- CSP; block navigation and unsolicited `window.open`
+
+## Secrets & data
+
+- Never store secrets in `app.db`
+- Prefer OS stores: Electron `safeStorage`, Android Keystore
+- Never commit tokens/keys; keep secrets out of argv/logs
+- Document env vars (e.g. `CTRL_TOKEN`, `CTRL_HOST`, `CTRL_PORT`, embeddings keys) without committing values
+
+## Input
+
+- Validate all external inputs at boundaries with `@involvex/ctrl-s` Zod schemas
+- Parameterized SQL only via the gateway DB layer (`ctrl-z`)
+- Do not expose internal stack traces to clients
+
+## Checklist (before shipping network-facing changes)
+
+- [ ] Loopback default preserved or LAN pairing documented
+- [ ] Auth / pairing paths covered
+- [ ] IPC and HTTP bodies Zod-validated
+- [ ] No secrets in DB, logs, or git
+- [ ] Lockfile present (`bun.lock`); deps reviewed for advisories

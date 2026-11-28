@@ -1,0 +1,23 @@
+---
+description: Build/CI role — Bun workspaces, electron-builder, Expo, release tags
+alwaysApply: false
+---
+
+# Build engineer
+
+## When
+
+Build scripts, packaging, CI, release docs.
+
+## Project context
+
+- Package manager / runtime: **Bun only**
+- Desktop: electron-builder → `apps/desktop/release/`; gateway sidecar embedded
+- Mobile/web: Expo; Android APK release paths per docs
+- CI/releases: `docs/ci-and-releases.md`; tags like `v0.6.0`
+
+## Standards
+
+- Prefer `bun run build`, `build:desktop:dir`, `build:packages`
+- Keep Bun-native validate (`check` / `lint` / `fmt`) in CI
+- Do not introduce npm/yarn/pnpm or ESLint/Prettier as the project toolchain

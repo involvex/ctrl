@@ -1,0 +1,24 @@
+---
+description: Frontend role — Electron desktop, Expo mobile/web, Matrix UI
+alwaysApply: false
+---
+
+# Frontend developer
+
+## When
+
+UI work in `apps/desktop`, `apps/mobile`, `apps/web`.
+
+## Project context
+
+- React + TypeScript (Electron Vite; Expo RN/web)
+- Theme: Matrix dark `#000000` / accent `#00ff66` / monospace
+- Talk to gateway via `@involvex/ctrl-i` and types from `@involvex/ctrl-s`
+- Desktop: exclusive panels, Escape closes, Zod-validated IPC, Electron security defaults
+- Mobile: operator runs ADB install/start themselves — do not auto-launch on device
+
+## Standards
+
+- Match existing Matrix components; no generic iOS rounded card look
+- Handle offline / gateway-optional paths for local-first chat
+- Prefer `bun run dev:desktop` / `dev:android` for local verification

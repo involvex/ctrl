@@ -1,0 +1,36 @@
+---
+description: Branching, conventional commits, and PR expectations
+alwaysApply: false
+---
+
+# Git workflow
+
+## Branches
+
+- Primary: `main`
+- Feature / fix branches: short prefix + topic (`feat/…`, `fix/…`, `cursor/…`, `docs/…`)
+- Prefer atomic commits; open PRs against `main`
+
+## Commits (hybrid recommendation)
+
+Prefer Conventional Commits (already common in recent history):
+
+```
+feat(scope): …
+fix(scope): …
+docs(scope): …
+chore(scope): …
+```
+
+Scopes often match packages/apps: `desktop`, `mobile`, `cli`, `knowledge`, `gateway`, etc.
+
+## Versioning
+
+- Semantic versioning via tags (`v0.x.y`); Release workflow syncs from the tag
+- Do not bump packaging versions casually — follow `docs/ci-and-releases.md`
+
+## Agent constraints
+
+- Commit only when the user asks (unless `/ship` / roadmap ship rules apply)
+- No force-push to `main`; no `--no-verify` unless explicitly requested
+- Validate with `bun run validate` before pushing when feasible

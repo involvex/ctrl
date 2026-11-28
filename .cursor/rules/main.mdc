@@ -1,0 +1,30 @@
+---
+description: Core project identity and non-negotiable conventions for @involvex/ctrl
+alwaysApply: true
+---
+
+# @involvex/ctrl
+
+Local-first agent platform: Bun gateway (`ctrl-a`), Electron desktop, Expo mobile/web, CLI (`ctrl-f5`).
+
+## Stack (source of truth)
+
+- **Runtime / PM:** Bun >= 1.3.4 only — never npm/yarn/pnpm for install or scripts
+- **Language:** TypeScript strict (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`)
+- **Monorepo:** Bun workspaces — `apps/*`, `packages/*`
+- **Protocol / types:** Zod schemas in `@involvex/ctrl-s` (canonical events and boundaries)
+- **DB:** SQLite via `bun:sqlite` in `@involvex/ctrl-z` — gateway owns the DB only
+- **UI theme:** Matrix dark — bg `#000000`, accent `#00ff66`, monospace (JetBrains Mono / Fira Code)
+
+## Non-negotiables
+
+- Validate with `bun check`, `bun lint`, `bun fmt` — **never** add ESLint or Prettier packages
+- Run `bun run validate` before committing
+- Workspace deps use `workspace:*`
+- Prefer `node:` protocol imports (`node:fs`, `node:path`, …)
+- Secrets never in `app.db`; use Electron `safeStorage`, Android Keystore, etc.
+- Do not invent event schemas — use `@involvex/ctrl-s`
+
+## Hybrid note
+
+Template full-stack TypeScript practices apply only where they do not conflict with the above or `AGENTS.md` / `ROADMAP.md`.

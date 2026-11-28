@@ -1,0 +1,30 @@
+---
+description: bun:test unit patterns and ctrl-t contract tests
+globs:
+  - "**/*.{test,spec}.{ts,tsx}"
+  - "packages/ctrl-t/**/*"
+alwaysApply: false
+---
+
+# Testing
+
+## Framework
+
+- **Unit / package tests:** `bun test`
+- **Contracts:** `bun run test:contracts` (ephemeral gateway + `@involvex/ctrl-t`)
+- Patterns: `describe`/`it` and `test()` blocks; mock provider for deterministic LLM tests
+
+## Guidelines
+
+- Prefer focused tests next to the code or in package test files
+- New API endpoints / events → add contract coverage in `ctrl-t`
+- Keep tests independent; mock external network and providers
+- Descriptive names; cover edge cases and Zod rejection paths
+- Do not require a fixed global coverage % unless CI already enforces one
+
+## Commands
+
+```bash
+bun test
+bun run test:contracts
+```

@@ -1,0 +1,20 @@
+---
+description: Optional role prompts for specialized tasks; do not override AGENTS.md or .cursor/rules
+alwaysApply: false
+---
+
+# Role prompts (optional)
+
+These prompts are **optional** context for specialized work. They do not replace root `AGENTS.md` or `.cursor/rules/`.
+
+Do **not** announce a role at the start of every reply unless the user asks for role-playing.
+
+## Roles
+
+| File | Use for |
+|------|---------|
+| `frontend-developer.mdc` | Electron / Expo / Matrix UI |
+| `backend-developer.mdc` | Gateway (`ctrl-a`), protocol, storage |
+| `build-engineer.mdc` | Bun, electron-builder, Expo, CI |
+
+Prefer project rules (Bun-native, Zod boundaries, Matrix UI) over generic stack advice in these files.

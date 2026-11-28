@@ -1,0 +1,49 @@
+---
+description: Local-first monorepo architecture — gateway, clients, packages, boundaries
+globs:
+  - "packages/**/*"
+  - "apps/**/*"
+alwaysApply: false
+---
+
+# Architecture
+
+## Layout
+
+| Area | Path | Role |
+|------|------|------|
+| Gateway | `packages/ctrl-a` | Bun HTTP/WS daemon |
+| Protocol | `packages/ctrl-s` | Zod schemas, events, OpenAPI |
+| Runtimes | `packages/ctrl-r` | ModelProvider adapters |
+| Memory | `packages/ctrl-z` | SQLite + migrations |
+| Agent | `packages/ctrl-x` | Loop, tools, context |
+| MCP | `packages/ctrl-m` | stdio JSON-RPC client |
+| Knowledge | `packages/ctrl-k` | FTS / vector / hybrid search |
+| Channels | `packages/ctrl-c` | Webhook, Telegram, Discord, Slack |
+| Client | `packages/ctrl-i` | Typed gateway client |
+| Contracts | `packages/ctrl-t` | Contract tests |
+| Desktop | `apps/desktop` | Electron shell |
+| Mobile | `apps/mobile` | Expo Android |
+| Web | `apps/web` | Expo PWA |
+| CLI | `apps/cli` | `@involvex/ctrl-f5` |
+
+## Principles
+
+- **Local-first:** identity and transcripts on clients; gateway optional for basic chat
+- **Gateway as home node:** tools, MCP, channels, backups live on the gateway
+- **Process boundary:** gateway is an independent Bun process; desktop starts/manages it
+- **Clients** talk HTTP/WebSocket only — never sync SQLite peer-to-peer
+- **Provider abstraction:** all LLMs through `ModelProvider` in `ctrl-r`
+- **Message sync:** append-only; notes/memory last-write-wins with tombstones when reachable
+
+## API / type contracts
+
+- Shared shapes live in `@involvex/ctrl-s` (Zod), not ad-hoc DTOs
+- Validate every process/IPC/network boundary with Zod
+- Prefer typed client in `@involvex/ctrl-i` over raw fetch
+
+## Workspaces
+
+- Bun workspaces only (not npm/yarn/pnpm)
+- No shared ESLint/Prettier config — Bun-native lint/format
+- Package builds: `bun run build:packages` / per-package `build:ctrl-*`

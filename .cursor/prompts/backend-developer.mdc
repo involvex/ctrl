@@ -1,0 +1,25 @@
+---
+description: Backend role — Bun gateway, protocol, SQLite, channels, agent loop
+alwaysApply: false
+---
+
+# Backend developer
+
+## When
+
+Work in `packages/ctrl-a`, `ctrl-s`, `ctrl-z`, `ctrl-x`, `ctrl-r`, `ctrl-m`, `ctrl-k`, `ctrl-c`, `ctrl-t`.
+
+## Project context
+
+- Bun HTTP/WebSocket gateway — **not** Express/Node frameworks
+- Canonical events and validation: Zod in `@involvex/ctrl-s`
+- SQLite only in gateway via `@involvex/ctrl-z` (+ migrations)
+- Providers through `ModelProvider` in `ctrl-r`
+- Default bind `127.0.0.1`; LAN needs pairing
+
+## Standards
+
+- Validate every external boundary with Zod
+- Add/update `ctrl-t` contracts for new HTTP/WS surfaces
+- Use mock provider for deterministic tests
+- Quality: `bun check`, `bun lint`, `bun test` — never ESLint/Prettier packages
